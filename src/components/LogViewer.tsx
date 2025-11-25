@@ -1,44 +1,63 @@
-import { useRef, useEffect, useCallback, CSSProperties } from 'react';
-import { List, ListImperativeAPI } from 'react-window';
-import { useLogStore } from '../stores/logStore';
-import type { ParsedLogEvent } from '../types';
+import { useRef, useEffect, useCallback, CSSProperties } from "react";
+import { List, ListImperativeAPI } from "react-window";
+import { useLogStore } from "../stores/logStore";
+import { LogDetailInline } from "./LogDetailInline";
+import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
 
-function getLogLevelClass(level: ParsedLogEvent['level']): string {
+function getLogLevelClass(level: ParsedLogEvent["level"]): string {
   switch (level) {
-    case 'error':
-      return 'log-error';
-    case 'warn':
-      return 'log-warn';
-    case 'info':
-      return 'log-info';
-    case 'debug':
-      return 'log-debug';
+    case "error":
+      return "log-error";
+    case "warn":
+      return "log-warn";
+    case "info":
+      return "log-info";
+    case "debug":
+      return "log-debug";
     default:
-      return '';
+      return "";
   }
 }
 
 interface LogRowProps {
   logs: ParsedLogEvent[];
+  expandedIndex: number | null;
+  onRowClick: (index: number) => void;
 }
 
 interface RowComponentPropsWithCustom {
   index: number;
   style: CSSProperties;
   logs: ParsedLogEvent[];
+  expandedIndex: number | null;
+  onRowClick: (index: number) => void;
 }
 
-function LogRow({ index, style, logs }: RowComponentPropsWithCustom) {
+function LogRow({
+  index,
+  style,
+  logs,
+  expandedIndex,
+  onRowClick,
+}: RowComponentPropsWithCustom) {
   const log = logs[index];
+  const isExpanded = expandedIndex === index;
 
   return (
     <div
       style={style}
-      className={`flex items-center px-3 font-mono text-xs border-b border-gray-800/50 hover:bg-gray-800/30 ${getLogLevelClass(log.level)}`}
+      onClick={() => onRowClick(index)}
+      className={`flex items-center px-3 font-mono text-xs border-b border-gray-800/50 cursor-pointer transition-colors ${
+        isExpanded
+          ? "bg-blue-900/30 border-l-2 border-l-blue-500"
+          : "hover:bg-gray-800/30"
+      } ${getLogLevelClass(log.level)}`}
     >
-      <span className="w-36 flex-shrink-0 text-gray-500">{log.formattedTime}</span>
+      <span className="w-36 flex-shrink-0 text-gray-500">
+        {log.formattedTime}
+      </span>
       <span className="flex-1 truncate" title={log.message}>
         {log.message}
       </span>
@@ -47,25 +66,92 @@ function LogRow({ index, style, logs }: RowComponentPropsWithCustom) {
 }
 
 export function LogViewer() {
-  const { filteredLogs, isLoading, error, selectedLogGroup, isTailing } = useLogStore();
+  const {
+    filteredLogs,
+    isLoading,
+    error,
+    selectedLogGroup,
+    isTailing,
+    expandedLogIndex,
+    setExpandedLogIndex,
+  } = useLogStore();
   const listRef = useRef<ListImperativeAPI>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
+  const prevLogCount = useRef(0);
+  const userScrolledAway = useRef(false);
+
+  const handleRowClick = useCallback(
+    (index: number) => {
+      // Toggle expansion: click same row closes it, different row expands it
+      setExpandedLogIndex(expandedLogIndex === index ? null : index);
+    },
+    [expandedLogIndex, setExpandedLogIndex],
+  );
+
+  const handleCloseDetail = useCallback(() => {
+    setExpandedLogIndex(null);
+  }, [setExpandedLogIndex]);
+
+  const expandedLog =
+    expandedLogIndex !== null ? filteredLogs[expandedLogIndex] : null;
 
   // Auto-scroll to bottom when tailing and new logs arrive
   useEffect(() => {
-    if (isTailing && shouldAutoScroll.current && listRef.current && filteredLogs.length > 0) {
-      listRef.current.scrollToRow({ index: filteredLogs.length - 1, align: 'end' });
+    const hasNewLogs = filteredLogs.length > prevLogCount.current;
+    prevLogCount.current = filteredLogs.length;
+
+    // Only auto-scroll if:
+    // 1. We're in tailing mode
+    // 2. New logs have arrived (not just filtering)
+    // 3. User hasn't scrolled away from bottom
+    // 4. shouldAutoScroll is true (we're near bottom)
+    if (
+      isTailing &&
+      hasNewLogs &&
+      shouldAutoScroll.current &&
+      !userScrolledAway.current &&
+      listRef.current &&
+      filteredLogs.length > 0
+    ) {
+      listRef.current.scrollToRow({
+        index: filteredLogs.length - 1,
+        align: "end",
+      });
     }
-  }, [filteredLogs.length, isTailing, listRef]);
+  }, [filteredLogs.length, isTailing]);
+
+  // Reset scroll state when starting/stopping tail
+  useEffect(() => {
+    if (isTailing) {
+      shouldAutoScroll.current = true;
+      userScrolledAway.current = false;
+      // Scroll to bottom when starting tail
+      if (listRef.current && filteredLogs.length > 0) {
+        listRef.current.scrollToRow({
+          index: filteredLogs.length - 1,
+          align: "end",
+        });
+      }
+    }
+  }, [isTailing, filteredLogs.length]);
 
   const handleRowsRendered = useCallback(
     (visibleRows: { startIndex: number; stopIndex: number }) => {
-      // If we're near the bottom, enable auto-scroll
-      const isNearBottom = visibleRows.stopIndex >= filteredLogs.length - 5;
-      shouldAutoScroll.current = isNearBottom;
+      // Check if user is at or near the bottom of the list
+      const isAtBottom = visibleRows.stopIndex >= filteredLogs.length - 3;
+
+      if (isAtBottom) {
+        // User scrolled back to bottom - resume auto-scroll
+        shouldAutoScroll.current = true;
+        userScrolledAway.current = false;
+      } else if (shouldAutoScroll.current && isTailing) {
+        // User scrolled away from bottom while tailing - pause auto-scroll
+        userScrolledAway.current = true;
+        shouldAutoScroll.current = false;
+      }
     },
-    [filteredLogs.length]
+    [filteredLogs.length, isTailing],
   );
 
   if (!selectedLogGroup) {
@@ -122,17 +208,29 @@ export function LogViewer() {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-hidden">
-      <List<LogRowProps>
-        listRef={listRef}
-        rowCount={filteredLogs.length}
-        rowHeight={ROW_HEIGHT}
-        rowComponent={LogRow}
-        rowProps={{ logs: filteredLogs }}
-        onRowsRendered={handleRowsRendered}
-        overscanCount={20}
-        className="h-full"
-      />
+    <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden">
+      {/* Virtualized log list */}
+      <div className="flex-1 overflow-hidden">
+        <List<LogRowProps>
+          listRef={listRef}
+          rowCount={filteredLogs.length}
+          rowHeight={ROW_HEIGHT}
+          rowComponent={LogRow}
+          rowProps={{
+            logs: filteredLogs,
+            expandedIndex: expandedLogIndex,
+            onRowClick: handleRowClick,
+          }}
+          onRowsRendered={handleRowsRendered}
+          overscanCount={20}
+          className="h-full"
+        />
+      </div>
+
+      {/* Expanded log detail panel - below the log list */}
+      {expandedLog && (
+        <LogDetailInline log={expandedLog} onClose={handleCloseDetail} />
+      )}
     </div>
   );
 }

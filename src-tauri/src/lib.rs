@@ -46,21 +46,30 @@ impl Default for AppState {
     }
 }
 
+/// AWS connection info returned on successful init
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwsConnectionInfo {
+    pub profile: Option<String>,
+    pub region: Option<String>,
+}
+
 /// Initialize the AWS CloudWatch client using the default credential chain
 #[tauri::command]
-async fn init_aws_client(state: State<'_, AppState>) -> Result<String, String> {
-    let config = aws_config::defaults(BehaviorVersion::latest())
-        .load()
-        .await;
+async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo, String> {
+    let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
 
     let client = CloudWatchClient::new(&config);
+
+    // Get profile from environment
+    let profile = std::env::var("AWS_PROFILE").ok();
+    let region = config.region().map(|r| r.to_string());
 
     // Test the connection by describing log groups
     match client.describe_log_groups().limit(1).send().await {
         Ok(_) => {
             let mut client_lock = state.client.lock().await;
             *client_lock = Some(client);
-            Ok("AWS client initialized successfully".to_string())
+            Ok(AwsConnectionInfo { profile, region })
         }
         Err(e) => Err(format!("Failed to connect to AWS: {}", e)),
     }
@@ -70,9 +79,7 @@ async fn init_aws_client(state: State<'_, AppState>) -> Result<String, String> {
 #[tauri::command]
 async fn list_log_groups(state: State<'_, AppState>) -> Result<Vec<LogGroup>, String> {
     let client_lock = state.client.lock().await;
-    let client = client_lock
-        .as_ref()
-        .ok_or("AWS client not initialized")?;
+    let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
     let mut log_groups = Vec::new();
     let mut next_token: Option<String> = None;
@@ -119,13 +126,9 @@ async fn fetch_logs(
     limit: Option<i32>,
 ) -> Result<Vec<LogEvent>, String> {
     let client_lock = state.client.lock().await;
-    let client = client_lock
-        .as_ref()
-        .ok_or("AWS client not initialized")?;
+    let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
-    let mut request = client
-        .filter_log_events()
-        .log_group_name(&log_group_name);
+    let mut request = client.filter_log_events().log_group_name(&log_group_name);
 
     if let Some(start) = start_time {
         request = request.start_time(start);
@@ -170,13 +173,9 @@ async fn fetch_logs_paginated(
     next_token: Option<String>,
 ) -> Result<(Vec<LogEvent>, Option<String>), String> {
     let client_lock = state.client.lock().await;
-    let client = client_lock
-        .as_ref()
-        .ok_or("AWS client not initialized")?;
+    let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
-    let mut request = client
-        .filter_log_events()
-        .log_group_name(&log_group_name);
+    let mut request = client.filter_log_events().log_group_name(&log_group_name);
 
     if let Some(start) = start_time {
         request = request.start_time(start);

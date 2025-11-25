@@ -1,0 +1,210 @@
+# AWS Loggy - Design Document
+
+## Overview
+
+A desktop application for viewing, querying, and visualizing AWS CloudWatch logs with a focus on real-time streaming, client-side filtering, and responsive UX.
+
+## Problem Statement
+
+Existing tools like Cloudash proxy every request to AWS, resulting in:
+
+- No true live tail capability (just polling/refresh)
+- Sluggish filtering (server roundtrip for each query)
+- No client-side caching or intelligence
+
+## Core Requirements
+
+### Must Have
+
+1. **Live Log Tailing** - True streaming of new log events as they arrive
+2. **Historical Log Viewing** - Browse and search past logs with time range selection
+3. **Real-time Client-side Filtering** - Instant filtering as user types (no AWS roundtrip)
+4. **JSON Query Filtering** - Filter by JSON field values (e.g., `level:error`, `userId:123`)
+5. **Pattern-based Colorization** - Highlight logs by level (ERROR=red, WARN=yellow) or custom patterns
+6. **Desktop GUI** - Native-feeling cross-platform desktop application
+
+### Nice to Have
+
+- CloudWatch Logs Insights query support
+- Saved/favorite queries
+- Export to JSON/CSV
+- Multiple log group support
+
+## Technical Architecture
+
+### Stack: Tauri + React + TypeScript
+
+**Tauri Benefits:**
+
+- Small bundle size (~10-15MB vs 150MB+ Electron)
+- Rust backend for high-performance log parsing/streaming
+- Native OS integration (system tray, notifications)
+- Lower memory footprint (uses OS webview)
+
+**Frontend:**
+
+- React 19 with TypeScript
+- Zustand for state management
+- react-window v2 for virtualized log rendering
+- Tailwind CSS v4 for styling
+
+**Theme:** Follow system preference (dark/light mode)
+
+**AWS Credentials:** Use AWS SDK default credential provider chain
+
+- Automatically supports profiles, SSO, IAM roles, environment variables
+- No custom credential management needed
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     React Frontend                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ Log Viewer  │  │  Filters    │  │  Settings/Config    │  │
+│  │ (Virtual    │  │  (Instant)  │  │  (AWS Profile,      │  │
+│  │  Scroll)    │  │             │  │   Log Groups)       │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└────────────────────────┬────────────────────────────────────┘
+                         │ Tauri IPC (Events + Commands)
+┌────────────────────────┴────────────────────────────────────┐
+│                     Rust Backend                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ AWS SDK     │  │ Log Cache   │  │  Log Parser         │  │
+│  │ (CloudWatch │  │ (In-memory  │  │  (JSON, Text,       │  │
+│  │  Logs)      │  │  buffer)    │  │   Pattern Match)    │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+#### Rust Backend (Tauri)
+
+- **AWS CloudWatch Client**: Use `aws-sdk-cloudwatchlogs` for API calls
+- **Log Streamer**: Poll CloudWatch with `FilterLogEvents` in a background task
+- **Log Cache**: In-memory ring buffer storing recent logs for instant client-side filtering
+- **Log Parser**: Parse JSON logs, extract fields for querying
+
+#### React Frontend
+
+- **LogViewer**: Virtualized list (react-window) for rendering 100k+ logs smoothly
+- **FilterBar**: Text input that filters cached logs instantly + level toggles
+- **TimeRangePicker**: Preset buttons (15m, 1h, 6h, 24h, 7d) + custom date range
+- **LogDetailInline**: Expandable detail view with JSON syntax highlighting
+- **JsonSyntaxHighlight**: Colorized JSON renderer
+
+### Data Flow
+
+**Live Tail Mode:**
+
+1. Backend polls CloudWatch every 2 seconds for new events
+2. New events parsed, cached, and emitted to frontend
+3. Frontend appends to virtualized list, applies active filters client-side
+4. User filter changes = instant re-filter of cached data (no AWS call)
+
+**Historical Mode:**
+
+1. User selects time range
+2. Backend fetches logs from CloudWatch (with pagination)
+3. Logs cached and displayed
+4. Client-side filtering on cached data
+
+### Filtering System
+
+**Filter Types:**
+
+1. **Text Search**: Simple substring match across log message
+2. **JSON Field Query**: `field:value` or `field.nested:value` syntax
+3. **Log Level**: Quick toggles for ERROR, WARN, INFO, DEBUG
+
+**Implementation:**
+
+- All filtering happens client-side on cached logs
+- Debounce input to avoid excessive re-renders
+
+### Log Level Detection
+
+Priority order for determining log level:
+
+1. **JSON `level` field**: Parse JSON and check `level` or `log_level` field
+2. **Prefix pattern**: Match `INFO`, `WARN`, `ERROR`, `DEBUG` with surrounding whitespace
+3. **Fallback**: Keyword matching anywhere in message
+
+### Colorization
+
+- ERROR/FATAL: Red (`log-error` class)
+- WARN: Yellow (`log-warn` class)
+- INFO: Blue (`log-info` class)
+- DEBUG: Gray (`log-debug` class)
+
+## Project Structure
+
+```
+aws-loggy/
+├── src-tauri/              # Rust backend
+│   ├── src/
+│   │   └── lib.rs          # Tauri commands & AWS integration
+│   └── Cargo.toml
+├── src/                    # React frontend
+│   ├── components/
+│   │   ├── FilterBar.tsx
+│   │   ├── LogViewer.tsx
+│   │   ├── LogDetailInline.tsx
+│   │   ├── JsonSyntaxHighlight.tsx
+│   │   ├── TimeRangePicker.tsx
+│   │   └── LogGroupSelector.tsx
+│   ├── stores/
+│   │   └── logStore.ts     # Zustand state management
+│   ├── types/
+│   │   └── index.ts
+│   └── App.tsx
+├── package.json
+├── DESIGN.md               # This file
+├── AGENTS.md               # AI agent instructions
+└── CLAUDE.md -> AGENTS.md  # Symlink
+```
+
+## Configuration
+
+- **Log cache size**: 50,000 log entries in memory
+- **Polling interval**: 2 seconds for live tail
+- **Theme**: System preference (dark/light)
+
+## Dependencies
+
+### Rust (Cargo.toml)
+
+- `tauri` - Desktop framework
+- `aws-sdk-cloudwatchlogs` - CloudWatch Logs API
+- `aws-config` - Default credential chain
+- `tokio` - Async runtime
+- `serde` / `serde_json` - Serialization
+
+### Frontend (package.json)
+
+- `react` / `react-dom` - UI framework
+- `@tauri-apps/api` - Tauri JS bindings
+- `zustand` - State management
+- `react-window` - Virtual scrolling
+- `tailwindcss` - Styling
+- `date-fns` - Date utilities
+
+## Scripts
+
+```bash
+npm start          # Run in development mode
+npm run app:build  # Build production app (.app + .dmg)
+npm run fmt        # Format code (trunk)
+npm run lint       # Lint code (trunk)
+```
+
+## Future Enhancements
+
+- Regex filter support (`/pattern/`)
+- Custom colorization rules
+- AWS profile selector UI
+- Saved/favorite queries
+- Export to JSON/CSV
+- CloudWatch Logs Insights integration
+- Multiple log group tabs
