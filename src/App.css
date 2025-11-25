@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Base styles */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+}
+
+/* Dark mode default (better for log viewing) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #e5e7eb;
+    background-color: #111827;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #1f2937;
+    background-color: #f9fafb;
+  }
+}
+
+/* Log colorization classes */
+.log-error {
+  @apply text-red-400 bg-red-950/30;
+}
+
+.log-warn {
+  @apply text-yellow-400 bg-yellow-950/20;
+}
+
+.log-info {
+  @apply text-blue-300;
+}
+
+.log-debug {
+  @apply text-gray-500;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-600 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
+}
