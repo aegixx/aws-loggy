@@ -12,6 +12,7 @@ interface AwsConnectionInfo {
 interface LogStore {
   // Connection state
   isConnected: boolean;
+  isConnecting: boolean;
   connectionError: string | null;
   awsInfo: AwsConnectionInfo | null;
 
@@ -183,6 +184,7 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
 export const useLogStore = create<LogStore>((set, get) => ({
   // Initial state
   isConnected: false,
+  isConnecting: false,
   connectionError: null,
   awsInfo: null,
   logGroups: [],
@@ -199,13 +201,15 @@ export const useLogStore = create<LogStore>((set, get) => ({
   tailInterval: null,
 
   initializeAws: async () => {
+    set({ isConnecting: true, connectionError: null });
     try {
       const awsInfo = await invoke<AwsConnectionInfo>("init_aws_client");
-      set({ isConnected: true, connectionError: null, awsInfo });
+      set({ isConnected: true, isConnecting: false, connectionError: null, awsInfo });
       await get().loadLogGroups();
     } catch (error) {
       set({
         isConnected: false,
+        isConnecting: false,
         connectionError: error instanceof Error ? error.message : String(error),
         awsInfo: null,
       });

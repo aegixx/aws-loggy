@@ -1,10 +1,11 @@
 import { useRef, useEffect, useCallback, CSSProperties } from "react";
 import { List, ListImperativeAPI } from "react-window";
 import { useLogStore } from "../stores/logStore";
-import { LogDetailInline } from "./LogDetailInline";
+import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
 import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
+const DETAIL_HEIGHT = 200;
 
 function getLogLevelClass(level: ParsedLogEvent["level"]): string {
   switch (level) {
@@ -25,6 +26,7 @@ interface LogRowProps {
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
   onRowClick: (index: number) => void;
+  onClose: () => void;
 }
 
 interface RowComponentPropsWithCustom {
@@ -33,6 +35,7 @@ interface RowComponentPropsWithCustom {
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
   onRowClick: (index: number) => void;
+  onClose: () => void;
 }
 
 function LogRow({
@@ -41,18 +44,106 @@ function LogRow({
   logs,
   expandedIndex,
   onRowClick,
+  onClose,
 }: RowComponentPropsWithCustom) {
-  const log = logs[index];
-  const isExpanded = expandedIndex === index;
+  // If there's an expanded row, indices after it are shifted by 1
+  const isDetailRow = expandedIndex !== null && index === expandedIndex + 1;
+  const actualLogIndex =
+    expandedIndex !== null && index > expandedIndex ? index - 1 : index;
+
+  // Render the detail panel
+  if (isDetailRow) {
+    const log = logs[expandedIndex];
+    const date = new Date(log.timestamp);
+    const fullTimestamp =
+      date.toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }) +
+      "." +
+      date.getMilliseconds().toString().padStart(3, "0");
+
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(log.message);
+      } catch (err) {
+        console.error("Failed to copy:", err);
+      }
+    };
+
+    return (
+      <div
+        style={style}
+        className="bg-gray-900 border-l-2 border-l-blue-500 px-3 py-2 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header with metadata */}
+        <div className="flex items-start justify-between mb-2 flex-shrink-0">
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-gray-400">
+              <span className="text-gray-600">Timestamp:</span>{" "}
+              <span className="text-gray-300">{fullTimestamp}</span>
+            </span>
+            {log.log_stream_name && (
+              <span className="text-gray-400">
+                <span className="text-gray-600">Stream:</span>{" "}
+                <span className="text-gray-300 font-mono text-xs">
+                  {log.log_stream_name}
+                </span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopy}
+              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors cursor-pointer"
+              title="Copy raw message"
+            >
+              Copy
+            </button>
+            <button
+              onClick={onClose}
+              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors cursor-pointer"
+              title="Close (Esc)"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* Log content */}
+        <div className="bg-gray-950 rounded p-2 overflow-auto flex-1 min-h-0">
+          {log.parsedJson ? (
+            <JsonSyntaxHighlight data={log.parsedJson} />
+          ) : (
+            <pre className="font-mono text-sm leading-relaxed text-gray-300 whitespace-pre-wrap break-all">
+              {log.message}
+            </pre>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Regular log row
+  const log = logs[actualLogIndex];
+  if (!log) return <div style={style} />;
+
+  const isExpanded = expandedIndex === actualLogIndex;
 
   return (
     <div
       style={style}
-      onClick={() => onRowClick(index)}
-      className={`flex items-center px-3 font-mono text-xs border-b border-gray-800/50 cursor-pointer transition-colors ${
+      onClick={() => onRowClick(actualLogIndex)}
+      className={`flex items-center px-3 font-mono text-xs border-b border-gray-800/50 cursor-pointer transition-colors border-l-2 ${
         isExpanded
-          ? "bg-blue-900/30 border-l-2 border-l-blue-500"
-          : "hover:bg-gray-800/30"
+          ? "bg-blue-900/30 border-l-blue-500"
+          : "border-l-transparent hover:bg-gray-800/30"
       } ${getLogLevelClass(log.level)}`}
     >
       <span className="w-36 flex-shrink-0 text-gray-500">
@@ -93,8 +184,31 @@ export function LogViewer() {
     setExpandedLogIndex(null);
   }, [setExpandedLogIndex]);
 
-  const expandedLog =
-    expandedLogIndex !== null ? filteredLogs[expandedLogIndex] : null;
+  // Handle Escape key to close detail
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && expandedLogIndex !== null) {
+        setExpandedLogIndex(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [expandedLogIndex, setExpandedLogIndex]);
+
+  // Calculate row count (add 1 for detail row when expanded)
+  const rowCount =
+    expandedLogIndex !== null ? filteredLogs.length + 1 : filteredLogs.length;
+
+  // Dynamic row height
+  const getRowHeight = useCallback(
+    (index: number) => {
+      if (expandedLogIndex !== null && index === expandedLogIndex + 1) {
+        return DETAIL_HEIGHT;
+      }
+      return ROW_HEIGHT;
+    },
+    [expandedLogIndex],
+  );
 
   // Auto-scroll to bottom when tailing and new logs arrive
   useEffect(() => {
@@ -139,7 +253,7 @@ export function LogViewer() {
   const handleRowsRendered = useCallback(
     (visibleRows: { startIndex: number; stopIndex: number }) => {
       // Check if user is at or near the bottom of the list
-      const isAtBottom = visibleRows.stopIndex >= filteredLogs.length - 3;
+      const isAtBottom = visibleRows.stopIndex >= rowCount - 3;
 
       if (isAtBottom) {
         // User scrolled back to bottom - resume auto-scroll
@@ -151,7 +265,7 @@ export function LogViewer() {
         shouldAutoScroll.current = false;
       }
     },
-    [filteredLogs.length, isTailing],
+    [rowCount, isTailing],
   );
 
   if (!selectedLogGroup) {
@@ -208,29 +322,22 @@ export function LogViewer() {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden">
-      {/* Virtualized log list */}
-      <div className="flex-1 overflow-hidden">
-        <List<LogRowProps>
-          listRef={listRef}
-          rowCount={filteredLogs.length}
-          rowHeight={ROW_HEIGHT}
-          rowComponent={LogRow}
-          rowProps={{
-            logs: filteredLogs,
-            expandedIndex: expandedLogIndex,
-            onRowClick: handleRowClick,
-          }}
-          onRowsRendered={handleRowsRendered}
-          overscanCount={20}
-          className="h-full"
-        />
-      </div>
-
-      {/* Expanded log detail panel - below the log list */}
-      {expandedLog && (
-        <LogDetailInline log={expandedLog} onClose={handleCloseDetail} />
-      )}
+    <div ref={containerRef} className="flex-1 overflow-hidden">
+      <List<LogRowProps>
+        listRef={listRef}
+        rowCount={rowCount}
+        rowHeight={getRowHeight}
+        rowComponent={LogRow}
+        rowProps={{
+          logs: filteredLogs,
+          expandedIndex: expandedLogIndex,
+          onRowClick: handleRowClick,
+          onClose: handleCloseDetail,
+        }}
+        onRowsRendered={handleRowsRendered}
+        overscanCount={20}
+        className="h-full"
+      />
     </div>
   );
 }
