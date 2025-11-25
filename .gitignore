@@ -25,3 +25,6 @@ dist-ssr
 
 # Claude Code
 .claude/
+
+# Rust build artifacts
+src-tauri/target/

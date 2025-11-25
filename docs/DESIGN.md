@@ -6,7 +6,7 @@ A desktop application for viewing, querying, and visualizing AWS CloudWatch logs
 
 ## Problem Statement
 
-Existing tools like Cloudash proxy every request to AWS, resulting in:
+Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS on each request, resulting in:
 
 - No true live tail capability (just polling/refresh)
 - Sluggish filtering (server roundtrip for each query)
@@ -57,7 +57,7 @@ Existing tools like Cloudash proxy every request to AWS, resulting in:
 
 ### Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                     React Frontend                          │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
@@ -140,7 +140,7 @@ Priority order for determining log level:
 
 ## Project Structure
 
-```
+```text
 aws-loggy/
 ├── src-tauri/              # Rust backend
 │   ├── src/

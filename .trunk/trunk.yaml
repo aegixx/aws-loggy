@@ -12,16 +12,16 @@ runtimes:
 lint:
   enabled:
     - checkov@3.2.495
-    - clippy@1.65.0
+    - clippy@SYSTEM
     - git-diff-check
     - markdownlint@0.46.0
     - osv-scanner@1.3.6
     - oxipng@7.0.0
     - prettier@3.6.2
-    - rustfmt@1.65.0
+    - rustfmt@SYSTEM
     - svgo@4.0.0
     - taplo@0.8.0
-    - trivy@0.37.1
+    # - trivy@0.37.1  # Disabled - internal policy errors
     - trufflehog@3.31.3
     - yamllint@1.37.1
 actions:

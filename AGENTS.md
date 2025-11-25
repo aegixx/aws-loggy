@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-AWS Loggy is a desktop application for viewing AWS CloudWatch logs. Built with Tauri (Rust backend) + React/TypeScript frontend.
+Loggy is a desktop application for viewing AWS CloudWatch logs. Built with Tauri (Rust backend) + React/TypeScript frontend.
 
 See `DESIGN.md` for full architecture documentation.
 
