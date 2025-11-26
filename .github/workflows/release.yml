@@ -74,5 +74,5 @@ jobs:
           releaseBody: See the assets below to download and install Loggy.
           releaseDraft: false
           prerelease: false
-          releaseAssetNamePattern: Loggy-[version]-${{ matrix.asset-name }}[ext]
+          assetNamePattern: Loggy-[version]-${{ matrix.asset-name }}[ext]
           args: ${{ matrix.args }}
