@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/aegixx/aws-loggy/compare/v1.3.5...v1.4.0) (2025-11-26)
+
+
+### Features
+
+* Add status bar, cache limits, and pagination for log fetching ([c1628a0](https://github.com/aegixx/aws-loggy/commit/c1628a01d539310271087a8cbcf7b1d45fb6b50d))
+* Add System log level, keyboard shortcuts, and UX improvements ([24c1937](https://github.com/aegixx/aws-loggy/commit/24c1937375bc26a1a054b20f86991b54f37f07fd))
+
+
+### Miscellaneous
+
+* Updated Cargo.lock ([a4dc293](https://github.com/aegixx/aws-loggy/commit/a4dc2939229f0a04086581c2bdd2b62f6aef8e44))
+
 ## [1.3.5](https://github.com/aegixx/aws-loggy/compare/v1.3.4...v1.3.5) (2025-11-26)
 
 
