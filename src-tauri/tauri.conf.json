@@ -38,9 +38,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "signing": {
-        "identity": null
-      }
+      "signingIdentity": null
     }
   }
 }
