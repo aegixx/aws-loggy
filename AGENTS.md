@@ -20,6 +20,7 @@ See `DESIGN.md` for full architecture documentation.
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/FilterBar.tsx` - Filter input and level toggles
 - `src/components/SettingsDialog.tsx` - Settings dialog (CMD-,)
+- `src/components/StatusBar.tsx` - Status bar with log counts and cache usage
 - `src/types/index.ts` - TypeScript type definitions
 
 ## Development
@@ -66,11 +67,17 @@ No test framework currently configured. Tests welcome as future enhancement.
 
 ## Keyboard Shortcuts
 
-| Shortcut        | Action                                       |
-| --------------- | -------------------------------------------- |
-| `⌘R` / `Ctrl+R` | Refresh - reconnect to AWS and re-query logs |
-| `⌘,` / `Ctrl+,` | Open Settings                                |
-| `Escape`        | Close dialogs / collapse expanded log        |
+| Shortcut           | Action                                       |
+| ------------------ | -------------------------------------------- |
+| `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
+| `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
+| `⌘,` / `Ctrl+,`    | Open Settings                                |
+| `Tab`              | Focus log viewer for keyboard navigation     |
+| `↑` / `↓`          | Navigate between log rows                    |
+| `Page Up` / `Down` | Jump one page at a time                      |
+| `Home` / `End`     | Jump to first / last log                     |
+| `Space` / `Enter`  | Expand / collapse selected log               |
+| `Escape`           | Close dialogs / collapse expanded log        |
 
 ## Notes
 
@@ -79,8 +86,9 @@ No test framework currently configured. Tests welcome as future enhancement.
 - When SSO session expires, frontend receives `aws-session-expired` event; user must re-auth via `aws sso login`
 - `reconnect_aws` Tauri command re-initializes the AWS client after credential refresh
 - `refreshConnection` store action calls `reconnect_aws` and re-fetches logs with current filters
-- Log cache limited to 50,000 entries
+- Log cache limits configurable in Settings (default: 50,000 entries OR 100 MB)
 - Live tail polls every 2 seconds
 - Default time range is 15 minutes
 - react-window v2 API differs from v1 (use `List`, not `FixedSizeList`)
 - Settings persisted to localStorage via zustand/persist middleware
+- Last selected log group is remembered and auto-selected on app launch

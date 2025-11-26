@@ -29,6 +29,7 @@ function getLogLevelStyle(
 interface LogRowProps {
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
+  selectedIndex: number | null;
   onRowClick: (index: number) => void;
   onClose: () => void;
   logLevels: LogLevelConfig[];
@@ -40,6 +41,7 @@ interface RowComponentPropsWithCustom {
   style: CSSProperties;
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
+  selectedIndex: number | null;
   onRowClick: (index: number) => void;
   onClose: () => void;
   logLevels: LogLevelConfig[];
@@ -51,6 +53,7 @@ function LogRow({
   style,
   logs,
   expandedIndex,
+  selectedIndex,
   onRowClick,
   onClose,
   logLevels,
@@ -60,6 +63,8 @@ function LogRow({
   const isDetailRow = expandedIndex !== null && index === expandedIndex + 1;
   const actualLogIndex =
     expandedIndex !== null && index > expandedIndex ? index - 1 : index;
+
+  const [copied, setCopied] = useState(false);
 
   // Render the detail panel
   if (isDetailRow) {
@@ -81,6 +86,8 @@ function LogRow({
     const handleCopy = async () => {
       try {
         await navigator.clipboard.writeText(log.message);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 500);
       } catch (err) {
         console.error("Failed to copy:", err);
       }
@@ -119,10 +126,16 @@ function LogRow({
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopy}
-              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer min-w-[52px] ${
+                copied
+                  ? "bg-green-600 text-white"
+                  : isDark
+                    ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-700"
+              }`}
               title="Copy raw message"
             >
-              Copy
+              {copied ? "Copied!" : "Copy"}
             </button>
             <button
               onClick={onClose}
@@ -157,21 +170,30 @@ function LogRow({
   if (!log) return <div style={style} />;
 
   const isExpanded = expandedIndex === actualLogIndex;
+  const isSelected = selectedIndex === actualLogIndex;
   const levelStyle = getLogLevelStyle(log.level, logLevels);
+
+  // Determine row styling based on expanded/selected state
+  let rowClasses =
+    "flex items-center px-3 font-mono text-xs border-b cursor-pointer transition-colors border-l-2 ";
+  if (isExpanded) {
+    rowClasses += `border-l-blue-500 ${isDark ? "bg-blue-900/30" : "bg-blue-100"}`;
+  } else if (isSelected) {
+    rowClasses += `border-l-blue-400 ${isDark ? "bg-gray-700/50 ring-1 ring-inset ring-blue-500/50" : "bg-blue-50 ring-1 ring-inset ring-blue-300"}`;
+  } else {
+    rowClasses += `border-l-transparent ${isDark ? "border-gray-800/50 hover:bg-gray-800/30" : "border-gray-200 hover:bg-gray-100"}`;
+  }
 
   return (
     <div
       style={{
         ...style,
         color: levelStyle.color,
-        backgroundColor: isExpanded ? undefined : levelStyle.backgroundColor,
+        backgroundColor:
+          isExpanded || isSelected ? undefined : levelStyle.backgroundColor,
       }}
       onClick={() => onRowClick(actualLogIndex)}
-      className={`flex items-center px-3 font-mono text-xs border-b cursor-pointer transition-colors border-l-2 ${
-        isExpanded
-          ? `border-l-blue-500 ${isDark ? "bg-blue-900/30" : "bg-blue-100"}`
-          : `border-l-transparent ${isDark ? "border-gray-800/50 hover:bg-gray-800/30" : "border-gray-200 hover:bg-gray-100"}`
-      }`}
+      className={rowClasses}
     >
       <span
         className={`w-36 flex-shrink-0 ${isDark ? "text-gray-500" : "text-gray-500"}`}
@@ -194,6 +216,8 @@ export function LogViewer() {
     isTailing,
     expandedLogIndex,
     setExpandedLogIndex,
+    selectedLogIndex,
+    setSelectedLogIndex,
   } = useLogStore();
   const { theme, logLevels } = useSettingsStore();
 
@@ -220,26 +244,99 @@ export function LogViewer() {
 
   const handleRowClick = useCallback(
     (index: number) => {
-      // Toggle expansion: click same row closes it, different row expands it
+      // Set selection and toggle expansion
+      setSelectedLogIndex(index);
       setExpandedLogIndex(expandedLogIndex === index ? null : index);
     },
-    [expandedLogIndex, setExpandedLogIndex],
+    [expandedLogIndex, setExpandedLogIndex, setSelectedLogIndex],
   );
 
   const handleCloseDetail = useCallback(() => {
     setExpandedLogIndex(null);
   }, [setExpandedLogIndex]);
 
-  // Handle Escape key to close detail
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && expandedLogIndex !== null) {
-        setExpandedLogIndex(null);
+  // Get visible row count for page navigation
+  const getVisibleRowCount = useCallback(() => {
+    if (!containerRef.current) return 10;
+    return Math.floor(containerRef.current.clientHeight / ROW_HEIGHT);
+  }, []);
+
+  // Handle keyboard navigation
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (filteredLogs.length === 0) return;
+
+      const currentIndex = selectedLogIndex ?? -1;
+      let newIndex: number | null = null;
+
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          newIndex = Math.min(currentIndex + 1, filteredLogs.length - 1);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          newIndex = Math.max(currentIndex - 1, 0);
+          break;
+        case "PageDown":
+          e.preventDefault();
+          newIndex = Math.min(
+            currentIndex + getVisibleRowCount(),
+            filteredLogs.length - 1,
+          );
+          break;
+        case "PageUp":
+          e.preventDefault();
+          newIndex = Math.max(currentIndex - getVisibleRowCount(), 0);
+          break;
+        case "Home":
+          e.preventDefault();
+          newIndex = 0;
+          break;
+        case "End":
+          e.preventDefault();
+          newIndex = filteredLogs.length - 1;
+          break;
+        case " ":
+        case "Enter":
+          e.preventDefault();
+          if (selectedLogIndex !== null) {
+            setExpandedLogIndex(
+              expandedLogIndex === selectedLogIndex ? null : selectedLogIndex,
+            );
+          }
+          return;
+        case "Escape":
+          if (expandedLogIndex !== null) {
+            e.preventDefault();
+            setExpandedLogIndex(null);
+          }
+          return;
       }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [expandedLogIndex, setExpandedLogIndex]);
+
+      if (newIndex !== null && newIndex !== currentIndex) {
+        setSelectedLogIndex(newIndex);
+        // Scroll to keep selected row visible
+        if (listRef.current) {
+          listRef.current.scrollToRow({
+            index:
+              expandedLogIndex !== null && newIndex > expandedLogIndex
+                ? newIndex + 1
+                : newIndex,
+            align: "smart",
+          });
+        }
+      }
+    },
+    [
+      filteredLogs.length,
+      selectedLogIndex,
+      expandedLogIndex,
+      setSelectedLogIndex,
+      setExpandedLogIndex,
+      getVisibleRowCount,
+    ],
+  );
 
   // Calculate row count (add 1 for detail row when expanded)
   const rowCount =
@@ -376,7 +473,12 @@ export function LogViewer() {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-hidden">
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-hidden focus:outline-none"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       <List<LogRowProps>
         listRef={listRef}
         rowCount={rowCount}
@@ -385,6 +487,7 @@ export function LogViewer() {
         rowProps={{
           logs: filteredLogs,
           expandedIndex: expandedLogIndex,
+          selectedIndex: selectedLogIndex,
           onRowClick: handleRowClick,
           onClose: handleCloseDetail,
           logLevels,

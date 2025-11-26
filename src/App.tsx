@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { LogGroupSelector } from "./components/LogGroupSelector";
 import { FilterBar } from "./components/FilterBar";
 import { LogViewer } from "./components/LogViewer";
+import { StatusBar } from "./components/StatusBar";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { AboutDialog } from "./components/AboutDialog";
 import { useLogStore } from "./stores/logStore";
@@ -14,6 +15,7 @@ function App() {
   const {
     initializeAws,
     refreshConnection,
+    setLoadingProgress,
     isConnected,
     isConnecting,
     connectionError,
@@ -21,6 +23,11 @@ function App() {
   } = useLogStore();
   const { theme, logLevels, openSettings } = useSettingsStore();
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [truncationWarning, setTruncationWarning] = useState<{
+    count: number;
+    sizeBytes: number;
+    reason: string;
+  } | null>(null);
 
   useEffect(() => {
     initializeAws();
@@ -38,13 +45,34 @@ function App() {
       // Always refresh connection (picks up credential changes) and re-query logs
       refreshConnection();
     });
+    const unlistenTruncated = listen<{
+      count: number;
+      size_bytes: number;
+      reason: string;
+    }>("logs-truncated", (event) => {
+      setTruncationWarning({
+        count: event.payload.count,
+        sizeBytes: event.payload.size_bytes,
+        reason: event.payload.reason,
+      });
+      // Auto-dismiss after 10 seconds
+      setTimeout(() => setTruncationWarning(null), 10000);
+    });
+    const unlistenProgress = listen<{ count: number; size_bytes: number }>(
+      "logs-progress",
+      (event) => {
+        setLoadingProgress(event.payload.count, event.payload.size_bytes);
+      },
+    );
 
     return () => {
       unlistenSettings.then((fn) => fn());
       unlistenAbout.then((fn) => fn());
       unlistenRefresh.then((fn) => fn());
+      unlistenTruncated.then((fn) => fn());
+      unlistenProgress.then((fn) => fn());
     };
-  }, [openSettings, refreshConnection]);
+  }, [openSettings, refreshConnection, setLoadingProgress]);
 
   // Handle keyboard shortcuts (fallback for non-menu shortcuts)
   useEffect(() => {
@@ -185,8 +213,29 @@ function App() {
       {/* Filter bar */}
       <FilterBar />
 
+      {/* Truncation warning */}
+      {truncationWarning && (
+        <div className="flex items-center justify-between px-3 py-2 bg-yellow-600 text-yellow-100 text-sm">
+          <span>
+            Results limited to {truncationWarning.count.toLocaleString()} logs (
+            {(truncationWarning.sizeBytes / 1024 / 1024).toFixed(1)} MB) due to{" "}
+            {truncationWarning.reason === "count" ? "count" : "size"} limit.
+            Narrow your time range for complete results.
+          </span>
+          <button
+            onClick={() => setTruncationWarning(null)}
+            className="ml-4 px-2 py-0.5 rounded bg-yellow-700 hover:bg-yellow-800 transition-colors cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Log viewer */}
       <LogViewer />
+
+      {/* Status bar */}
+      <StatusBar />
     </div>
   );
 }

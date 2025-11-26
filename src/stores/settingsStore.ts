@@ -30,6 +30,16 @@ export const LOG_LEVEL_JSON_FIELDS = [
   "logLevel",
 ];
 
+export interface CacheLimits {
+  maxLogCount: number; // Maximum number of logs to cache
+  maxSizeMb: number; // Maximum size in megabytes
+}
+
+export const DEFAULT_CACHE_LIMITS: CacheLimits = {
+  maxLogCount: 50_000,
+  maxSizeMb: 100,
+};
+
 interface SettingsStore {
   // Theme
   theme: Theme;
@@ -37,11 +47,19 @@ interface SettingsStore {
   // Log level settings - array ordered by priority
   logLevels: LogLevelConfig[];
 
+  // Last selected log group (persisted)
+  lastSelectedLogGroup: string | null;
+
+  // Cache limits
+  cacheLimits: CacheLimits;
+
   // Settings dialog visibility
   isSettingsOpen: boolean;
 
   // Actions
   setTheme: (theme: Theme) => void;
+  setLastSelectedLogGroup: (logGroup: string | null) => void;
+  setCacheLimits: (limits: Partial<CacheLimits>) => void;
   setLogLevelStyle: (id: string, style: Partial<LogLevelStyle>) => void;
   setLogLevelKeywords: (id: string, keywords: string[]) => void;
   setLogLevelName: (id: string, name: string) => void;
@@ -197,9 +215,17 @@ export const useSettingsStore = create<SettingsStore>()(
     (set, get) => ({
       theme: "system" as Theme,
       logLevels: DEFAULT_LOG_LEVELS,
+      lastSelectedLogGroup: null,
+      cacheLimits: DEFAULT_CACHE_LIMITS,
       isSettingsOpen: false,
 
       setTheme: (theme) => set({ theme }),
+      setLastSelectedLogGroup: (logGroup) =>
+        set({ lastSelectedLogGroup: logGroup }),
+      setCacheLimits: (limits) =>
+        set((state) => ({
+          cacheLimits: { ...state.cacheLimits, ...limits },
+        })),
 
       setLogLevelStyle: (id, style) =>
         set((state) => ({
@@ -291,10 +317,12 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 4,
+      version: 6,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
+        lastSelectedLogGroup: state.lastSelectedLogGroup,
+        cacheLimits: state.cacheLimits,
       }),
       migrate: (persisted, version) => {
         const data = persisted as { logLevels?: unknown; theme?: Theme };
@@ -340,10 +368,39 @@ export const useSettingsStore = create<SettingsStore>()(
               ...level,
               defaultEnabled: level.defaultEnabled ?? true,
             })),
+            lastSelectedLogGroup: null,
           };
         }
 
-        return persisted as { theme: Theme; logLevels: LogLevelConfig[] };
+        if (version === 4) {
+          // Add lastSelectedLogGroup to existing v4 data
+          return {
+            theme: data.theme ?? ("system" as Theme),
+            logLevels: data.logLevels as LogLevelConfig[],
+            lastSelectedLogGroup: null,
+            cacheLimits: DEFAULT_CACHE_LIMITS,
+          };
+        }
+
+        if (version === 5) {
+          // Add cacheLimits to existing v5 data
+          const v5Data = persisted as {
+            theme: Theme;
+            logLevels: LogLevelConfig[];
+            lastSelectedLogGroup: string | null;
+          };
+          return {
+            ...v5Data,
+            cacheLimits: DEFAULT_CACHE_LIMITS,
+          };
+        }
+
+        return persisted as {
+          theme: Theme;
+          logLevels: LogLevelConfig[];
+          lastSelectedLogGroup: string | null;
+          cacheLimits: CacheLimits;
+        };
       },
     },
   ),

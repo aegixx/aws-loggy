@@ -26,6 +26,9 @@ interface LogStore {
   // Logs
   logs: ParsedLogEvent[];
   isLoading: boolean;
+  loadingProgress: number; // Number of logs fetched so far during loading
+  loadingSizeBytes: number; // Size of logs fetched so far during loading
+  totalSizeBytes: number; // Total size of all loaded logs
   error: string | null;
 
   // Filtering
@@ -35,6 +38,9 @@ interface LogStore {
 
   // Expanded log detail
   expandedLogIndex: number | null;
+
+  // Selected row for keyboard navigation
+  selectedLogIndex: number | null;
 
   // Time range
   timeRange: { start: number; end: number | null } | null;
@@ -52,10 +58,12 @@ interface LogStore {
   setFilterText: (text: string) => void;
   toggleLevel: (level: LogLevel) => void;
   setExpandedLogIndex: (index: number | null) => void;
+  setSelectedLogIndex: (index: number | null) => void;
   setTimeRange: (range: { start: number; end: number | null } | null) => void;
   startTail: () => void;
   stopTail: () => void;
   clearLogs: () => void;
+  setLoadingProgress: (count: number, sizeBytes: number) => void;
 }
 
 function parseLogLevel(
@@ -197,11 +205,15 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectedLogGroup: null,
   logs: [],
   isLoading: false,
+  loadingProgress: 0,
+  loadingSizeBytes: 0,
+  totalSizeBytes: 0,
   error: null,
   filterText: "",
   disabledLevels: new Set(),
   filteredLogs: [],
   expandedLogIndex: null,
+  selectedLogIndex: null,
   timeRange: null,
   isTailing: false,
   tailInterval: null,
@@ -217,6 +229,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
         awsInfo,
       });
       await get().loadLogGroups();
+
+      // Auto-select last used log group if available
+      const { lastSelectedLogGroup } = useSettingsStore.getState();
+      const { logGroups, selectLogGroup } = get();
+      if (
+        lastSelectedLogGroup &&
+        logGroups.some((g) => g.name === lastSelectedLogGroup)
+      ) {
+        selectLogGroup(lastSelectedLogGroup);
+      }
     } catch (error) {
       set({
         isConnected: false,
@@ -265,7 +287,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   selectLogGroup: (name: string) => {
     const { stopTail, fetchLogs, timeRange } = get();
-    const { getDefaultDisabledLevels } = useSettingsStore.getState();
+    const { getDefaultDisabledLevels, setLastSelectedLogGroup } =
+      useSettingsStore.getState();
     stopTail();
     set({
       selectedLogGroup: name,
@@ -274,6 +297,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
       error: null,
       disabledLevels: getDefaultDisabledLevels(),
     });
+
+    // Persist selection to settings
+    setLastSelectedLogGroup(name);
 
     // Automatically fetch logs with existing time range/filters
     if (name) {
@@ -285,25 +311,52 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const { selectedLogGroup, filterText, disabledLevels } = get();
     if (!selectedLogGroup) return;
 
-    set({ isLoading: true, error: null, expandedLogIndex: null });
+    set({
+      isLoading: true,
+      loadingProgress: 0,
+      loadingSizeBytes: 0,
+      error: null,
+      logs: [],
+      filteredLogs: [],
+      expandedLogIndex: null,
+      selectedLogIndex: null,
+    });
 
     try {
       // Default to last 15 minutes if no time range specified
       const now = Date.now();
       const defaultStart = startTime ?? now - 15 * 60 * 1000;
 
+      // Use current time as end if not specified, to get logs "up to now"
+      const effectiveEnd = endTime ?? Date.now();
+
+      // Get cache limits from settings
+      const { cacheLimits } = useSettingsStore.getState();
+
       const rawLogs = await invoke<LogEvent[]>("fetch_logs", {
         logGroupName: selectedLogGroup,
         startTime: defaultStart,
-        endTime: endTime ?? null,
+        endTime: effectiveEnd,
         filterPattern: null,
-        limit: 1000,
+        maxCount: cacheLimits.maxLogCount,
+        maxSizeMb: cacheLimits.maxSizeMb,
       });
 
       const parsedLogs = rawLogs.map(parseLogEvent);
       const filtered = filterLogs(parsedLogs, filterText, disabledLevels);
 
-      set({ logs: parsedLogs, filteredLogs: filtered, isLoading: false });
+      // Calculate total size of loaded logs
+      const totalSize = rawLogs.reduce(
+        (sum, log) => sum + log.message.length,
+        0,
+      );
+
+      set({
+        logs: parsedLogs,
+        filteredLogs: filtered,
+        isLoading: false,
+        totalSizeBytes: totalSize,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : String(error),
@@ -315,7 +368,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
   setFilterText: (text: string) => {
     const { logs, disabledLevels } = get();
     const filtered = filterLogs(logs, text, disabledLevels);
-    set({ filterText: text, filteredLogs: filtered, expandedLogIndex: null });
+    set({
+      filterText: text,
+      filteredLogs: filtered,
+      expandedLogIndex: null,
+      selectedLogIndex: null,
+    });
   },
 
   toggleLevel: (level: LogLevel) => {
@@ -331,11 +389,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
       disabledLevels: newDisabled,
       filteredLogs: filtered,
       expandedLogIndex: null,
+      selectedLogIndex: null,
     });
   },
 
   setExpandedLogIndex: (index: number | null) => {
     set({ expandedLogIndex: index });
+  },
+
+  setSelectedLogIndex: (index: number | null) => {
+    set({ selectedLogIndex: index });
   },
 
   setTimeRange: (range: { start: number; end: number | null } | null) => {
@@ -408,11 +471,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
       disabledLevels: getDefaultDisabledLevels(),
       timeRange: null,
       expandedLogIndex: null,
+      selectedLogIndex: null,
     });
 
     // Trigger a fresh query with default time range
     if (selectedLogGroup) {
       fetchLogs();
     }
+  },
+
+  setLoadingProgress: (count: number, sizeBytes: number) => {
+    set({ loadingProgress: count, loadingSizeBytes: sizeBytes });
   },
 }));

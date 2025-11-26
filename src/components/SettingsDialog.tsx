@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState } from "react";
 import {
   useSettingsStore,
   getSortedLogLevels,
+  DEFAULT_CACHE_LIMITS,
   type LogLevelConfig,
 } from "../stores/settingsStore";
 
@@ -273,6 +274,8 @@ export function SettingsDialog() {
     theme,
     setTheme,
     logLevels,
+    cacheLimits,
+    setCacheLimits,
     isSettingsOpen,
     closeSettings,
     resetLogLevelDefaults,
@@ -371,6 +374,82 @@ export function SettingsDialog() {
                 >
                   Light
                 </button>
+              </div>
+            </div>
+
+            {/* Cache Limits */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider">
+                  Cache Limits
+                </h3>
+                <button
+                  onClick={() => setCacheLimits(DEFAULT_CACHE_LIMITS)}
+                  className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
+                >
+                  Reset to Defaults
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Logs are fetched until either limit is reached (whichever comes
+                first).
+              </p>
+              <div className="grid grid-cols-2 gap-4 bg-gray-800 rounded-lg p-4">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Max Log Count
+                  </label>
+                  <input
+                    type="number"
+                    value={
+                      cacheLimits?.maxLogCount ??
+                      DEFAULT_CACHE_LIMITS.maxLogCount
+                    }
+                    onChange={(e) =>
+                      setCacheLimits({
+                        maxLogCount: Math.max(
+                          1000,
+                          parseInt(e.target.value) ||
+                            DEFAULT_CACHE_LIMITS.maxLogCount,
+                        ),
+                      })
+                    }
+                    min={1000}
+                    max={500000}
+                    step={1000}
+                    className="w-full px-2 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-300"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Range: 1,000 - 500,000
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Max Size (MB)
+                  </label>
+                  <input
+                    type="number"
+                    value={
+                      cacheLimits?.maxSizeMb ?? DEFAULT_CACHE_LIMITS.maxSizeMb
+                    }
+                    onChange={(e) =>
+                      setCacheLimits({
+                        maxSizeMb: Math.max(
+                          10,
+                          parseInt(e.target.value) ||
+                            DEFAULT_CACHE_LIMITS.maxSizeMb,
+                        ),
+                      })
+                    }
+                    min={10}
+                    max={1000}
+                    step={10}
+                    className="w-full px-2 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-gray-300"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Range: 10 - 1,000 MB
+                  </p>
+                </div>
               </div>
             </div>
 

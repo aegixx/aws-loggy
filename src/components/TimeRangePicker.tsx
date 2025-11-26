@@ -181,6 +181,12 @@ export function TimeRangePicker() {
         {showCustom && (
           <div
             className={`absolute top-full right-0 mt-1 p-3 rounded-lg shadow-xl border z-50 w-72 ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"}`}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleCustomApply();
+              }
+            }}
           >
             <div className="space-y-3">
               <div>

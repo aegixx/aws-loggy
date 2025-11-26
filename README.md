@@ -17,6 +17,7 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 - **JSON Syntax Highlighting** - Collapsible, colorized JSON viewer for structured logs
 - **Virtualized Rendering** - Smooth scrolling through 50,000+ log entries
 - **Native Performance** - Built with Tauri for small bundle size and low memory usage
+- **Persistent State** - Remembers your last selected log group across sessions
 
 ## Prerequisites
 
@@ -78,11 +79,17 @@ Download the latest release for your platform from the [Releases](https://github
 
 ## Keyboard Shortcuts
 
-| Shortcut        | Action                                       |
-| --------------- | -------------------------------------------- |
-| `⌘R` / `Ctrl+R` | Refresh - reconnect to AWS and re-query logs |
-| `⌘,` / `Ctrl+,` | Open Settings                                |
-| `Escape`        | Close dialogs / collapse expanded log        |
+| Shortcut           | Action                                       |
+| ------------------ | -------------------------------------------- |
+| `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
+| `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
+| `⌘,` / `Ctrl+,`    | Open Settings                                |
+| `Tab`              | Focus log viewer for keyboard navigation     |
+| `↑` / `↓`          | Navigate between log rows                    |
+| `Page Up` / `Down` | Jump one page at a time                      |
+| `Home` / `End`     | Jump to first / last log                     |
+| `Space` / `Enter`  | Expand / collapse selected log               |
+| `Escape`           | Close dialogs / collapse expanded log        |
 
 ## Development
 
@@ -144,16 +151,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Tauri](https://tauri.app/) for the excellent desktop framework
 - The AWS SDK team for the Rust SDK
 
+## In-Progress Features
+
+- ! Binary can't be used on MacOS
+- Control over default font size, family, & line height
+- JSON expand/collapse
+- Log group typeahead search
+- CMD-G/Ctrl-G Go-to Log group shortcut dialog
+- Support CMD-F/Ctrl-F for text search within current log messages (highlighting matches)
+- Ability to filter by request ID (i.e. select a specific message and see full context)
+- On unfilter, scroll to maintain selected row position
+- Add right-click menu (copy, show related, etc)
+
 ## Future (potential) features
 
-- Regex filter support (`/pattern/`)
+- ! Cloudwatch Filter Syntax support
+- ! Regex filter support (`/pattern/`)
+- Configurable datetime format
 - AWS profile selector UI
 - Saved/favorite queries
 - Export to JSON/CSV
 - CloudWatch Logs Insights integration
 - Multiple log group tabs
 - Alternate file support (e.g. local files, Azure Log Analytics, etc.)
-- Infinite scroll
 - Multi-source aggregation (e.g. combine logs from multiple sources into a single view)
 - Multi-region support
 - Multi-account support
+- Timeline / histogram view based on volume
+- Stacked timeline view based on log level

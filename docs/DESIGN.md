@@ -40,11 +40,17 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 ## Keyboard Shortcuts
 
-| Shortcut        | Action                                       |
-| --------------- | -------------------------------------------- |
-| `⌘R` / `Ctrl+R` | Refresh - reconnect to AWS and re-query logs |
-| `⌘,` / `Ctrl+,` | Open Settings                                |
-| `Escape`        | Close dialogs / collapse expanded log        |
+| Shortcut           | Action                                       |
+| ------------------ | -------------------------------------------- |
+| `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
+| `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
+| `⌘,` / `Ctrl+,`    | Open Settings                                |
+| `Tab`              | Focus log viewer for keyboard navigation     |
+| `↑` / `↓`          | Navigate between log rows                    |
+| `Page Up` / `Down` | Jump one page at a time                      |
+| `Home` / `End`     | Jump to first / last log                     |
+| `Space` / `Enter`  | Expand / collapse selected log               |
+| `Escape`           | Close dialogs / collapse expanded log        |
 
 ## Technical Architecture
 
@@ -134,7 +140,7 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 1. **Text Search**: Simple substring match across log message
 2. **JSON Field Query**: `field:value` or `field.nested:value` syntax
-3. **Log Level**: Quick toggles for ERROR, WARN, INFO, DEBUG
+3. **Log Level**: Quick toggles for ERROR, WARN, INFO, DEBUG, SYSTEM
 
 **Implementation:**
 
@@ -155,6 +161,7 @@ Priority order for determining log level:
 - WARN: Yellow (`log-warn` class)
 - INFO: Blue (`log-info` class)
 - DEBUG: Gray (`log-debug` class)
+- SYSTEM: Gray with subtle background (`log-system` class)
 
 ## Project Structure
 
@@ -171,9 +178,11 @@ aws-loggy/
 │   │   ├── LogDetailInline.tsx
 │   │   ├── JsonSyntaxHighlight.tsx
 │   │   ├── TimeRangePicker.tsx
-│   │   └── LogGroupSelector.tsx
+│   │   ├── LogGroupSelector.tsx
+│   │   └── StatusBar.tsx
 │   ├── stores/
-│   │   └── logStore.ts     # Zustand state management
+│   │   ├── logStore.ts     # Zustand log/connection state
+│   │   └── settingsStore.ts # Zustand persisted settings
 │   ├── types/
 │   │   └── index.ts
 │   └── App.tsx
@@ -185,7 +194,10 @@ aws-loggy/
 
 ## Configuration
 
-- **Log cache size**: 50,000 log entries in memory
+- **Log cache limits**: Configurable in Settings
+  - Default: 50,000 log entries OR 100 MB (whichever is hit first)
+  - Progress displayed in status bar during fetch
+  - Truncation warning shown when limits reached
 - **Polling interval**: 2 seconds for live tail
 - **Theme**: System preference (dark/light)
 

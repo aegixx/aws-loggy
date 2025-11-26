@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { TimeRangePicker } from "./TimeRangePicker";
@@ -18,6 +18,22 @@ export function FilterBar() {
   } = useLogStore();
   const { theme, logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
+  const filterInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle CMD-L to focus filter input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+        e.preventDefault();
+        if (filterInputRef.current) {
+          filterInputRef.current.focus();
+          filterInputRef.current.select();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Track system preference for theme
   const [systemPrefersDark, setSystemPrefersDark] = useState(
@@ -58,6 +74,7 @@ export function FilterBar() {
         {/* Filter input */}
         <div className="flex-1 relative">
           <input
+            ref={filterInputRef}
             type="text"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}

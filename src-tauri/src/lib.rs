@@ -382,7 +382,23 @@ async fn list_log_groups(
     Ok(log_groups)
 }
 
-/// Fetch logs from a specific log group
+/// Progress update sent to frontend during log fetching
+#[derive(Clone, serde::Serialize)]
+struct LogsProgress {
+    count: usize,
+    size_bytes: usize,
+}
+
+/// Truncation info sent when limits are hit
+#[derive(Clone, serde::Serialize)]
+struct LogsTruncated {
+    count: usize,
+    size_bytes: usize,
+    reason: String, // "count" or "size"
+}
+
+/// Fetch logs from a specific log group with automatic pagination
+/// Fetches all available logs up to max_count or max_size_bytes, whichever is hit first
 #[tauri::command]
 async fn fetch_logs(
     app: AppHandle,
@@ -391,49 +407,102 @@ async fn fetch_logs(
     start_time: Option<i64>,
     end_time: Option<i64>,
     filter_pattern: Option<String>,
-    limit: Option<i32>,
+    max_count: Option<i32>,
+    max_size_mb: Option<i32>,
 ) -> Result<Vec<LogEvent>, String> {
     let client_lock = state.client.lock().await;
     let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
-    let mut request = client.filter_log_events().log_group_name(&log_group_name);
+    let max_events: usize = max_count.map(|l| l as usize).unwrap_or(50_000);
+    let max_bytes: usize = max_size_mb.map(|mb| mb as usize * 1024 * 1024).unwrap_or(100 * 1024 * 1024);
+    let mut all_events: Vec<LogEvent> = Vec::new();
+    let mut total_size: usize = 0;
+    let mut next_token: Option<String> = None;
 
-    if let Some(start) = start_time {
-        request = request.start_time(start);
-    }
+    loop {
+        let mut request = client.filter_log_events().log_group_name(&log_group_name);
 
-    if let Some(end) = end_time {
-        request = request.end_time(end);
-    }
-
-    if let Some(pattern) = filter_pattern {
-        if !pattern.is_empty() {
-            request = request.filter_pattern(pattern);
+        if let Some(start) = start_time {
+            request = request.start_time(start);
         }
-    }
 
-    if let Some(lim) = limit {
-        request = request.limit(lim);
-    }
-
-    match request.send().await {
-        Ok(response) => {
-            let events = response
-                .events
-                .unwrap_or_default()
-                .into_iter()
-                .map(LogEvent::from)
-                .collect();
-            Ok(events)
+        if let Some(end) = end_time {
+            request = request.end_time(end);
         }
-        Err(e) => {
-            let error_msg = format!("{}", e);
-            if is_sso_session_expired(&error_msg) {
-                app.emit("aws-session-expired", ()).ok();
+
+        if let Some(ref pattern) = filter_pattern {
+            if !pattern.is_empty() {
+                request = request.filter_pattern(pattern);
             }
-            Err(humanize_aws_error(&error_msg))
+        }
+
+        if let Some(ref token) = next_token {
+            request = request.next_token(token);
+        }
+
+        match request.send().await {
+            Ok(response) => {
+                let events: Vec<LogEvent> = response
+                    .events
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(LogEvent::from)
+                    .collect();
+
+                // Calculate size of new events
+                let new_size: usize = events.iter().map(|e| e.message.len()).sum();
+                total_size += new_size;
+                all_events.extend(events);
+
+                // Emit progress update to frontend
+                app.emit("logs-progress", LogsProgress {
+                    count: all_events.len(),
+                    size_bytes: total_size,
+                }).ok();
+
+                // Check for more pages
+                next_token = response.next_token.clone();
+
+                // Check if we've hit count limit
+                if all_events.len() >= max_events {
+                    all_events.truncate(max_events);
+                    if next_token.is_some() {
+                        app.emit("logs-truncated", LogsTruncated {
+                            count: all_events.len(),
+                            size_bytes: total_size,
+                            reason: "count".to_string(),
+                        }).ok();
+                    }
+                    break;
+                }
+
+                // Check if we've hit size limit
+                if total_size >= max_bytes {
+                    if next_token.is_some() {
+                        app.emit("logs-truncated", LogsTruncated {
+                            count: all_events.len(),
+                            size_bytes: total_size,
+                            reason: "size".to_string(),
+                        }).ok();
+                    }
+                    break;
+                }
+
+                if next_token.is_none() {
+                    break;
+                }
+            }
+            Err(e) => {
+                let error_msg = format!("{}", e);
+                if is_sso_session_expired(&error_msg) {
+                    app.emit("aws-session-expired", ()).ok();
+                }
+                return Err(humanize_aws_error(&error_msg));
+            }
         }
     }
+
+    Ok(all_events)
 }
 
 /// Fetch logs with pagination support for tailing
@@ -510,6 +579,11 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+R")
                 .build(app)?;
 
+            let focus_filter_item = MenuItemBuilder::new("Focus Filter")
+                .id("focus-filter")
+                .accelerator("CmdOrCtrl+L")
+                .build(app)?;
+
             // App submenu (macOS application menu)
             let app_submenu = SubmenuBuilder::new(app, "Loggy")
                 .item(&about_item)
@@ -539,6 +613,7 @@ pub fn run() {
             // View submenu
             let view_submenu = SubmenuBuilder::new(app, "View")
                 .item(&refresh_item)
+                .item(&focus_filter_item)
                 .separator()
                 .fullscreen()
                 .build()?;
