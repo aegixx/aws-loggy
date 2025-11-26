@@ -72,7 +72,16 @@ jobs:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: Loggy ${{ inputs.tag || github.ref_name }}
           releaseBody: See the assets below to download and install Loggy.
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           assetNamePattern: Loggy-[version]-${{ matrix.asset-name }}[ext]
           args: ${{ matrix.args }}
+
+  publish-release:
+    needs: build-tauri
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit ${{ inputs.tag || github.ref_name }} --draft=false --repo ${{ github.repository }}
