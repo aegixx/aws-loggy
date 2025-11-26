@@ -22,13 +22,15 @@ lint:
         - src-tauri/**
   enabled:
     - checkov@3.2.495
-    - clippy@SYSTEM
+    # clippy disabled - requires GTK system deps, handled by cargo-check CI job
+    # - clippy@SYSTEM
     - git-diff-check
     - markdownlint@0.46.0
     - osv-scanner@1.3.6
     - oxipng@7.0.0
     - prettier@3.6.2
-    - rustfmt@SYSTEM
+    # rustfmt disabled - Rust formatting handled locally, not in CI
+    # - rustfmt@SYSTEM
     - svgo@4.0.0
     - taplo@0.8.0
     # - trivy@0.37.1  # Disabled - internal policy errors
