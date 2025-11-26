@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.5](https://github.com/aegixx/aws-loggy/compare/v1.3.4...v1.3.5) (2025-11-26)
+
+
+### Bug Fixes
+
+* **ci:** hold release as draft until all artifacts are ready ([3d6e040](https://github.com/aegixx/aws-loggy/commit/3d6e04060879c642d5573ddc217de7d5eeefcd95))
+
 ## [1.3.4](https://github.com/aegixx/aws-loggy/compare/v1.3.3...v1.3.4) (2025-11-26)
 
 
