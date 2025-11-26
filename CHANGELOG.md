@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/aegixx/aws-loggy/compare/v1.3.1...v1.3.2) (2025-11-26)
+
+
+### Bug Fixes
+
+* correct directory name in README installation instructions ([78dfcbb](https://github.com/aegixx/aws-loggy/commit/78dfcbb66b47f8ed68202caaa8a54b066bb0902e))
+
 ## [1.3.1](https://github.com/aegixx/aws-loggy/compare/v1.3.0...v1.3.1) (2025-11-26)
 
 
