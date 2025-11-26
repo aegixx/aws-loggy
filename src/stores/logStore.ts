@@ -45,6 +45,7 @@ interface LogStore {
 
   // Actions
   initializeAws: () => Promise<void>;
+  refreshConnection: () => Promise<void>;
   loadLogGroups: () => Promise<void>;
   selectLogGroup: (name: string) => void;
   fetchLogs: (startTime?: number, endTime?: number) => Promise<void>;
@@ -226,6 +227,33 @@ export const useLogStore = create<LogStore>((set, get) => ({
     }
   },
 
+  refreshConnection: async () => {
+    const { selectedLogGroup, timeRange, fetchLogs } = get();
+    set({ isConnecting: true, connectionError: null });
+    try {
+      // Use reconnect_aws to clear and reinitialize with fresh credentials
+      const awsInfo = await invoke<AwsConnectionInfo>("reconnect_aws");
+      set({
+        isConnected: true,
+        isConnecting: false,
+        connectionError: null,
+        awsInfo,
+      });
+      await get().loadLogGroups();
+      // Re-fetch logs if a log group was selected
+      if (selectedLogGroup) {
+        await fetchLogs(timeRange?.start, timeRange?.end ?? undefined);
+      }
+    } catch (error) {
+      set({
+        isConnected: false,
+        isConnecting: false,
+        connectionError: error instanceof Error ? error.message : String(error),
+        awsInfo: null,
+      });
+    }
+  },
+
   loadLogGroups: async () => {
     try {
       const groups = await invoke<LogGroup[]>("list_log_groups");
@@ -236,9 +264,21 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   selectLogGroup: (name: string) => {
-    const { stopTail } = get();
+    const { stopTail, fetchLogs, timeRange } = get();
+    const { getDefaultDisabledLevels } = useSettingsStore.getState();
     stopTail();
-    set({ selectedLogGroup: name, logs: [], filteredLogs: [], error: null });
+    set({
+      selectedLogGroup: name,
+      logs: [],
+      filteredLogs: [],
+      error: null,
+      disabledLevels: getDefaultDisabledLevels(),
+    });
+
+    // Automatically fetch logs with existing time range/filters
+    if (name) {
+      fetchLogs(timeRange?.start, timeRange?.end ?? undefined);
+    }
   },
 
   fetchLogs: async (startTime?: number, endTime?: number) => {
@@ -248,9 +288,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
     set({ isLoading: true, error: null, expandedLogIndex: null });
 
     try {
-      // Default to last 30 minutes if no time range specified
+      // Default to last 15 minutes if no time range specified
       const now = Date.now();
-      const defaultStart = startTime ?? now - 30 * 60 * 1000;
+      const defaultStart = startTime ?? now - 15 * 60 * 1000;
 
       const rawLogs = await invoke<LogEvent[]>("fetch_logs", {
         logGroupName: selectedLogGroup,
@@ -310,8 +350,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
     if (isTailing || !selectedLogGroup) return;
 
     // Initial fetch
-    const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
-    fetchLogs(thirtyMinutesAgo);
+    const fifteenMinutesAgo = Date.now() - 15 * 60 * 1000;
+    fetchLogs(fifteenMinutesAgo);
 
     // Set up polling
     const interval = setInterval(async () => {
@@ -319,7 +359,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       const lastTimestamp =
         logs.length > 0
           ? logs[logs.length - 1].timestamp
-          : Date.now() - 30 * 60 * 1000;
+          : Date.now() - 15 * 60 * 1000;
 
       try {
         const newLogs = await invoke<LogEvent[]>("fetch_logs", {
@@ -357,6 +397,22 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   clearLogs: () => {
-    set({ logs: [], filteredLogs: [] });
+    const { selectedLogGroup, fetchLogs } = get();
+    const { getDefaultDisabledLevels } = useSettingsStore.getState();
+
+    // Reset all filters to defaults and clear logs
+    set({
+      logs: [],
+      filteredLogs: [],
+      filterText: "",
+      disabledLevels: getDefaultDisabledLevels(),
+      timeRange: null,
+      expandedLogIndex: null,
+    });
+
+    // Trigger a fresh query with default time range
+    if (selectedLogGroup) {
+      fetchLogs();
+    }
   },
 }));

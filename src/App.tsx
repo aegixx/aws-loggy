@@ -11,8 +11,14 @@ import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
 import "./App.css";
 
 function App() {
-  const { initializeAws, isConnected, isConnecting, connectionError, awsInfo } =
-    useLogStore();
+  const {
+    initializeAws,
+    refreshConnection,
+    isConnected,
+    isConnecting,
+    connectionError,
+    awsInfo,
+  } = useLogStore();
   const { theme, logLevels, openSettings } = useSettingsStore();
   const [isAboutOpen, setIsAboutOpen] = useState(false);
 
@@ -28,24 +34,38 @@ function App() {
     const unlistenAbout = listen("open-about", () => {
       setIsAboutOpen(true);
     });
+    const unlistenRefresh = listen("refresh-logs", () => {
+      // Always refresh connection (picks up credential changes) and re-query logs
+      refreshConnection();
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
       unlistenAbout.then((fn) => fn());
+      unlistenRefresh.then((fn) => fn());
     };
-  }, [openSettings]);
+  }, [openSettings, refreshConnection]);
 
-  // Handle CMD-, (or Ctrl-,) to open settings (fallback for keyboard shortcut)
+  // Handle keyboard shortcuts (fallback for non-menu shortcuts)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
-        e.preventDefault();
-        openSettings();
+      if (e.metaKey || e.ctrlKey) {
+        // CMD-, (or Ctrl-,) to open settings
+        if (e.key === ",") {
+          e.preventDefault();
+          openSettings();
+        }
+        // CMD-R (or Ctrl-R) to refresh - prevent default browser reload
+        if (e.key === "r") {
+          e.preventDefault();
+          // Always refresh connection (picks up credential changes) and re-query logs
+          refreshConnection();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openSettings]);
+  }, [openSettings, refreshConnection]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     // Only start dragging on left mouse button and if not clicking interactive elements

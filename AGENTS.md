@@ -55,7 +55,8 @@ No test framework currently configured. Tests welcome as future enhancement.
 ### Modifying log parsing
 
 - Edit `parseLogLevel()` in `src/stores/logStore.ts`
-- Log levels: `error`, `warn`, `info`, `debug`, `unknown`
+- Default log levels: `error`, `warn`, `info`, `debug`, `system`, `unknown`
+- Log levels are configurable in Settings (colors, keywords, default visibility)
 
 ### Adding Tauri commands
 
@@ -63,14 +64,23 @@ No test framework currently configured. Tests welcome as future enhancement.
 2. Register in `tauri::Builder`
 3. Call from frontend via `invoke()`
 
+## Keyboard Shortcuts
+
+| Shortcut        | Action                                       |
+| --------------- | -------------------------------------------- |
+| `⌘R` / `Ctrl+R` | Refresh - reconnect to AWS and re-query logs |
+| `⌘,` / `Ctrl+,` | Open Settings                                |
+| `Escape`        | Close dialogs / collapse expanded log        |
+
 ## Notes
 
 - AWS credentials use default provider chain (profiles, SSO, env vars)
 - SSO credentials auto-refresh within a valid SSO session (no manual intervention needed)
 - When SSO session expires, frontend receives `aws-session-expired` event; user must re-auth via `aws sso login`
 - `reconnect_aws` Tauri command re-initializes the AWS client after credential refresh
+- `refreshConnection` store action calls `reconnect_aws` and re-fetches logs with current filters
 - Log cache limited to 50,000 entries
 - Live tail polls every 2 seconds
+- Default time range is 15 minutes
 - react-window v2 API differs from v1 (use `List`, not `FixedSizeList`)
-- Settings accessible via CMD-, (or Ctrl-,) or gear icon in header
 - Settings persisted to localStorage via zustand/persist middleware

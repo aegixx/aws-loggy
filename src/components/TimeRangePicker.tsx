@@ -26,11 +26,17 @@ function parseDateTimeLocal(value: string): number {
 }
 
 export function TimeRangePicker() {
-  const { isTailing, startTail, stopTail, setTimeRange, selectedLogGroup } =
-    useLogStore();
+  const {
+    isTailing,
+    startTail,
+    stopTail,
+    setTimeRange,
+    selectedLogGroup,
+    timeRange,
+  } = useLogStore();
   const { theme } = useSettingsStore();
   const [showCustom, setShowCustom] = useState(false);
-  const [activePreset, setActivePreset] = useState<string | null>("30m");
+  const [activePreset, setActivePreset] = useState<string | null>("15m");
   const [customStart, setCustomStart] = useState(() =>
     formatDateTimeLocal(Date.now() - 60 * 60 * 1000),
   );
@@ -54,6 +60,13 @@ export function TimeRangePicker() {
   }, []);
 
   const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+
+  // Sync activePreset with store's timeRange (e.g., when Clear resets timeRange to null)
+  useEffect(() => {
+    if (timeRange === null && !isTailing) {
+      setActivePreset("15m");
+    }
+  }, [timeRange, isTailing]);
 
   // Close custom picker when clicking outside
   useEffect(() => {

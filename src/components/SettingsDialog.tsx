@@ -43,6 +43,7 @@ function LogLevelEditor({
     setLogLevelStyle,
     setLogLevelKeywords,
     setLogLevelName,
+    setLogLevelDefaultEnabled,
     removeLogLevel,
     moveLogLevel,
   } = useSettingsStore();
@@ -237,6 +238,31 @@ function LogLevelEditor({
         <p className="text-xs text-gray-500 mt-1">
           Matched in JSON level fields and log messages (case-insensitive)
         </p>
+      </div>
+
+      {/* Default Enabled Toggle */}
+      <div className="flex items-center justify-between pt-2 border-t border-gray-700">
+        <div>
+          <label className="text-xs text-gray-400">Enabled</label>
+          <p className="text-xs text-gray-500">
+            When disabled, this level is not shown in the filter bar and will
+            not be matched against logs.
+          </p>
+        </div>
+        <button
+          onClick={() =>
+            setLogLevelDefaultEnabled(level.id, !level.defaultEnabled)
+          }
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+            level.defaultEnabled ? "bg-blue-600" : "bg-gray-600"
+          }`}
+        >
+          <span
+            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+              level.defaultEnabled ? "translate-x-4.5" : "translate-x-1"
+            }`}
+          />
+        </button>
       </div>
     </div>
   );

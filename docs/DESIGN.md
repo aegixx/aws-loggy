@@ -30,6 +30,22 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 - Export to JSON/CSV
 - Multiple log group support
 
+## Design Principles
+
+1. **Keyboard-First Interface** - The application must be fully operable via keyboard. All UI actions must have corresponding keyboard shortcuts. Mouse/trackpad usage should be optional, not required.
+
+2. **Instant Feedback** - All filtering and UI interactions should feel instantaneous with no perceptible delay.
+
+3. **Fail Fast** - Prefer clear error messages over silent failures or fallback behaviors.
+
+## Keyboard Shortcuts
+
+| Shortcut        | Action                                       |
+| --------------- | -------------------------------------------- |
+| `⌘R` / `Ctrl+R` | Refresh - reconnect to AWS and re-query logs |
+| `⌘,` / `Ctrl+,` | Open Settings                                |
+| `Escape`        | Close dialogs / collapse expanded log        |
+
 ## Technical Architecture
 
 ### Stack: Tauri + React + TypeScript

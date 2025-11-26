@@ -12,7 +12,7 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 - **Live Log Tailing** - Stream new log events in real-time with auto-scroll
 - **Instant Filtering** - Client-side filtering as you type (no AWS roundtrip)
 - **JSON Query Syntax** - Filter by JSON fields with `field:value` or `field.nested:value`
-- **Log Level Detection** - Automatic colorization based on log level (ERROR, WARN, INFO, DEBUG)
+- **Log Level Detection** - Automatic colorization based on log level (ERROR, WARN, INFO, DEBUG, SYSTEM)
 - **Customizable Colors** - Configure log level colors and detection patterns via Settings (Cmd-,)
 - **JSON Syntax Highlighting** - Collapsible, colorized JSON viewer for structured logs
 - **Virtualized Rendering** - Smooth scrolling through 50,000+ log entries
@@ -75,6 +75,14 @@ Download the latest release for your platform from the [Releases](https://github
 6. **Toggle Log Levels** - Click level badges (ERROR, WARN, INFO, DEBUG) to show/hide specific levels.
 
 7. **View Details** - Click any log row to expand and see the full message with JSON highlighting.
+
+## Keyboard Shortcuts
+
+| Shortcut        | Action                                       |
+| --------------- | -------------------------------------------- |
+| `⌘R` / `Ctrl+R` | Refresh - reconnect to AWS and re-query logs |
+| `⌘,` / `Ctrl+,` | Open Settings                                |
+| `Escape`        | Close dialogs / collapse expanded log        |
 
 ## Development
 

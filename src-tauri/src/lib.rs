@@ -505,6 +505,11 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
 
+            let refresh_item = MenuItemBuilder::new("Refresh")
+                .id("refresh")
+                .accelerator("CmdOrCtrl+R")
+                .build(app)?;
+
             // App submenu (macOS application menu)
             let app_submenu = SubmenuBuilder::new(app, "Loggy")
                 .item(&about_item)
@@ -532,7 +537,11 @@ pub fn run() {
                 .build()?;
 
             // View submenu
-            let view_submenu = SubmenuBuilder::new(app, "View").fullscreen().build()?;
+            let view_submenu = SubmenuBuilder::new(app, "View")
+                .item(&refresh_item)
+                .separator()
+                .fullscreen()
+                .build()?;
 
             // Window submenu
             let window_submenu = SubmenuBuilder::new(app, "Window")
@@ -560,12 +569,15 @@ pub fn run() {
             // Handle menu events
             let preferences_id = preferences_item.id().clone();
             let about_id = about_item.id().clone();
+            let refresh_id = refresh_item.id().clone();
 
             app.on_menu_event(move |app_handle, event| {
                 if *event.id() == preferences_id {
                     app_handle.emit("open-settings", ()).ok();
                 } else if *event.id() == about_id {
                     app_handle.emit("open-about", ()).ok();
+                } else if *event.id() == refresh_id {
+                    app_handle.emit("refresh-logs", ()).ok();
                 }
             });
 

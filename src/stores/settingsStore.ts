@@ -14,6 +14,7 @@ export interface LogLevelConfig {
   style: LogLevelStyle;
   keywords: string[];
   priority: number; // Lower = higher priority (checked first)
+  defaultEnabled: boolean; // Whether this level is enabled by default in the filter
 }
 
 // Standard JSON field names to check for log level
@@ -44,12 +45,14 @@ interface SettingsStore {
   setLogLevelStyle: (id: string, style: Partial<LogLevelStyle>) => void;
   setLogLevelKeywords: (id: string, keywords: string[]) => void;
   setLogLevelName: (id: string, name: string) => void;
+  setLogLevelDefaultEnabled: (id: string, enabled: boolean) => void;
   addLogLevel: () => void;
   removeLogLevel: (id: string) => void;
   moveLogLevel: (id: string, direction: "up" | "down") => void;
   resetLogLevelDefaults: () => void;
   openSettings: () => void;
   closeSettings: () => void;
+  getDefaultDisabledLevels: () => Set<string>;
 }
 
 const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
@@ -62,6 +65,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
     },
     keywords: ["error", "fatal", "err", "critical", "crit"],
     priority: 0,
+    defaultEnabled: true,
   },
   {
     id: "warn",
@@ -72,6 +76,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
     },
     keywords: ["warn", "warning"],
     priority: 1,
+    defaultEnabled: true,
   },
   {
     id: "info",
@@ -82,6 +87,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
     },
     keywords: ["info"],
     priority: 2,
+    defaultEnabled: true,
   },
   {
     id: "debug",
@@ -92,6 +98,25 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
     },
     keywords: ["debug", "trace", "verbose"],
     priority: 3,
+    defaultEnabled: true,
+  },
+  {
+    id: "system",
+    name: "System",
+    style: {
+      textColor: "#9ca3af",
+      backgroundColor: "rgba(75, 85, 99, 0.2)",
+    },
+    keywords: [
+      "INIT_REPORT",
+      "REPORT",
+      "START",
+      "END",
+      "RequestId",
+      "EXTENSION",
+    ],
+    priority: 4,
+    defaultEnabled: true,
   },
 ];
 
@@ -150,6 +175,7 @@ function migrateFromOldFormat(
       style: old.style || DEFAULT_LOG_LEVELS.find((d) => d.id === level)!.style,
       keywords,
       priority: priority++,
+      defaultEnabled: true,
     });
   }
 
@@ -198,6 +224,13 @@ export const useSettingsStore = create<SettingsStore>()(
           ),
         })),
 
+      setLogLevelDefaultEnabled: (id, enabled) =>
+        set((state) => ({
+          logLevels: state.logLevels.map((level) =>
+            level.id === id ? { ...level, defaultEnabled: enabled } : level,
+          ),
+        })),
+
       addLogLevel: () => {
         const { logLevels } = get();
         const maxPriority = Math.max(...logLevels.map((l) => l.priority), -1);
@@ -210,6 +243,7 @@ export const useSettingsStore = create<SettingsStore>()(
           },
           keywords: [],
           priority: maxPriority + 1,
+          defaultEnabled: true,
         };
         set({ logLevels: [...logLevels, newLevel] });
       },
@@ -245,10 +279,19 @@ export const useSettingsStore = create<SettingsStore>()(
 
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
+
+      getDefaultDisabledLevels: () => {
+        const { logLevels } = get();
+        return new Set(
+          logLevels
+            .filter((level) => !level.defaultEnabled)
+            .map((level) => level.id),
+        );
+      },
     }),
     {
       name: "loggy-settings",
-      version: 3,
+      version: 4,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -285,6 +328,18 @@ export const useSettingsStore = create<SettingsStore>()(
           return {
             theme: "system" as Theme,
             logLevels: data.logLevels as LogLevelConfig[],
+          };
+        }
+
+        if (version === 3) {
+          // Add defaultEnabled to existing v3 data (default to true for existing levels)
+          const levels = data.logLevels as LogLevelConfig[];
+          return {
+            theme: data.theme ?? ("system" as Theme),
+            logLevels: levels.map((level) => ({
+              ...level,
+              defaultEnabled: level.defaultEnabled ?? true,
+            })),
           };
         }
 
