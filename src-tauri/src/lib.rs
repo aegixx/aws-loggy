@@ -579,7 +579,7 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+R")
                 .build(app)?;
 
-            let focus_filter_item = MenuItemBuilder::new("Focus Filter")
+            let focus_filter_item = MenuItemBuilder::new("Search")
                 .id("focus-filter")
                 .accelerator("CmdOrCtrl+L")
                 .build(app)?;

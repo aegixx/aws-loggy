@@ -153,7 +153,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## In-Progress Features
 
-- ! Binary can't be used on MacOS
 - Control over default font size, family, & line height
 - JSON expand/collapse
 - Log group typeahead search
@@ -165,6 +164,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Future (potential) features
 
+- Debug / application logging for better troubleshooting
 - ! Cloudwatch Filter Syntax support
 - ! Regex filter support (`/pattern/`)
 - Configurable datetime format
