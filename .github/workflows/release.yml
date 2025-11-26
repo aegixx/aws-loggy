@@ -17,11 +17,15 @@ jobs:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
             rust-targets: aarch64-apple-darwin
+            asset-name: macos-arm64
           - platform: macos-latest
             args: --target x86_64-apple-darwin
             rust-targets: x86_64-apple-darwin
+            asset-name: macos-x86_64
           - platform: ubuntu-22.04
+            asset-name: linux-x86_64
           - platform: windows-latest
+            asset-name: windows-x86_64
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -62,4 +66,5 @@ jobs:
           releaseBody: See the assets below to download and install Loggy.
           releaseDraft: false
           prerelease: false
+          releaseAssetNamePattern: Loggy-[version]-${{ matrix.asset-name }}[ext]
           args: ${{ matrix.args }}
