@@ -33,8 +33,6 @@ jobs:
         uses: trunk-io/trunk-action@v1
         with:
           check-mode: all
-          # Skip Rust linters - handled by dedicated cargo-check job with proper deps
-          arguments: --exclude=clippy --exclude=rustfmt
 
   typecheck:
     name: TypeScript Check

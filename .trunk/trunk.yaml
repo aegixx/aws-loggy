@@ -15,6 +15,11 @@ lint:
       paths:
         # Upstream Tauri/GTK dependencies - cannot be fixed directly
         - src-tauri/Cargo.lock
+    - linters: [clippy, rustfmt]
+      paths:
+        # Rust linting handled by dedicated cargo-check job in CI
+        # These require GTK system libs not available in lint runner
+        - src-tauri/**
   enabled:
     - checkov@3.2.495
     - clippy@SYSTEM
