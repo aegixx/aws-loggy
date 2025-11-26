@@ -24,6 +24,7 @@ jobs:
 
       - name: Enable auto-merge for release PR
         if: ${{ steps.release.outputs.pr }}
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr merge ${{ fromJSON(steps.release.outputs.pr).number }} --auto --squash --repo ${{ github.repository }}
