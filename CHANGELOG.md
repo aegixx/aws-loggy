@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.1](https://github.com/aegixx/aws-loggy/compare/v1.3.0...v1.3.1) (2025-11-26)
+
+
+### Bug Fixes
+
+* disable ad-hoc code signing for macOS builds ([5912375](https://github.com/aegixx/aws-loggy/commit/591237503f8e41c9cbceb335641d42be338ab922))
+* use correct signingIdentity field for macOS config ([7c4b47b](https://github.com/aegixx/aws-loggy/commit/7c4b47bc7b56872960b799c2296e5308f9230a66))
+* use friendly names for release binaries ([36fd3f2](https://github.com/aegixx/aws-loggy/commit/36fd3f2c30acab1472ea5aae45aae87196fbb78c))
+
 ## [1.3.0](https://github.com/aegixx/aws-loggy/compare/v1.2.1...v1.3.0) (2025-11-26)
 
 
