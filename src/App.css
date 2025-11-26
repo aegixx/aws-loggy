@@ -24,21 +24,30 @@
   }
 }
 
-/* Log colorization classes */
+/* Log colorization classes - using CSS variables from settings */
 .log-error {
-  @apply text-red-400 bg-red-950/30;
+  color: var(--log-error-text, #f87171);
+  background-color: var(--log-error-bg, rgba(127, 29, 29, 0.3));
 }
 
 .log-warn {
-  @apply text-yellow-400 bg-yellow-950/20;
+  color: var(--log-warn-text, #facc15);
+  background-color: var(--log-warn-bg, rgba(113, 63, 18, 0.2));
 }
 
 .log-info {
-  @apply text-blue-300;
+  color: var(--log-info-text, #93c5fd);
+  background-color: var(--log-info-bg, transparent);
 }
 
 .log-debug {
-  @apply text-gray-500;
+  color: var(--log-debug-text, #6b7280);
+  background-color: var(--log-debug-bg, transparent);
+}
+
+.log-unknown {
+  color: var(--log-unknown-text, #d1d5db);
+  background-color: var(--log-unknown-bg, transparent);
 }
 
 /* Scrollbar styling */

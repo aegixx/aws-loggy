@@ -1,8 +1,11 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import type { LogEvent, LogGroup, ParsedLogEvent, LogLevel } from "../types";
-
-const ALL_LEVELS: LogLevel[] = ["error", "warn", "info", "debug", "unknown"];
+import {
+  useSettingsStore,
+  LOG_LEVEL_JSON_FIELDS,
+  getSortedLogLevels,
+} from "./settingsStore";
 
 interface AwsConnectionInfo {
   profile: string | null;
@@ -27,7 +30,7 @@ interface LogStore {
 
   // Filtering
   filterText: string;
-  enabledLevels: Set<LogLevel>;
+  disabledLevels: Set<LogLevel>; // Track disabled levels instead of enabled (empty = all enabled)
   filteredLogs: ParsedLogEvent[];
 
   // Expanded log detail
@@ -58,35 +61,37 @@ function parseLogLevel(
   message: string,
   parsedJson: Record<string, unknown> | null,
 ): LogLevel {
-  // Priority 1: Check JSON level field
+  const { logLevels } = useSettingsStore.getState();
+  const sortedLevels = getSortedLogLevels(logLevels);
+
+  // Priority 1: Check JSON level fields for keyword matches
   if (parsedJson) {
-    const levelField =
-      parsedJson.level ??
-      parsedJson.log_level ??
-      parsedJson.Level ??
-      parsedJson.LOG_LEVEL;
-    if (typeof levelField === "string") {
-      const level = levelField.toLowerCase();
-      if (level === "error" || level === "fatal" || level === "err")
-        return "error";
-      if (level === "warn" || level === "warning") return "warn";
-      if (level === "info") return "info";
-      if (level === "debug" || level === "trace") return "debug";
+    for (const field of LOG_LEVEL_JSON_FIELDS) {
+      const fieldValue = parsedJson[field];
+      if (typeof fieldValue === "string") {
+        const valueLower = fieldValue.toLowerCase();
+        for (const level of sortedLevels) {
+          if (level.keywords.some((k) => k.toLowerCase() === valueLower)) {
+            return level.id;
+          }
+        }
+      }
     }
   }
 
-  // Priority 2: Check for level prefix pattern (e.g., "INFO", "WARN" surrounded by whitespace/tabs)
-  // Matches patterns like: "2025-11-19T08:01:09.672Z    uuid    INFO    message"
-  const prefixMatch = message.match(
-    /[\s\t]+(INFO|WARN|WARNING|ERROR|ERR|FATAL|DEBUG|TRACE)[\s\t]+/i,
-  );
-  if (prefixMatch) {
-    const level = prefixMatch[1].toUpperCase();
-    if (level === "ERROR" || level === "ERR" || level === "FATAL")
-      return "error";
-    if (level === "WARN" || level === "WARNING") return "warn";
-    if (level === "INFO") return "info";
-    if (level === "DEBUG" || level === "TRACE") return "debug";
+  // Priority 2: Check for keyword in message (surrounded by whitespace or at boundaries)
+  for (const level of sortedLevels) {
+    for (const keyword of level.keywords) {
+      const keywordLower = keyword.toLowerCase();
+      // Match keyword surrounded by non-word characters or at string boundaries
+      const regex = new RegExp(
+        `(?:^|[\\s\\t\\[\\]():])${keywordLower}(?:[\\s\\t\\[\\]():]|$)`,
+        "i",
+      );
+      if (regex.test(message)) {
+        return level.id;
+      }
+    }
   }
 
   // Priority 3: No match found
@@ -129,13 +134,13 @@ function parseLogEvent(event: LogEvent): ParsedLogEvent {
 function filterLogs(
   logs: ParsedLogEvent[],
   filterText: string,
-  enabledLevels: Set<LogLevel>,
+  disabledLevels: Set<LogLevel>,
 ): ParsedLogEvent[] {
   let filtered = logs;
 
-  // Filter by enabled levels
-  if (enabledLevels.size < ALL_LEVELS.length) {
-    filtered = filtered.filter((log) => enabledLevels.has(log.level));
+  // Filter by enabled levels (exclude disabled ones)
+  if (disabledLevels.size > 0) {
+    filtered = filtered.filter((log) => !disabledLevels.has(log.level));
   }
 
   // Filter by text
@@ -193,7 +198,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   isLoading: false,
   error: null,
   filterText: "",
-  enabledLevels: new Set(ALL_LEVELS),
+  disabledLevels: new Set(),
   filteredLogs: [],
   expandedLogIndex: null,
   timeRange: null,
@@ -204,7 +209,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
     set({ isConnecting: true, connectionError: null });
     try {
       const awsInfo = await invoke<AwsConnectionInfo>("init_aws_client");
-      set({ isConnected: true, isConnecting: false, connectionError: null, awsInfo });
+      set({
+        isConnected: true,
+        isConnecting: false,
+        connectionError: null,
+        awsInfo,
+      });
       await get().loadLogGroups();
     } catch (error) {
       set({
@@ -232,7 +242,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   fetchLogs: async (startTime?: number, endTime?: number) => {
-    const { selectedLogGroup, filterText, enabledLevels } = get();
+    const { selectedLogGroup, filterText, disabledLevels } = get();
     if (!selectedLogGroup) return;
 
     set({ isLoading: true, error: null, expandedLogIndex: null });
@@ -251,7 +261,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       });
 
       const parsedLogs = rawLogs.map(parseLogEvent);
-      const filtered = filterLogs(parsedLogs, filterText, enabledLevels);
+      const filtered = filterLogs(parsedLogs, filterText, disabledLevels);
 
       set({ logs: parsedLogs, filteredLogs: filtered, isLoading: false });
     } catch (error) {
@@ -263,22 +273,22 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   setFilterText: (text: string) => {
-    const { logs, enabledLevels } = get();
-    const filtered = filterLogs(logs, text, enabledLevels);
+    const { logs, disabledLevels } = get();
+    const filtered = filterLogs(logs, text, disabledLevels);
     set({ filterText: text, filteredLogs: filtered, expandedLogIndex: null });
   },
 
   toggleLevel: (level: LogLevel) => {
-    const { logs, filterText, enabledLevels } = get();
-    const newLevels = new Set(enabledLevels);
-    if (newLevels.has(level)) {
-      newLevels.delete(level);
+    const { logs, filterText, disabledLevels } = get();
+    const newDisabled = new Set(disabledLevels);
+    if (newDisabled.has(level)) {
+      newDisabled.delete(level);
     } else {
-      newLevels.add(level);
+      newDisabled.add(level);
     }
-    const filtered = filterLogs(logs, filterText, newLevels);
+    const filtered = filterLogs(logs, filterText, newDisabled);
     set({
-      enabledLevels: newLevels,
+      disabledLevels: newDisabled,
       filteredLogs: filtered,
       expandedLogIndex: null,
     });
@@ -305,7 +315,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     // Set up polling
     const interval = setInterval(async () => {
-      const { logs, filterText, enabledLevels } = get();
+      const { logs, filterText, disabledLevels } = get();
       const lastTimestamp =
         logs.length > 0
           ? logs[logs.length - 1].timestamp
@@ -326,7 +336,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
           // Keep max 50000 logs in memory
           const trimmedLogs = allLogs.slice(-50000);
-          const filtered = filterLogs(trimmedLogs, filterText, enabledLevels);
+          const filtered = filterLogs(trimmedLogs, filterText, disabledLevels);
 
           set({ logs: trimmedLogs, filteredLogs: filtered });
         }

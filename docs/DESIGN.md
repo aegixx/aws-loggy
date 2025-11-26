@@ -53,7 +53,9 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 **AWS Credentials:** Use AWS SDK default credential provider chain
 
 - Automatically supports profiles, SSO, IAM roles, environment variables
-- No custom credential management needed
+- SSO credentials auto-refresh within a valid SSO session
+- When SSO session expires, `aws-session-expired` event emitted to frontend
+- `reconnect_aws` command re-initializes client after user re-authenticates
 
 ### Architecture Overview
 

@@ -2,7 +2,7 @@ use aws_config::BehaviorVersion;
 use aws_sdk_cloudwatchlogs::{types::FilteredLogEvent, Client as CloudWatchClient};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 /// Represents a log event returned to the frontend
@@ -33,17 +33,37 @@ pub struct LogGroup {
     pub stored_bytes: Option<i64>,
 }
 
-/// Application state holding the CloudWatch client
+/// Application state holding the CloudWatch client and config
 pub struct AppState {
     pub client: Arc<Mutex<Option<CloudWatchClient>>>,
+    pub config: Arc<Mutex<Option<aws_config::SdkConfig>>>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
             client: Arc::new(Mutex::new(None)),
+            config: Arc::new(Mutex::new(None)),
         }
     }
+}
+
+/// Check if an error indicates the SSO session has expired (requires browser re-auth)
+fn is_sso_session_expired(error_msg: &str) -> bool {
+    let error_lower = error_msg.to_lowercase();
+    error_lower.contains("token has expired")
+        || error_lower.contains("sso session")
+        || error_lower.contains("refresh token")
+        || error_lower.contains("re-authenticate")
+        || error_lower.contains("accessdeniedexception")
+        || error_lower.contains("invalid_grant")
+}
+
+/// Error response that includes whether reconnection is needed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwsError {
+    pub message: String,
+    pub requires_reconnect: bool,
 }
 
 /// AWS connection info returned on successful init
@@ -54,6 +74,7 @@ pub struct AwsConnectionInfo {
 }
 
 /// Initialize the AWS CloudWatch client using the default credential chain
+/// The SDK will auto-refresh SSO credentials as long as the SSO session is valid
 #[tauri::command]
 async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo, String> {
     let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
@@ -67,6 +88,11 @@ async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo
     // Test the connection by describing log groups
     match client.describe_log_groups().limit(1).send().await {
         Ok(_) => {
+            // Store both client and config (config holds the credential provider for auto-refresh)
+            let mut config_lock = state.config.lock().await;
+            *config_lock = Some(config);
+            drop(config_lock);
+
             let mut client_lock = state.client.lock().await;
             *client_lock = Some(client);
             Ok(AwsConnectionInfo { profile, region })
@@ -75,9 +101,47 @@ async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo
     }
 }
 
+/// Reconnect to AWS with fresh credentials
+/// Call this after running `aws sso login` or `aws-switch` when the SSO session has expired
+#[tauri::command]
+async fn reconnect_aws(state: State<'_, AppState>) -> Result<AwsConnectionInfo, String> {
+    // Clear existing client and config
+    {
+        let mut client_lock = state.client.lock().await;
+        *client_lock = None;
+    }
+    {
+        let mut config_lock = state.config.lock().await;
+        *config_lock = None;
+    }
+
+    // Re-initialize with fresh credentials from the provider chain
+    let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+    let client = CloudWatchClient::new(&config);
+
+    let profile = std::env::var("AWS_PROFILE").ok();
+    let region = config.region().map(|r| r.to_string());
+
+    match client.describe_log_groups().limit(1).send().await {
+        Ok(_) => {
+            let mut config_lock = state.config.lock().await;
+            *config_lock = Some(config);
+            drop(config_lock);
+
+            let mut client_lock = state.client.lock().await;
+            *client_lock = Some(client);
+            Ok(AwsConnectionInfo { profile, region })
+        }
+        Err(e) => Err(format!("Failed to reconnect to AWS: {}", e)),
+    }
+}
+
 /// List all available log groups
 #[tauri::command]
-async fn list_log_groups(state: State<'_, AppState>) -> Result<Vec<LogGroup>, String> {
+async fn list_log_groups(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<LogGroup>, String> {
     let client_lock = state.client.lock().await;
     let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
@@ -108,7 +172,13 @@ async fn list_log_groups(state: State<'_, AppState>) -> Result<Vec<LogGroup>, St
                     break;
                 }
             }
-            Err(e) => return Err(format!("Failed to list log groups: {}", e)),
+            Err(e) => {
+                let error_msg = format!("{}", e);
+                if is_sso_session_expired(&error_msg) {
+                    app.emit("aws-session-expired", ()).ok();
+                }
+                return Err(format!("Failed to list log groups: {}", e));
+            }
         }
     }
 
@@ -118,6 +188,7 @@ async fn list_log_groups(state: State<'_, AppState>) -> Result<Vec<LogGroup>, St
 /// Fetch logs from a specific log group
 #[tauri::command]
 async fn fetch_logs(
+    app: AppHandle,
     state: State<'_, AppState>,
     log_group_name: String,
     start_time: Option<i64>,
@@ -158,13 +229,20 @@ async fn fetch_logs(
                 .collect();
             Ok(events)
         }
-        Err(e) => Err(format!("Failed to fetch logs: {}", e)),
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            if is_sso_session_expired(&error_msg) {
+                app.emit("aws-session-expired", ()).ok();
+            }
+            Err(format!("Failed to fetch logs: {}", e))
+        }
     }
 }
 
 /// Fetch logs with pagination support for tailing
 #[tauri::command]
 async fn fetch_logs_paginated(
+    app: AppHandle,
     state: State<'_, AppState>,
     log_group_name: String,
     start_time: Option<i64>,
@@ -206,7 +284,13 @@ async fn fetch_logs_paginated(
             let new_token = response.next_token;
             Ok((events, new_token))
         }
-        Err(e) => Err(format!("Failed to fetch logs: {}", e)),
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            if is_sso_session_expired(&error_msg) {
+                app.emit("aws-session-expired", ()).ok();
+            }
+            Err(format!("Failed to fetch logs: {}", e))
+        }
     }
 }
 
@@ -217,6 +301,7 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             init_aws_client,
+            reconnect_aws,
             list_log_groups,
             fetch_logs,
             fetch_logs_paginated,

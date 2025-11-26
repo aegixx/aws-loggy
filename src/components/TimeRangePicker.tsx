@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLogStore } from "../stores/logStore";
+import { useSettingsStore } from "../stores/settingsStore";
 
 interface TimePreset {
   label: string;
@@ -27,6 +28,7 @@ function parseDateTimeLocal(value: string): number {
 export function TimeRangePicker() {
   const { isTailing, startTail, stopTail, setTimeRange, selectedLogGroup } =
     useLogStore();
+  const { theme } = useSettingsStore();
   const [showCustom, setShowCustom] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>("30m");
   const [customStart, setCustomStart] = useState(() =>
@@ -36,6 +38,22 @@ export function TimeRangePicker() {
     formatDateTimeLocal(Date.now()),
   );
   const customRef = useRef<HTMLDivElement>(null);
+
+  // Track system preference for theme
+  const [systemPrefersDark, setSystemPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemPrefersDark(e.matches);
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
 
   // Close custom picker when clicking outside
   useEffect(() => {
@@ -88,7 +106,9 @@ export function TimeRangePicker() {
         className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1.5 ${
           isTailing
             ? "bg-green-600 text-white"
-            : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+            : isDark
+              ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              : "bg-gray-200 hover:bg-gray-300 text-gray-700"
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         {isTailing && (
@@ -106,7 +126,9 @@ export function TimeRangePicker() {
           className={`px-2 py-1 text-xs rounded transition-colors ${
             activePreset === preset.label && !isTailing
               ? "bg-blue-600 text-white"
-              : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              : isDark
+                ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                : "bg-gray-200 hover:bg-gray-300 text-gray-700"
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {preset.label}
@@ -121,7 +143,9 @@ export function TimeRangePicker() {
           className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
             activePreset === "custom" && !isTailing
               ? "bg-blue-600 text-white"
-              : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              : isDark
+                ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                : "bg-gray-200 hover:bg-gray-300 text-gray-700"
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           Custom
@@ -142,26 +166,34 @@ export function TimeRangePicker() {
 
         {/* Custom picker dropdown */}
         {showCustom && (
-          <div className="absolute top-full right-0 mt-1 p-3 bg-gray-800 rounded-lg shadow-xl border border-gray-700 z-50 w-72">
+          <div
+            className={`absolute top-full right-0 mt-1 p-3 rounded-lg shadow-xl border z-50 w-72 ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"}`}
+          >
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">
+                <label
+                  className={`block text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                >
                   Start
                 </label>
                 <input
                   type="datetime-local"
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+                  className={`w-full rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 text-gray-300" : "bg-gray-50 border border-gray-300 text-gray-700"}`}
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">End</label>
+                <label
+                  className={`block text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                >
+                  End
+                </label>
                 <input
                   type="datetime-local"
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+                  className={`w-full rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 text-gray-300" : "bg-gray-50 border border-gray-300 text-gray-700"}`}
                 />
               </div>
               <button

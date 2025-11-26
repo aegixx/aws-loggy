@@ -4,6 +4,7 @@ interface JsonSyntaxHighlightProps {
   data: unknown;
   indent?: number;
   defaultExpanded?: boolean;
+  isDark?: boolean;
 }
 
 interface CollapsibleContainerProps {
@@ -12,6 +13,7 @@ interface CollapsibleContainerProps {
   preview: string;
   comma: string;
   defaultExpanded: boolean;
+  isDark: boolean;
 }
 
 function CollapsibleContainer({
@@ -20,6 +22,7 @@ function CollapsibleContainer({
   preview,
   comma,
   defaultExpanded,
+  isDark,
 }: CollapsibleContainerProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -33,14 +36,24 @@ function CollapsibleContainer({
       <span>
         <button
           onClick={toggle}
-          className="text-gray-500 hover:text-gray-300 transition-colors"
+          className={`transition-colors ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"}`}
           title="Click to expand"
         >
-          <span className="text-gray-400">{openBracket}</span>
-          <span className="text-gray-500 mx-1">{preview}</span>
-          <span className="text-gray-400">{closeBracket}</span>
+          <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+            {openBracket}
+          </span>
+          <span
+            className={`mx-1 ${isDark ? "text-gray-500" : "text-gray-600"}`}
+          >
+            {preview}
+          </span>
+          <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+            {closeBracket}
+          </span>
         </button>
-        <span className="text-gray-400">{comma}</span>
+        <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+          {comma}
+        </span>
       </span>
     );
   }
@@ -49,13 +62,13 @@ function CollapsibleContainer({
     <>
       <button
         onClick={toggle}
-        className="text-gray-400 hover:text-gray-200 transition-colors"
+        className={`transition-colors ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-500 hover:text-gray-700"}`}
         title="Click to collapse"
       >
         {openBracket}
       </button>
       <div style={{ paddingLeft: "1rem" }}>{children}</div>
-      <span className="text-gray-400">
+      <span className={isDark ? "text-gray-400" : "text-gray-500"}>
         {closeBracket}
         {comma}
       </span>
@@ -69,16 +82,21 @@ function renderValue(
   isLast: boolean,
   defaultExpanded: boolean,
   path: string,
+  isDark: boolean,
 ): ReactNode {
   const comma = isLast ? "" : ",";
 
   if (value === null) {
-    return <span className="text-gray-500">null{comma}</span>;
+    return (
+      <span className={isDark ? "text-gray-500" : "text-gray-600"}>
+        null{comma}
+      </span>
+    );
   }
 
   if (typeof value === "boolean") {
     return (
-      <span className="text-purple-400">
+      <span className={isDark ? "text-purple-400" : "text-purple-600"}>
         {value.toString()}
         {comma}
       </span>
@@ -87,7 +105,7 @@ function renderValue(
 
   if (typeof value === "number") {
     return (
-      <span className="text-yellow-400">
+      <span className={isDark ? "text-yellow-400" : "text-yellow-600"}>
         {value}
         {comma}
       </span>
@@ -96,7 +114,7 @@ function renderValue(
 
   if (typeof value === "string") {
     return (
-      <span className="text-green-400">
+      <span className={isDark ? "text-green-400" : "text-green-600"}>
         "{value}"{comma}
       </span>
     );
@@ -104,7 +122,11 @@ function renderValue(
 
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      return <span className="text-gray-400">[]{comma}</span>;
+      return (
+        <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+          []{comma}
+        </span>
+      );
     }
 
     const preview = `${value.length} item${value.length !== 1 ? "s" : ""}`;
@@ -115,6 +137,7 @@ function renderValue(
         preview={preview}
         comma={comma}
         defaultExpanded={defaultExpanded}
+        isDark={isDark}
       >
         {value.map((item, index) => (
           <div key={index}>
@@ -124,6 +147,7 @@ function renderValue(
               index === value.length - 1,
               defaultExpanded,
               `${path}[${index}]`,
+              isDark,
             )}
           </div>
         ))}
@@ -135,7 +159,7 @@ function renderValue(
     const entries = Object.entries(value as Record<string, unknown>);
     if (entries.length === 0) {
       return (
-        <span className="text-gray-400">
+        <span className={isDark ? "text-gray-400" : "text-gray-500"}>
           {"{}"}
           {comma}
         </span>
@@ -150,17 +174,23 @@ function renderValue(
         preview={preview}
         comma={comma}
         defaultExpanded={defaultExpanded}
+        isDark={isDark}
       >
         {entries.map(([key, val], index) => (
           <div key={key}>
-            <span className="text-blue-400">"{key}"</span>
-            <span className="text-gray-400">: </span>
+            <span className={isDark ? "text-blue-400" : "text-blue-600"}>
+              "{key}"
+            </span>
+            <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+              :{" "}
+            </span>
             {renderValue(
               val,
               indent + 1,
               index === entries.length - 1,
               defaultExpanded,
               `${path}.${key}`,
+              isDark,
             )}
           </div>
         ))}
@@ -170,7 +200,7 @@ function renderValue(
 
   // Fallback for undefined or other types
   return (
-    <span className="text-gray-500">
+    <span className={isDark ? "text-gray-500" : "text-gray-600"}>
       {String(value)}
       {comma}
     </span>
@@ -181,10 +211,11 @@ export function JsonSyntaxHighlight({
   data,
   indent = 0,
   defaultExpanded = true,
+  isDark = true,
 }: JsonSyntaxHighlightProps) {
   return (
     <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-all">
-      {renderValue(data, indent, true, defaultExpanded, "root")}
+      {renderValue(data, indent, true, defaultExpanded, "root", isDark)}
     </pre>
   );
 }

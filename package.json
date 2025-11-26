@@ -17,6 +17,7 @@
     "start": "tauri dev",
     "app:build": "tauri build",
     "app:build:debug": "tauri build --debug",
+    "clean": "rm -rf dist src-tauri/target",
     "fmt": "trunk fmt",
     "lint": "trunk check",
     "lint:fix": "trunk check --fix"

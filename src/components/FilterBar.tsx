@@ -1,51 +1,38 @@
+import { useState, useEffect } from "react";
 import { useLogStore } from "../stores/logStore";
+import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { TimeRangePicker } from "./TimeRangePicker";
 import type { LogLevel } from "../types";
-
-const LEVEL_CONFIG: Record<
-  LogLevel,
-  { label: string; color: string; bgColor: string }
-> = {
-  error: {
-    label: "ERROR",
-    color: "text-red-400",
-    bgColor: "bg-red-500/20 border-red-500/50",
-  },
-  warn: {
-    label: "WARN",
-    color: "text-yellow-400",
-    bgColor: "bg-yellow-500/20 border-yellow-500/50",
-  },
-  info: {
-    label: "INFO",
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/20 border-blue-500/50",
-  },
-  debug: {
-    label: "DEBUG",
-    color: "text-gray-400",
-    bgColor: "bg-gray-500/20 border-gray-500/50",
-  },
-  unknown: {
-    label: "OTHER",
-    color: "text-gray-500",
-    bgColor: "bg-gray-500/20 border-gray-500/50",
-  },
-};
-
-const DISPLAY_LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
 
 export function FilterBar() {
   const {
     filterText,
     setFilterText,
-    enabledLevels,
+    disabledLevels,
     toggleLevel,
     isTailing,
     clearLogs,
     logs,
     filteredLogs,
   } = useLogStore();
+  const { theme, logLevels } = useSettingsStore();
+  const sortedLevels = getSortedLogLevels(logLevels);
+
+  // Track system preference for theme
+  const [systemPrefersDark, setSystemPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemPrefersDark(e.matches);
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
 
   // Count logs by level
   const levelCounts = logs.reduce(
@@ -57,7 +44,9 @@ export function FilterBar() {
   );
 
   return (
-    <div className="flex flex-col gap-2 p-3 bg-gray-800/50 border-b border-gray-700">
+    <div
+      className={`flex flex-col gap-2 p-3 border-b ${isDark ? "bg-gray-800/50 border-gray-700" : "bg-gray-50 border-gray-300"}`}
+    >
       {/* Top row: Filter input and actions */}
       <div className="flex items-center gap-3">
         {/* Filter input */}
@@ -67,7 +56,7 @@ export function FilterBar() {
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Filter logs... (use field:value for JSON fields)"
-            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-500"
+            className={`w-full rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 placeholder-gray-500" : "bg-white border border-gray-300 placeholder-gray-400"}`}
           />
           {filterText && (
             <button
@@ -80,7 +69,9 @@ export function FilterBar() {
         </div>
 
         {/* Log count */}
-        <div className="text-sm text-gray-400 whitespace-nowrap">
+        <div
+          className={`text-sm whitespace-nowrap ${isDark ? "text-gray-400" : "text-gray-600"}`}
+        >
           {filteredLogs.length !== logs.length ? (
             <span>
               {filteredLogs.length.toLocaleString()} /{" "}
@@ -98,7 +89,7 @@ export function FilterBar() {
         <button
           onClick={clearLogs}
           disabled={logs.length === 0}
-          className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+          className={`px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed rounded ${isDark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
         >
           Clear
         </button>
@@ -114,23 +105,41 @@ export function FilterBar() {
 
       {/* Bottom row: Level toggles */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 mr-1">Levels:</span>
-        {DISPLAY_LEVELS.map((level) => {
-          const config = LEVEL_CONFIG[level];
-          const count = levelCounts[level] || 0;
-          const isEnabled = enabledLevels.has(level);
+        <span
+          className={`text-xs mr-1 ${isDark ? "text-gray-500" : "text-gray-600"}`}
+        >
+          Levels:
+        </span>
+        {sortedLevels.map((levelConfig) => {
+          const count = levelCounts[levelConfig.id] || 0;
+          const isEnabled = !disabledLevels.has(levelConfig.id);
 
           return (
             <button
-              key={level}
-              onClick={() => toggleLevel(level)}
-              className={`px-2 py-0.5 text-xs rounded border transition-all ${
+              key={levelConfig.id}
+              onClick={() => toggleLevel(levelConfig.id)}
+              className="px-2 py-0.5 text-xs rounded border transition-all"
+              style={
                 isEnabled
-                  ? `${config.bgColor} ${config.color}`
-                  : "bg-gray-800 border-gray-700 text-gray-600"
-              }`}
+                  ? {
+                      color: levelConfig.style.textColor,
+                      backgroundColor: levelConfig.style.backgroundColor,
+                      borderColor: levelConfig.style.textColor + "80",
+                    }
+                  : isDark
+                    ? {
+                        color: "#4b5563",
+                        backgroundColor: "#1f2937",
+                        borderColor: "#374151",
+                      }
+                    : {
+                        color: "#9ca3af",
+                        backgroundColor: "#e5e7eb",
+                        borderColor: "#d1d5db",
+                      }
+              }
             >
-              {config.label}
+              {levelConfig.name.toUpperCase()}
               {count > 0 && (
                 <span
                   className={`ml-1 ${isEnabled ? "opacity-75" : "opacity-50"}`}

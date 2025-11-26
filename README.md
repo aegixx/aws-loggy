@@ -10,6 +10,7 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 - **Instant Filtering** - Client-side filtering as you type (no AWS roundtrip)
 - **JSON Query Syntax** - Filter by JSON fields with `field:value` or `field.nested:value`
 - **Log Level Detection** - Automatic colorization based on log level (ERROR, WARN, INFO, DEBUG)
+- **Customizable Colors** - Configure log level colors and detection patterns via Settings (Cmd-,)
 - **JSON Syntax Highlighting** - Collapsible, colorized JSON viewer for structured logs
 - **Virtualized Rendering** - Smooth scrolling through 50,000+ log entries
 - **Native Performance** - Built with Tauri for small bundle size and low memory usage

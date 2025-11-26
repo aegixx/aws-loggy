@@ -1,25 +1,29 @@
-import { useRef, useEffect, useCallback, CSSProperties } from "react";
+import { useRef, useEffect, useCallback, useState, CSSProperties } from "react";
 import { List, ListImperativeAPI } from "react-window";
 import { useLogStore } from "../stores/logStore";
+import { useSettingsStore, type LogLevelConfig } from "../stores/settingsStore";
 import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
 import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
 const DETAIL_HEIGHT = 200;
 
-function getLogLevelClass(level: ParsedLogEvent["level"]): string {
-  switch (level) {
-    case "error":
-      return "log-error";
-    case "warn":
-      return "log-warn";
-    case "info":
-      return "log-info";
-    case "debug":
-      return "log-debug";
-    default:
-      return "";
+function getLogLevelStyle(
+  level: string,
+  logLevels: LogLevelConfig[],
+): { color: string; backgroundColor: string } {
+  const config = logLevels.find((l) => l.id === level);
+  if (config) {
+    return {
+      color: config.style.textColor,
+      backgroundColor: config.style.backgroundColor,
+    };
   }
+  // Default for unknown level
+  return {
+    color: "#d1d5db",
+    backgroundColor: "transparent",
+  };
 }
 
 interface LogRowProps {
@@ -27,6 +31,8 @@ interface LogRowProps {
   expandedIndex: number | null;
   onRowClick: (index: number) => void;
   onClose: () => void;
+  logLevels: LogLevelConfig[];
+  isDark: boolean;
 }
 
 interface RowComponentPropsWithCustom {
@@ -36,6 +42,8 @@ interface RowComponentPropsWithCustom {
   expandedIndex: number | null;
   onRowClick: (index: number) => void;
   onClose: () => void;
+  logLevels: LogLevelConfig[];
+  isDark: boolean;
 }
 
 function LogRow({
@@ -45,6 +53,8 @@ function LogRow({
   expandedIndex,
   onRowClick,
   onClose,
+  logLevels,
+  isDark,
 }: RowComponentPropsWithCustom) {
   // If there's an expanded row, indices after it are shifted by 1
   const isDetailRow = expandedIndex !== null && index === expandedIndex + 1;
@@ -79,20 +89,28 @@ function LogRow({
     return (
       <div
         style={style}
-        className="bg-gray-900 border-l-2 border-l-blue-500 px-3 py-2 flex flex-col"
+        className={`border-l-2 border-l-blue-500 px-3 py-2 flex flex-col ${isDark ? "bg-gray-900" : "bg-white"}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with metadata */}
         <div className="flex items-start justify-between mb-2 flex-shrink-0">
           <div className="flex items-center gap-4 text-xs">
-            <span className="text-gray-400">
-              <span className="text-gray-600">Timestamp:</span>{" "}
-              <span className="text-gray-300">{fullTimestamp}</span>
+            <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+              <span className={isDark ? "text-gray-600" : "text-gray-500"}>
+                Timestamp:
+              </span>{" "}
+              <span className={isDark ? "text-gray-300" : "text-gray-700"}>
+                {fullTimestamp}
+              </span>
             </span>
             {log.log_stream_name && (
-              <span className="text-gray-400">
-                <span className="text-gray-600">Stream:</span>{" "}
-                <span className="text-gray-300 font-mono text-xs">
+              <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                <span className={isDark ? "text-gray-600" : "text-gray-500"}>
+                  Stream:
+                </span>{" "}
+                <span
+                  className={`font-mono text-xs ${isDark ? "text-gray-300" : "text-gray-700"}`}
+                >
                   {log.log_stream_name}
                 </span>
               </span>
@@ -101,14 +119,14 @@ function LogRow({
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopy}
-              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors cursor-pointer"
+              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
               title="Copy raw message"
             >
               Copy
             </button>
             <button
               onClick={onClose}
-              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors cursor-pointer"
+              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
               title="Close (Esc)"
             >
               ×
@@ -117,11 +135,15 @@ function LogRow({
         </div>
 
         {/* Log content */}
-        <div className="bg-gray-950 rounded p-2 overflow-auto flex-1 min-h-0">
+        <div
+          className={`rounded p-2 overflow-auto flex-1 min-h-0 ${isDark ? "bg-gray-950" : "bg-gray-100"}`}
+        >
           {log.parsedJson ? (
-            <JsonSyntaxHighlight data={log.parsedJson} />
+            <JsonSyntaxHighlight data={log.parsedJson} isDark={isDark} />
           ) : (
-            <pre className="font-mono text-sm leading-relaxed text-gray-300 whitespace-pre-wrap break-all">
+            <pre
+              className={`font-mono text-sm leading-relaxed whitespace-pre-wrap break-all ${isDark ? "text-gray-300" : "text-gray-700"}`}
+            >
               {log.message}
             </pre>
           )}
@@ -135,18 +157,25 @@ function LogRow({
   if (!log) return <div style={style} />;
 
   const isExpanded = expandedIndex === actualLogIndex;
+  const levelStyle = getLogLevelStyle(log.level, logLevels);
 
   return (
     <div
-      style={style}
+      style={{
+        ...style,
+        color: levelStyle.color,
+        backgroundColor: isExpanded ? undefined : levelStyle.backgroundColor,
+      }}
       onClick={() => onRowClick(actualLogIndex)}
-      className={`flex items-center px-3 font-mono text-xs border-b border-gray-800/50 cursor-pointer transition-colors border-l-2 ${
+      className={`flex items-center px-3 font-mono text-xs border-b cursor-pointer transition-colors border-l-2 ${
         isExpanded
-          ? "bg-blue-900/30 border-l-blue-500"
-          : "border-l-transparent hover:bg-gray-800/30"
-      } ${getLogLevelClass(log.level)}`}
+          ? `border-l-blue-500 ${isDark ? "bg-blue-900/30" : "bg-blue-100"}`
+          : `border-l-transparent ${isDark ? "border-gray-800/50 hover:bg-gray-800/30" : "border-gray-200 hover:bg-gray-100"}`
+      }`}
     >
-      <span className="w-36 flex-shrink-0 text-gray-500">
+      <span
+        className={`w-36 flex-shrink-0 ${isDark ? "text-gray-500" : "text-gray-500"}`}
+      >
         {log.formattedTime}
       </span>
       <span className="flex-1 truncate" title={log.message}>
@@ -166,6 +195,23 @@ export function LogViewer() {
     expandedLogIndex,
     setExpandedLogIndex,
   } = useLogStore();
+  const { theme, logLevels } = useSettingsStore();
+
+  // Track system preference for theme
+  const [systemPrefersDark, setSystemPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemPrefersDark(e.matches);
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
   const listRef = useRef<ListImperativeAPI>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
@@ -270,7 +316,9 @@ export function LogViewer() {
 
   if (!selectedLogGroup) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
+      <div
+        className={`flex-1 flex items-center justify-center ${isDark ? "text-gray-500" : "text-gray-600"}`}
+      >
         Select a log group to view logs
       </div>
     );
@@ -278,7 +326,9 @@ export function LogViewer() {
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center text-red-400">
+      <div
+        className={`flex-1 flex items-center justify-center ${isDark ? "text-red-400" : "text-red-600"}`}
+      >
         <div className="text-center">
           <p className="font-semibold">Error fetching logs</p>
           <p className="text-sm mt-1">{error}</p>
@@ -289,7 +339,9 @@ export function LogViewer() {
 
   if (isLoading && filteredLogs.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
+      <div
+        className={`flex-1 flex items-center justify-center ${isDark ? "text-gray-500" : "text-gray-600"}`}
+      >
         <div className="flex items-center gap-2">
           <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
             <circle
@@ -315,7 +367,9 @@ export function LogViewer() {
 
   if (filteredLogs.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
+      <div
+        className={`flex-1 flex items-center justify-center ${isDark ? "text-gray-500" : "text-gray-600"}`}
+      >
         No logs found. Try adjusting the time range or filter.
       </div>
     );
@@ -333,6 +387,8 @@ export function LogViewer() {
           expandedIndex: expandedLogIndex,
           onRowClick: handleRowClick,
           onClose: handleCloseDetail,
+          logLevels,
+          isDark,
         }}
         onRowsRendered={handleRowsRendered}
         overscanCount={20}

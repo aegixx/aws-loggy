@@ -15,9 +15,11 @@ See `DESIGN.md` for full architecture documentation.
 ## Key Files
 
 - `src-tauri/src/lib.rs` - Rust backend with AWS CloudWatch integration
-- `src/stores/logStore.ts` - Zustand store with all app state
+- `src/stores/logStore.ts` - Zustand store with log/connection state
+- `src/stores/settingsStore.ts` - Zustand store with persisted settings (colors, patterns)
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/FilterBar.tsx` - Filter input and level toggles
+- `src/components/SettingsDialog.tsx` - Settings dialog (CMD-,)
 - `src/types/index.ts` - TypeScript type definitions
 
 ## Development
@@ -64,6 +66,11 @@ No test framework currently configured. Tests welcome as future enhancement.
 ## Notes
 
 - AWS credentials use default provider chain (profiles, SSO, env vars)
+- SSO credentials auto-refresh within a valid SSO session (no manual intervention needed)
+- When SSO session expires, frontend receives `aws-session-expired` event; user must re-auth via `aws sso login`
+- `reconnect_aws` Tauri command re-initializes the AWS client after credential refresh
 - Log cache limited to 50,000 entries
 - Live tail polls every 2 seconds
 - react-window v2 API differs from v1 (use `List`, not `FixedSizeList`)
+- Settings accessible via CMD-, (or Ctrl-,) or gear icon in header
+- Settings persisted to localStorage via zustand/persist middleware

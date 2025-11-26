@@ -11,7 +11,8 @@ export interface LogGroup {
   stored_bytes: number | null;
 }
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'unknown';
+// Log level is now a dynamic string (level ID from settings, or "unknown" for unmatched)
+export type LogLevel = string;
 
 export interface ParsedLogEvent extends LogEvent {
   level: LogLevel;
