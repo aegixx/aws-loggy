@@ -1,5 +1,8 @@
 # Loggy
 
+[![CI](https://github.com/aegixx/aws-loggy/actions/workflows/ci.yml/badge.svg)](https://github.com/aegixx/aws-loggy/actions/workflows/ci.yml)
+[![Release](https://github.com/aegixx/aws-loggy/actions/workflows/release.yml/badge.svg)](https://github.com/aegixx/aws-loggy/actions/workflows/release.yml)
+
 A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 
 ![Loggy Screenshot](media/screenshot.png)
@@ -48,7 +51,11 @@ The built application will be in `src-tauri/target/release/bundle/`.
 
 ### Pre-built Binaries
 
-Coming soon - check the [Releases](https://github.com/aegixx/aws-loggy/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/aegixx/aws-loggy/releases) page:
+
+- **macOS**: `.dmg` installer (Apple Silicon and Intel)
+- **Windows**: `.msi` or `.exe` installer
+- **Linux**: `.deb`, `.AppImage`, or `.rpm`
 
 ## Usage
 
@@ -111,9 +118,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Run formatting and linting (`npm run fmt && npm run lint`)
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/):
+   - `fix: description` for bug fixes (patch release)
+   - `feat: description` for new features (minor release)
+   - `feat!: description` or `BREAKING CHANGE:` for breaking changes (major release)
 5. Push to the branch (`git push origin feature/amazing-feature`)
 6. Open a Pull Request
+
+Releases are automated via [release-please](https://github.com/googleapis/release-please) based on conventional commit messages.
 
 ## License
 
