@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - v*.*.*
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to build
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -30,6 +36,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -61,8 +69,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Loggy ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: Loggy ${{ inputs.tag || github.ref_name }}
           releaseBody: See the assets below to download and install Loggy.
           releaseDraft: false
           prerelease: false
