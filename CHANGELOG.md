@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.5.0](https://github.com/aegixx/aws-loggy/compare/v1.4.0...v1.5.0) (2025-11-26)
+
+
+### Features
+
+* Add Apple code signing and notarization to release workflow ([b9cb1d7](https://github.com/aegixx/aws-loggy/commit/b9cb1d7c0b9173b5116b898c3c01b01bb19cc7a3))
+* Enable auto-merge for release-please PRs ([1d2a73a](https://github.com/aegixx/aws-loggy/commit/1d2a73a51e9a5a37ae3334fc1525494c5a6b6e57))
+
+
+### Bug Fixes
+
+* Allow auto-merge to fail gracefully for workflow changes ([ef795bf](https://github.com/aegixx/aws-loggy/commit/ef795bfa4b75e165121d2e91161aee2cb58dfb4d))
+* Parse PR number from release-please JSON output ([1f47a8f](https://github.com/aegixx/aws-loggy/commit/1f47a8ff50434adf5095152cc75b6f5528dc2e79))
+
+
+### Miscellaneous
+
+* Enable ad-hoc signing and rename menu item ([997128a](https://github.com/aegixx/aws-loggy/commit/997128a692c67c9ea1f6c5664841c36511bb47d1))
+* Update Cargo.lock ([1e33846](https://github.com/aegixx/aws-loggy/commit/1e338464d35a556d678ec9348041a39e5e7ac424))
+
 ## [1.4.0](https://github.com/aegixx/aws-loggy/compare/v1.3.5...v1.4.0) (2025-11-26)
 
 
