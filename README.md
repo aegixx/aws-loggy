@@ -35,7 +35,7 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 ```bash
 # Clone the repository
 git clone https://github.com/aegixx/aws-loggy.git
-cd loggy
+cd aws-loggy
 
 # Install dependencies
 npm install
