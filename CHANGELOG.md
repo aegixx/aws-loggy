@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.1](https://github.com/aegixx/aws-loggy/compare/loggy-v1.2.0...loggy-v1.2.1) (2025-11-26)
+
+
+### Bug Fixes
+
+* **ci:** migrate trunk check-mode and update screenshot ([a6ec8ea](https://github.com/aegixx/aws-loggy/commit/a6ec8ea2757c8bebfbcc6c2c3bed1678b0c0a7d8))
+
+
+### Miscellaneous
+
+* update Cargo.lock for version 1.2.0 ([2872ec8](https://github.com/aegixx/aws-loggy/commit/2872ec8279bcd1c1c6b5f901982f1c1e18728265))
+
 ## [1.2.0](https://github.com/aegixx/aws-loggy/compare/loggy-v1.1.0...loggy-v1.2.0) (2025-11-26)
 
 ### Features
