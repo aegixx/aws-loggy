@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/aegixx/aws-loggy/compare/v1.3.2...v1.3.3) (2025-11-26)
+
+
+### Bug Fixes
+
+* **ci:** chain release workflow from release-please ([caf7d3b](https://github.com/aegixx/aws-loggy/commit/caf7d3b346ff6c82aef7c41465a3b58218f2e5d1))
+
 ## [1.3.2](https://github.com/aegixx/aws-loggy/compare/v1.3.1...v1.3.2) (2025-11-26)
 
 
