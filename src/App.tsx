@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { LogGroupSelector } from "./components/LogGroupSelector";
 import { FilterBar } from "./components/FilterBar";
 import { LogViewer } from "./components/LogViewer";
@@ -15,23 +16,55 @@ function App() {
   const {
     initializeAws,
     refreshConnection,
+    resetState,
     setLoadingProgress,
     isConnected,
     isConnecting,
     connectionError,
     awsInfo,
   } = useLogStore();
-  const { theme, logLevels, openSettings } = useSettingsStore();
+  const { theme, logLevels, openSettings, awsProfile, setAwsProfile } =
+    useSettingsStore();
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [truncationWarning, setTruncationWarning] = useState<{
     count: number;
     sizeBytes: number;
     reason: string;
   } | null>(null);
+  const [availableProfiles, setAvailableProfiles] = useState<string[]>([
+    "default",
+  ]);
+  const [isChangingProfile, setIsChangingProfile] = useState(false);
 
   useEffect(() => {
     initializeAws();
+    // Load available profiles
+    invoke<string[]>("list_aws_profiles")
+      .then((profiles) => setAvailableProfiles(profiles))
+      .catch((err) => console.error("Failed to load profiles:", err));
   }, [initializeAws]);
+
+  const handleProfileChange = async (newProfile: string) => {
+    const profileValue = newProfile === "default" ? null : newProfile;
+    const currentProfile = awsProfile ?? awsInfo?.profile ?? "default";
+    const isProfileChange = newProfile !== currentProfile;
+
+    setIsChangingProfile(true);
+    setAwsProfile(profileValue);
+
+    // Reset state if switching to a different profile
+    if (isProfileChange) {
+      resetState();
+    }
+
+    try {
+      await refreshConnection();
+    } catch (err) {
+      console.error("Failed to switch profile:", err);
+    } finally {
+      setIsChangingProfile(false);
+    }
+  };
 
   // Listen for menu events from Tauri
   useEffect(() => {
@@ -142,45 +175,60 @@ function App() {
         >
           <LogGroupSelector />
         </div>
-        {isConnected && (
-          <div className="flex items-center gap-2 text-sm text-green-400 relative z-10">
+        {/* Profile selector - always visible */}
+        <div
+          className="flex items-center gap-2 text-sm relative z-10"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {/* Connection status indicator */}
+          {isConnecting ? (
+            <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+          ) : isConnected ? (
             <span className="w-2 h-2 bg-green-400 rounded-full" />
-            <span>
-              {awsInfo?.profile || "default"}
-              {awsInfo?.region && (
-                <span
-                  className={`ml-1 ${isDark ? "text-gray-500" : "text-gray-600"}`}
-                >
-                  ({awsInfo.region})
-                </span>
-              )}
-            </span>
-          </div>
-        )}
-        {(connectionError || isConnecting) && (
-          <div
-            className="flex items-center gap-2 text-sm relative z-10"
-            onMouseDown={(e) => e.stopPropagation()}
+          ) : (
+            <span className="w-2 h-2 bg-red-400 rounded-full" />
+          )}
+
+          {/* Profile dropdown */}
+          <select
+            value={awsProfile ?? awsInfo?.profile ?? "default"}
+            onChange={(e) => handleProfileChange(e.target.value)}
+            disabled={isChangingProfile || isConnecting}
+            className={`px-2 py-1 rounded text-sm cursor-pointer disabled:opacity-50 ${
+              isDark
+                ? "bg-gray-700 border-gray-600"
+                : "bg-gray-200 border-gray-300"
+            } ${
+              isConnected
+                ? isDark
+                  ? "text-green-400"
+                  : "text-green-600"
+                : connectionError
+                  ? "text-red-400"
+                  : "text-yellow-400"
+            } border`}
           >
-            {isConnecting ? (
-              <>
-                <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-                <span className="text-yellow-400">Connecting...</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 bg-red-400 rounded-full" />
-                <span className="text-red-400">Disconnected</span>
-                <button
-                  onClick={() => initializeAws()}
-                  className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
-                >
-                  Retry
-                </button>
-              </>
-            )}
-          </div>
-        )}
+            {availableProfiles.map((profile) => (
+              <option key={profile} value={profile}>
+                {profile}
+              </option>
+            ))}
+          </select>
+
+          {/* Region */}
+          {awsInfo?.region && (
+            <span className={`${isDark ? "text-gray-500" : "text-gray-600"}`}>
+              ({awsInfo.region})
+            </span>
+          )}
+
+          {/* Status text */}
+          {(isChangingProfile || isConnecting) && (
+            <span className="text-yellow-400 text-xs">
+              {isChangingProfile ? "Switching..." : "Connecting..."}
+            </span>
+          )}
+        </div>
         {/* Settings button */}
         <button
           onClick={openSettings}
@@ -231,8 +279,53 @@ function App() {
         </div>
       )}
 
-      {/* Log viewer */}
-      <LogViewer />
+      {/* Log viewer or connection error */}
+      {connectionError && !isConnected ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div
+            className={`text-center max-w-md px-6 py-8 rounded-lg ${isDark ? "bg-gray-800" : "bg-white shadow-lg"}`}
+          >
+            <div className="text-red-400 mb-4">
+              <svg
+                className="w-12 h-12 mx-auto"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <h2
+              className={`text-lg font-semibold mb-2 ${isDark ? "text-gray-100" : "text-gray-900"}`}
+            >
+              Connection Error
+            </h2>
+            <p
+              className={`text-sm mb-4 select-text cursor-text ${isDark ? "text-gray-400" : "text-gray-600"}`}
+            >
+              {connectionError}
+            </p>
+            <p
+              className={`text-xs ${isDark ? "text-gray-500" : "text-gray-500"}`}
+            >
+              Select a profile above to reconnect, or press{" "}
+              <kbd
+                className={`px-1.5 py-0.5 rounded text-xs ${isDark ? "bg-gray-700" : "bg-gray-200"}`}
+              >
+                ⌘R
+              </kbd>{" "}
+              to retry
+            </p>
+          </div>
+        </div>
+      ) : (
+        <LogViewer />
+      )}
 
       {/* Status bar */}
       <StatusBar />

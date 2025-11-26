@@ -63,6 +63,7 @@ interface LogStore {
   startTail: () => void;
   stopTail: () => void;
   clearLogs: () => void;
+  resetState: () => void;
   setLoadingProgress: (count: number, sizeBytes: number) => void;
 }
 
@@ -221,7 +222,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
   initializeAws: async () => {
     set({ isConnecting: true, connectionError: null });
     try {
-      const awsInfo = await invoke<AwsConnectionInfo>("init_aws_client");
+      // Get the saved profile from settings
+      const { awsProfile } = useSettingsStore.getState();
+      const awsInfo = await invoke<AwsConnectionInfo>("init_aws_client", {
+        profile: awsProfile,
+      });
       set({
         isConnected: true,
         isConnecting: false,
@@ -253,8 +258,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const { selectedLogGroup, timeRange, fetchLogs } = get();
     set({ isConnecting: true, connectionError: null });
     try {
+      // Get the saved profile from settings
+      const { awsProfile } = useSettingsStore.getState();
       // Use reconnect_aws to clear and reinitialize with fresh credentials
-      const awsInfo = await invoke<AwsConnectionInfo>("reconnect_aws");
+      const awsInfo = await invoke<AwsConnectionInfo>("reconnect_aws", {
+        profile: awsProfile,
+      });
       set({
         isConnected: true,
         isConnecting: false,
@@ -478,6 +487,35 @@ export const useLogStore = create<LogStore>((set, get) => ({
     if (selectedLogGroup) {
       fetchLogs();
     }
+  },
+
+  resetState: () => {
+    const { stopTail } = get();
+    const { getDefaultDisabledLevels, setLastSelectedLogGroup } =
+      useSettingsStore.getState();
+
+    // Stop any active tail
+    stopTail();
+
+    // Clear persisted log group selection
+    setLastSelectedLogGroup(null);
+
+    // Reset all state to initial values
+    set({
+      selectedLogGroup: null,
+      logs: [],
+      filteredLogs: [],
+      filterText: "",
+      disabledLevels: getDefaultDisabledLevels(),
+      timeRange: null,
+      expandedLogIndex: null,
+      selectedLogIndex: null,
+      error: null,
+      isLoading: false,
+      loadingProgress: 0,
+      loadingSizeBytes: 0,
+      totalSizeBytes: 0,
+    });
   },
 
   setLoadingProgress: (count: number, sizeBytes: number) => {

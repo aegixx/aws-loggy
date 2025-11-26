@@ -151,19 +151,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Tauri](https://tauri.app/) for the excellent desktop framework
 - The AWS SDK team for the Rust SDK
 
-## In-Progress Features
+## Future (potential) features
 
 - Control over default font size, family, & line height
 - JSON expand/collapse
 - Log group typeahead search
-- CMD-G/Ctrl-G Go-to Log group shortcut dialog
 - Support CMD-F/Ctrl-F for text search within current log messages (highlighting matches)
 - Ability to filter by request ID (i.e. select a specific message and see full context)
 - On unfilter, scroll to maintain selected row position
 - Add right-click menu (copy, show related, etc)
-
-## Future (potential) features
-
 - Debug / application logging for better troubleshooting
 - ! Cloudwatch Filter Syntax support
 - ! Regex filter support (`/pattern/`)

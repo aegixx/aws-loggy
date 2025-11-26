@@ -2,6 +2,8 @@ use aws_config::BehaviorVersion;
 use aws_credential_types::provider::ProvideCredentials;
 use aws_sdk_cloudwatchlogs::{types::FilteredLogEvent, Client as CloudWatchClient};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
@@ -41,6 +43,7 @@ pub struct LogGroup {
 pub struct AppState {
     pub client: Arc<Mutex<Option<CloudWatchClient>>>,
     pub config: Arc<Mutex<Option<aws_config::SdkConfig>>>,
+    pub current_profile: Arc<Mutex<Option<String>>>,
 }
 
 impl Default for AppState {
@@ -48,8 +51,64 @@ impl Default for AppState {
         Self {
             client: Arc::new(Mutex::new(None)),
             config: Arc::new(Mutex::new(None)),
+            current_profile: Arc::new(Mutex::new(None)),
         }
     }
+}
+
+/// Get the AWS config directory path
+fn get_aws_config_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".aws").join("config"))
+}
+
+/// List available AWS profiles from ~/.aws/config
+#[tauri::command]
+async fn list_aws_profiles() -> Result<Vec<String>, String> {
+    let config_path = get_aws_config_path()
+        .ok_or_else(|| "Could not determine home directory".to_string())?;
+
+    if !config_path.exists() {
+        return Ok(vec!["default".to_string()]);
+    }
+
+    let contents = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read AWS config: {}", e))?;
+
+    let mut profiles = HashSet::new();
+    profiles.insert("default".to_string());
+
+    for line in contents.lines() {
+        let line = line.trim();
+        // Match [profile name] or [default]
+        if line.starts_with('[') && line.ends_with(']') {
+            let section = &line[1..line.len() - 1];
+            if section == "default" {
+                profiles.insert("default".to_string());
+            } else if let Some(name) = section.strip_prefix("profile ") {
+                profiles.insert(name.to_string());
+            }
+        }
+    }
+
+    let mut profiles_vec: Vec<String> = profiles.into_iter().collect();
+    profiles_vec.sort();
+    Ok(profiles_vec)
+}
+
+/// Trigger SSO login for a profile
+#[tauri::command]
+async fn trigger_sso_login(profile: Option<String>) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("aws");
+    cmd.arg("sso").arg("login");
+
+    if let Some(p) = &profile {
+        cmd.arg("--profile").arg(p);
+    }
+
+    cmd.spawn()
+        .map_err(|e| format!("Failed to start SSO login: {}", e))?;
+
+    Ok(())
 }
 
 /// Check if an error indicates the SSO session has expired (requires browser re-auth)
@@ -186,12 +245,21 @@ pub struct AwsConnectionInfo {
 
 /// Initialize the AWS CloudWatch client using the default credential chain
 /// The SDK will auto-refresh SSO credentials as long as the SSO session is valid
+/// If profile is provided, it will be used instead of the default/environment profile
 #[tauri::command]
-async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo, String> {
-    let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+async fn init_aws_client(
+    state: State<'_, AppState>,
+    profile: Option<String>,
+) -> Result<AwsConnectionInfo, String> {
+    // Build config with optional profile
+    let mut config_loader = aws_config::defaults(BehaviorVersion::latest());
+    if let Some(ref p) = profile {
+        config_loader = config_loader.profile_name(p);
+    }
+    let config = config_loader.load().await;
 
-    // Get profile from environment
-    let profile = std::env::var("AWS_PROFILE").ok();
+    // Use provided profile or fall back to environment variable
+    let effective_profile = profile.clone().or_else(|| std::env::var("AWS_PROFILE").ok());
     let region = config.region().map(|r| r.to_string());
 
     // Step 1: Verify credentials can be loaded (this catches SSO expiration, missing creds, etc.)
@@ -230,6 +298,11 @@ async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo
 
     match client.describe_log_groups().limit(1).send().await {
         Ok(_) => {
+            // Store the current profile
+            let mut profile_lock = state.current_profile.lock().await;
+            *profile_lock = effective_profile.clone();
+            drop(profile_lock);
+
             // Store both client and config (config holds the credential provider for auto-refresh)
             let mut config_lock = state.config.lock().await;
             *config_lock = Some(config);
@@ -237,7 +310,10 @@ async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo
 
             let mut client_lock = state.client.lock().await;
             *client_lock = Some(client);
-            Ok(AwsConnectionInfo { profile, region })
+            Ok(AwsConnectionInfo {
+                profile: effective_profile,
+                region,
+            })
         }
         Err(e) => {
             let error_msg = format!("{}", e);
@@ -257,8 +333,21 @@ async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo
 
 /// Reconnect to AWS with fresh credentials
 /// Call this after running `aws sso login` or `aws-switch` when the SSO session has expired
+/// If profile is provided, switches to that profile; otherwise uses the current profile
 #[tauri::command]
-async fn reconnect_aws(state: State<'_, AppState>) -> Result<AwsConnectionInfo, String> {
+async fn reconnect_aws(
+    state: State<'_, AppState>,
+    profile: Option<String>,
+) -> Result<AwsConnectionInfo, String> {
+    // Get the profile to use: provided > stored > environment
+    let effective_profile = match profile {
+        Some(p) => Some(p),
+        None => {
+            let stored = state.current_profile.lock().await;
+            stored.clone().or_else(|| std::env::var("AWS_PROFILE").ok())
+        }
+    };
+
     // Clear existing client and config
     {
         let mut client_lock = state.client.lock().await;
@@ -270,9 +359,12 @@ async fn reconnect_aws(state: State<'_, AppState>) -> Result<AwsConnectionInfo, 
     }
 
     // Re-initialize with fresh credentials from the provider chain
-    let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+    let mut config_loader = aws_config::defaults(BehaviorVersion::latest());
+    if let Some(ref p) = effective_profile {
+        config_loader = config_loader.profile_name(p);
+    }
+    let config = config_loader.load().await;
 
-    let profile = std::env::var("AWS_PROFILE").ok();
     let region = config.region().map(|r| r.to_string());
 
     // Step 1: Verify credentials can be loaded
@@ -310,13 +402,21 @@ async fn reconnect_aws(state: State<'_, AppState>) -> Result<AwsConnectionInfo, 
 
     match client.describe_log_groups().limit(1).send().await {
         Ok(_) => {
+            // Store the current profile
+            let mut profile_lock = state.current_profile.lock().await;
+            *profile_lock = effective_profile.clone();
+            drop(profile_lock);
+
             let mut config_lock = state.config.lock().await;
             *config_lock = Some(config);
             drop(config_lock);
 
             let mut client_lock = state.client.lock().await;
             *client_lock = Some(client);
-            Ok(AwsConnectionInfo { profile, region })
+            Ok(AwsConnectionInfo {
+                profile: effective_profile,
+                region,
+            })
         }
         Err(e) => {
             let error_msg = format!("{}", e);
@@ -661,6 +761,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             init_aws_client,
             reconnect_aws,
+            list_aws_profiles,
+            trigger_sso_login,
             list_log_groups,
             fetch_logs,
             fetch_logs_paginated,
