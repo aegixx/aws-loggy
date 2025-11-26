@@ -38,7 +38,8 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "signingIdentity": "-"
+      "signingIdentity": "Developer ID Application: Bryan Stone (M44EB6SW5S)",
+      "entitlements": "entitlements.plist"
     }
   }
 }
