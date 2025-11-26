@@ -8,8 +8,6 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { AboutDialog } from "./components/AboutDialog";
 import { useLogStore } from "./stores/logStore";
 import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
-import LoggyName from "./assets/loggy-name.png";
-import LoggyMascot from "./assets/loggy-mascot.png";
 import "./App.css";
 
 function App() {
