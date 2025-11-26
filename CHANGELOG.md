@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.4](https://github.com/aegixx/aws-loggy/compare/v1.3.3...v1.3.4) (2025-11-26)
+
+
+### Bug Fixes
+
+* **ci:** correct assetNamePattern parameter name ([7a0a967](https://github.com/aegixx/aws-loggy/commit/7a0a967af8e971ddcb5cc538cd53529620de8e14))
+
 ## [1.3.3](https://github.com/aegixx/aws-loggy/compare/v1.3.2...v1.3.3) (2025-11-26)
 
 
