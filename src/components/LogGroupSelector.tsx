@@ -34,7 +34,9 @@ export function LogGroupSelector() {
         {connectionError ? (
           <div className={isDark ? "text-red-400" : "text-red-600"}>
             <p className="font-semibold">Connection Error</p>
-            <p className="text-sm mt-1">{connectionError}</p>
+            <p className="text-sm mt-1 select-text cursor-text">
+              {connectionError}
+            </p>
           </div>
         ) : (
           <p className={isDark ? "text-gray-400" : "text-gray-600"}>

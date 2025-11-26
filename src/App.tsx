@@ -1,9 +1,11 @@
 import { useEffect, useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { LogGroupSelector } from "./components/LogGroupSelector";
 import { FilterBar } from "./components/FilterBar";
 import { LogViewer } from "./components/LogViewer";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { AboutDialog } from "./components/AboutDialog";
 import { useLogStore } from "./stores/logStore";
 import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
 import LoggyName from "./assets/loggy-name.png";
@@ -14,12 +16,28 @@ function App() {
   const { initializeAws, isConnected, isConnecting, connectionError, awsInfo } =
     useLogStore();
   const { theme, logLevels, openSettings } = useSettingsStore();
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   useEffect(() => {
     initializeAws();
   }, [initializeAws]);
 
-  // Handle CMD-, (or Ctrl-,) to open settings
+  // Listen for menu events from Tauri
+  useEffect(() => {
+    const unlistenSettings = listen("open-settings", () => {
+      openSettings();
+    });
+    const unlistenAbout = listen("open-about", () => {
+      setIsAboutOpen(true);
+    });
+
+    return () => {
+      unlistenSettings.then((fn) => fn());
+      unlistenAbout.then((fn) => fn());
+    };
+  }, [openSettings]);
+
+  // Handle CMD-, (or Ctrl-,) to open settings (fallback for keyboard shortcut)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
@@ -63,8 +81,9 @@ function App() {
       className={`h-screen flex flex-col ${isDark ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"}`}
       style={cssVars as React.CSSProperties}
     >
-      {/* Settings Dialog */}
+      {/* Dialogs */}
       <SettingsDialog />
+      <AboutDialog isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
 
       {/* Header - with padding for macOS traffic lights */}
       <header

@@ -1,8 +1,12 @@
 use aws_config::BehaviorVersion;
+use aws_credential_types::provider::ProvideCredentials;
 use aws_sdk_cloudwatchlogs::{types::FilteredLogEvent, Client as CloudWatchClient};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
+    AppHandle, Emitter, State,
+};
 use tokio::sync::Mutex;
 
 /// Represents a log event returned to the frontend
@@ -59,6 +63,113 @@ fn is_sso_session_expired(error_msg: &str) -> bool {
         || error_lower.contains("invalid_grant")
 }
 
+/// Convert AWS SDK errors to human-friendly messages
+fn humanize_aws_error(error_msg: &str) -> String {
+    let error_lower = error_msg.to_lowercase();
+
+    // Check credential errors FIRST - these are often wrapped in dispatch failures
+    // SSO/token expiration errors
+    if error_lower.contains("token has expired")
+        || error_lower.contains("sso session")
+        || error_lower.contains("invalid_grant")
+        || error_lower.contains("the sso session")
+        || error_lower.contains("expired sso token")
+        || error_lower.contains("sso token")
+    {
+        return "Your AWS session has expired. Please run 'aws sso login' to refresh your credentials.".to_string();
+    }
+
+    // Missing credentials (often wrapped in DispatchFailure)
+    if error_lower.contains("no credentials")
+        || error_lower.contains("missing credentials")
+        || error_lower.contains("failed to load credentials")
+        || (error_lower.contains("credential")
+            && (error_lower.contains("provider") || error_lower.contains("not found")))
+        || (error_lower.contains("could not find")
+            && (error_lower.contains("profile") || error_lower.contains("credential")))
+    {
+        return "No AWS credentials found. Please run 'aws sso login' or configure your AWS credentials.".to_string();
+    }
+
+    // Access denied / authorization errors
+    if error_lower.contains("accessdenied")
+        || error_lower.contains("access denied")
+        || error_lower.contains("not authorized")
+        || error_lower.contains("unauthorized")
+    {
+        return "Access denied. Your AWS credentials don't have permission for this operation."
+            .to_string();
+    }
+
+    // Invalid credentials
+    if error_lower.contains("invalid") && error_lower.contains("credential") {
+        return "Invalid AWS credentials. Please check your AWS configuration.".to_string();
+    }
+
+    // Dispatch failure - check what's inside it
+    // This is a catch-all wrapper, so we need to be careful
+    if error_lower.contains("dispatch failure") || error_lower.contains("dispatchfailure") {
+        // If it mentions credentials or SSO anywhere, it's likely a credential issue
+        if error_lower.contains("credential")
+            || error_lower.contains("sso")
+            || error_lower.contains("token")
+            || error_lower.contains("profile")
+        {
+            return "AWS credentials error. Please run 'aws sso login' or check your AWS configuration.".to_string();
+        }
+        // Otherwise, it's likely a network issue
+        return "Unable to connect to AWS. This could be a network issue or expired credentials. Try running 'aws sso login'.".to_string();
+    }
+
+    // Network-specific errors (only if not credential-related)
+    if error_lower.contains("connector error") || error_lower.contains("hyper::error") {
+        return "Unable to connect to AWS. Please check your network connection.".to_string();
+    }
+
+    if error_lower.contains("timeout") || error_lower.contains("timed out") {
+        return "Connection to AWS timed out. Please try again.".to_string();
+    }
+
+    if error_lower.contains("dns") || error_lower.contains("name resolution") {
+        return "Unable to resolve AWS endpoint. Please check your network connection.".to_string();
+    }
+
+    // Resource errors
+    if error_lower.contains("resourcenotfound") || error_lower.contains("does not exist") {
+        return "The requested log group was not found.".to_string();
+    }
+
+    if error_lower.contains("throttling") || error_lower.contains("rate exceeded") {
+        return "AWS rate limit exceeded. Please wait a moment and try again.".to_string();
+    }
+
+    // Region errors
+    if error_lower.contains("region") && error_lower.contains("not") {
+        return "Invalid or missing AWS region. Please check your AWS configuration.".to_string();
+    }
+
+    // Service errors
+    if error_lower.contains("service") && error_lower.contains("unavailable") {
+        return "AWS CloudWatch Logs service is temporarily unavailable. Please try again later."
+            .to_string();
+    }
+
+    // Default: return a cleaned up version of the original error
+    // Strip common prefixes and technical details
+    let cleaned = error_msg
+        .replace("DispatchFailure(", "")
+        .replace("ConnectorError", "Connection error")
+        .replace("SdkError", "")
+        .trim_matches(|c| c == '(' || c == ')' || c == ':' || c == ' ')
+        .to_string();
+
+    if cleaned.is_empty() || cleaned.len() < 5 {
+        return "An unexpected error occurred while connecting to AWS.".to_string();
+    }
+
+    cleaned
+}
+
 /// Error response that includes whether reconnection is needed
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AwsError {
@@ -79,13 +190,44 @@ pub struct AwsConnectionInfo {
 async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo, String> {
     let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
 
-    let client = CloudWatchClient::new(&config);
-
     // Get profile from environment
     let profile = std::env::var("AWS_PROFILE").ok();
     let region = config.region().map(|r| r.to_string());
 
-    // Test the connection by describing log groups
+    // Step 1: Verify credentials can be loaded (this catches SSO expiration, missing creds, etc.)
+    if let Some(credentials_provider) = config.credentials_provider() {
+        match credentials_provider.provide_credentials().await {
+            Ok(_) => {
+                // Credentials loaded successfully
+            }
+            Err(e) => {
+                let error_msg = format!("{}", e);
+                // Provide specific credential error messages
+                if error_msg.to_lowercase().contains("token")
+                    || error_msg.to_lowercase().contains("sso")
+                    || error_msg.to_lowercase().contains("expired")
+                {
+                    return Err(
+                        "Your AWS session has expired. Please run 'aws sso login' to refresh."
+                            .to_string(),
+                    );
+                }
+                return Err(format!(
+                    "AWS credentials error: {}. Please run 'aws sso login' or check your AWS configuration.",
+                    error_msg
+                ));
+            }
+        }
+    } else {
+        return Err(
+            "No AWS credentials configured. Please run 'aws sso login' or configure credentials."
+                .to_string(),
+        );
+    }
+
+    // Step 2: Create client and test connection (this catches network issues)
+    let client = CloudWatchClient::new(&config);
+
     match client.describe_log_groups().limit(1).send().await {
         Ok(_) => {
             // Store both client and config (config holds the credential provider for auto-refresh)
@@ -97,7 +239,19 @@ async fn init_aws_client(state: State<'_, AppState>) -> Result<AwsConnectionInfo
             *client_lock = Some(client);
             Ok(AwsConnectionInfo { profile, region })
         }
-        Err(e) => Err(format!("Failed to connect to AWS: {}", e)),
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            // At this point, credentials are valid, so it's likely a network or permission issue
+            if error_msg.to_lowercase().contains("accessdenied")
+                || error_msg.to_lowercase().contains("not authorized")
+            {
+                return Err("Access denied. Your credentials don't have permission to access CloudWatch Logs.".to_string());
+            }
+            Err(format!(
+                "Unable to connect to AWS. Please check your network connection. ({})",
+                humanize_aws_error(&error_msg)
+            ))
+        }
     }
 }
 
@@ -117,10 +271,42 @@ async fn reconnect_aws(state: State<'_, AppState>) -> Result<AwsConnectionInfo, 
 
     // Re-initialize with fresh credentials from the provider chain
     let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-    let client = CloudWatchClient::new(&config);
 
     let profile = std::env::var("AWS_PROFILE").ok();
     let region = config.region().map(|r| r.to_string());
+
+    // Step 1: Verify credentials can be loaded
+    if let Some(credentials_provider) = config.credentials_provider() {
+        match credentials_provider.provide_credentials().await {
+            Ok(_) => {
+                // Credentials loaded successfully
+            }
+            Err(e) => {
+                let error_msg = format!("{}", e);
+                if error_msg.to_lowercase().contains("token")
+                    || error_msg.to_lowercase().contains("sso")
+                    || error_msg.to_lowercase().contains("expired")
+                {
+                    return Err(
+                        "Your AWS session has expired. Please run 'aws sso login' to refresh."
+                            .to_string(),
+                    );
+                }
+                return Err(format!(
+                    "AWS credentials error: {}. Please run 'aws sso login' or check your AWS configuration.",
+                    error_msg
+                ));
+            }
+        }
+    } else {
+        return Err(
+            "No AWS credentials configured. Please run 'aws sso login' or configure credentials."
+                .to_string(),
+        );
+    }
+
+    // Step 2: Create client and test connection
+    let client = CloudWatchClient::new(&config);
 
     match client.describe_log_groups().limit(1).send().await {
         Ok(_) => {
@@ -132,7 +318,18 @@ async fn reconnect_aws(state: State<'_, AppState>) -> Result<AwsConnectionInfo, 
             *client_lock = Some(client);
             Ok(AwsConnectionInfo { profile, region })
         }
-        Err(e) => Err(format!("Failed to reconnect to AWS: {}", e)),
+        Err(e) => {
+            let error_msg = format!("{}", e);
+            if error_msg.to_lowercase().contains("accessdenied")
+                || error_msg.to_lowercase().contains("not authorized")
+            {
+                return Err("Access denied. Your credentials don't have permission to access CloudWatch Logs.".to_string());
+            }
+            Err(format!(
+                "Unable to connect to AWS. Please check your network connection. ({})",
+                humanize_aws_error(&error_msg)
+            ))
+        }
     }
 }
 
@@ -177,7 +374,7 @@ async fn list_log_groups(
                 if is_sso_session_expired(&error_msg) {
                     app.emit("aws-session-expired", ()).ok();
                 }
-                return Err(format!("Failed to list log groups: {}", e));
+                return Err(humanize_aws_error(&error_msg));
             }
         }
     }
@@ -234,7 +431,7 @@ async fn fetch_logs(
             if is_sso_session_expired(&error_msg) {
                 app.emit("aws-session-expired", ()).ok();
             }
-            Err(format!("Failed to fetch logs: {}", e))
+            Err(humanize_aws_error(&error_msg))
         }
     }
 }
@@ -289,7 +486,7 @@ async fn fetch_logs_paginated(
             if is_sso_session_expired(&error_msg) {
                 app.emit("aws-session-expired", ()).ok();
             }
-            Err(format!("Failed to fetch logs: {}", e))
+            Err(humanize_aws_error(&error_msg))
         }
     }
 }
@@ -299,6 +496,81 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
+        .setup(|app| {
+            // Create menu items
+            let about_item = MenuItemBuilder::new("About Loggy").id("about").build(app)?;
+
+            let preferences_item = MenuItemBuilder::new("Preferences...")
+                .id("preferences")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+
+            // App submenu (macOS application menu)
+            let app_submenu = SubmenuBuilder::new(app, "Loggy")
+                .item(&about_item)
+                .separator()
+                .item(&preferences_item)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
+            // Edit submenu with standard editing commands
+            let edit_submenu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
+            // View submenu
+            let view_submenu = SubmenuBuilder::new(app, "View").fullscreen().build()?;
+
+            // Window submenu
+            let window_submenu = SubmenuBuilder::new(app, "Window")
+                .minimize()
+                .separator()
+                .close_window()
+                .build()?;
+
+            // Help submenu (empty for now, but required for standard macOS menu)
+            let help_submenu = SubmenuBuilder::new(app, "Help").build()?;
+
+            // Build the menu
+            let menu = MenuBuilder::new(app)
+                .items(&[
+                    &app_submenu,
+                    &edit_submenu,
+                    &view_submenu,
+                    &window_submenu,
+                    &help_submenu,
+                ])
+                .build()?;
+
+            app.set_menu(menu)?;
+
+            // Handle menu events
+            let preferences_id = preferences_item.id().clone();
+            let about_id = about_item.id().clone();
+
+            app.on_menu_event(move |app_handle, event| {
+                if *event.id() == preferences_id {
+                    app_handle.emit("open-settings", ()).ok();
+                } else if *event.id() == about_id {
+                    app_handle.emit("open-about", ()).ok();
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             init_aws_client,
             reconnect_aws,

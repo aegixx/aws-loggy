@@ -329,9 +329,9 @@ export function LogViewer() {
       <div
         className={`flex-1 flex items-center justify-center ${isDark ? "text-red-400" : "text-red-600"}`}
       >
-        <div className="text-center">
+        <div className="text-center max-w-lg px-4">
           <p className="font-semibold">Error fetching logs</p>
-          <p className="text-sm mt-1">{error}</p>
+          <p className="text-sm mt-1 select-text cursor-text">{error}</p>
         </div>
       </div>
     );

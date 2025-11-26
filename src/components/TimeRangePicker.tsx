@@ -109,7 +109,7 @@ export function TimeRangePicker() {
             : isDark
               ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
               : "bg-gray-200 hover:bg-gray-300 text-gray-700"
-        } disabled:opacity-50 disabled:cursor-not-allowed`}
+        } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
       >
         {isTailing && (
           <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
@@ -129,7 +129,7 @@ export function TimeRangePicker() {
               : isDark
                 ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
                 : "bg-gray-200 hover:bg-gray-300 text-gray-700"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
         >
           {preset.label}
         </button>
@@ -146,7 +146,7 @@ export function TimeRangePicker() {
               : isDark
                 ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
                 : "bg-gray-200 hover:bg-gray-300 text-gray-700"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
         >
           Custom
           <svg
@@ -198,7 +198,7 @@ export function TimeRangePicker() {
               </div>
               <button
                 onClick={handleCustomApply}
-                className="w-full px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded text-white transition-colors"
+                className="w-full px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded text-white transition-colors cursor-pointer"
               >
                 Apply
               </button>

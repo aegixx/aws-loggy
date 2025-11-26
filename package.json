@@ -1,12 +1,12 @@
 {
   "name": "loggy",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "A fast, native desktop app for browsing and tailing AWS CloudWatch logs",
   "license": "MIT",
   "author": "Bryan Stone",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/loggy.git"
+    "url": "https://github.com/aegixx/aws-loggy.git"
   },
   "type": "module",
   "scripts": {

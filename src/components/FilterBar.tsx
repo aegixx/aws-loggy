@@ -14,6 +14,7 @@ export function FilterBar() {
     clearLogs,
     logs,
     filteredLogs,
+    selectedLogGroup,
   } = useLogStore();
   const { theme, logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
@@ -33,6 +34,11 @@ export function FilterBar() {
   }, []);
 
   const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+
+  // Hide filter bar until a log group is selected
+  if (!selectedLogGroup) {
+    return null;
+  }
 
   // Count logs by level
   const levelCounts = logs.reduce(
@@ -61,7 +67,7 @@ export function FilterBar() {
           {filterText && (
             <button
               onClick={() => setFilterText("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 cursor-pointer"
             >
               ×
             </button>
@@ -89,7 +95,7 @@ export function FilterBar() {
         <button
           onClick={clearLogs}
           disabled={logs.length === 0}
-          className={`px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed rounded ${isDark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+          className={`px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer rounded ${isDark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
         >
           Clear
         </button>
@@ -118,7 +124,7 @@ export function FilterBar() {
             <button
               key={levelConfig.id}
               onClick={() => toggleLevel(levelConfig.id)}
-              className="px-2 py-0.5 text-xs rounded border transition-all"
+              className="px-2 py-0.5 text-xs rounded border transition-all cursor-pointer"
               style={
                 isEnabled
                   ? {

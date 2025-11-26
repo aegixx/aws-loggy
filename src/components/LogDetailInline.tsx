@@ -68,14 +68,14 @@ export function LogDetailInline({ log, onClose }: LogDetailInlineProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopy}
-            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors"
+            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors cursor-pointer"
             title="Copy raw message"
           >
             Copy
           </button>
           <button
             onClick={onClose}
-            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors"
+            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition-colors cursor-pointer"
             title="Close (Esc)"
           >
             ×

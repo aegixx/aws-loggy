@@ -100,7 +100,7 @@ function LogLevelEditor({
           <button
             onClick={() => moveLogLevel(level.id, "up")}
             disabled={isFirst}
-            className={`p-0.5 rounded text-gray-400 ${isFirst ? "opacity-30" : "hover:bg-gray-700 hover:text-gray-200"}`}
+            className={`p-0.5 rounded text-gray-400 cursor-pointer ${isFirst ? "opacity-30 cursor-not-allowed" : "hover:bg-gray-700 hover:text-gray-200"}`}
             title="Move up (higher priority)"
           >
             <svg
@@ -120,7 +120,7 @@ function LogLevelEditor({
           <button
             onClick={() => moveLogLevel(level.id, "down")}
             disabled={isLast}
-            className={`p-0.5 rounded text-gray-400 ${isLast ? "opacity-30" : "hover:bg-gray-700 hover:text-gray-200"}`}
+            className={`p-0.5 rounded text-gray-400 cursor-pointer ${isLast ? "opacity-30 cursor-not-allowed" : "hover:bg-gray-700 hover:text-gray-200"}`}
             title="Move down (lower priority)"
           >
             <svg
@@ -162,7 +162,7 @@ function LogLevelEditor({
         <button
           onClick={() => removeLogLevel(level.id)}
           disabled={!canDelete}
-          className={`p-1 rounded ${canDelete ? "text-red-400 hover:bg-red-900/30 hover:text-red-300" : "text-gray-600 cursor-not-allowed"}`}
+          className={`p-1 rounded cursor-pointer ${canDelete ? "text-red-400 hover:bg-red-900/30 hover:text-red-300" : "text-gray-600 cursor-not-allowed"}`}
           title={canDelete ? "Remove level" : "Cannot remove last level"}
         >
           <svg
@@ -202,7 +202,7 @@ function LogLevelEditor({
             Background
             <button
               onClick={handleBgToggle}
-              className="ml-2 text-xs text-blue-400 hover:text-blue-300"
+              className="ml-2 text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
             >
               {bgEnabled ? "(disable)" : "(enable)"}
             </button>
@@ -287,7 +287,7 @@ export function SettingsDialog() {
           <h2 className="text-lg font-semibold text-gray-100">Settings</h2>
           <button
             onClick={closeSettings}
-            className="p-1 hover:bg-gray-800 rounded transition-colors text-gray-400 hover:text-gray-200"
+            className="p-1 hover:bg-gray-800 rounded transition-colors text-gray-400 hover:text-gray-200 cursor-pointer"
             title="Close (Esc)"
           >
             <svg
@@ -317,7 +317,7 @@ export function SettingsDialog() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setTheme("system")}
-                  className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+                  className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors cursor-pointer ${
                     theme === "system"
                       ? "bg-blue-600 text-white"
                       : "bg-gray-800 text-gray-400 hover:bg-gray-700"
@@ -327,7 +327,7 @@ export function SettingsDialog() {
                 </button>
                 <button
                   onClick={() => setTheme("dark")}
-                  className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+                  className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors cursor-pointer ${
                     theme === "dark"
                       ? "bg-blue-600 text-white"
                       : "bg-gray-800 text-gray-400 hover:bg-gray-700"
@@ -337,7 +337,7 @@ export function SettingsDialog() {
                 </button>
                 <button
                   onClick={() => setTheme("light")}
-                  className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+                  className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors cursor-pointer ${
                     theme === "light"
                       ? "bg-blue-600 text-white"
                       : "bg-gray-800 text-gray-400 hover:bg-gray-700"
@@ -356,7 +356,7 @@ export function SettingsDialog() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={addLogLevel}
-                  className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300"
+                  className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 cursor-pointer"
                 >
                   <svg
                     className="w-4 h-4"
@@ -376,7 +376,7 @@ export function SettingsDialog() {
                 <span className="text-gray-600">|</span>
                 <button
                   onClick={resetLogLevelDefaults}
-                  className="text-xs text-blue-400 hover:text-blue-300"
+                  className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
                 >
                   Reset to Defaults
                 </button>
@@ -405,7 +405,7 @@ export function SettingsDialog() {
         <div className="px-4 py-3 border-t border-gray-700 flex justify-end">
           <button
             onClick={closeSettings}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-medium transition-colors"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-medium transition-colors cursor-pointer"
           >
             Done
           </button>

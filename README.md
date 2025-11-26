@@ -123,3 +123,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [Tauri](https://tauri.app/) for the excellent desktop framework
 - The AWS SDK team for the Rust SDK
+
+## Future (potential) features
+
+- Regex filter support (`/pattern/`)
+- AWS profile selector UI
+- Saved/favorite queries
+- Export to JSON/CSV
+- CloudWatch Logs Insights integration
+- Multiple log group tabs
+- Alternate file support (e.g. local files, Azure Log Analytics, etc.)
+- Infinite scroll
+- Multi-source aggregation (e.g. combine logs from multiple sources into a single view)
+- Multi-region support
+- Multi-account support
