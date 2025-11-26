@@ -10,6 +10,11 @@ runtimes:
     - python@3.10.8
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
+  ignore:
+    - linters: [osv-scanner]
+      paths:
+        # Upstream Tauri/GTK dependencies - cannot be fixed directly
+        - src-tauri/Cargo.lock
   enabled:
     - checkov@3.2.495
     - clippy@SYSTEM
