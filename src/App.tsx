@@ -87,18 +87,9 @@ function App() {
 
       {/* Header - with padding for macOS traffic lights */}
       <header
-        className={`relative flex items-center gap-4 px-3 pl-25 border-b select-none ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"}`}
+        className={`relative flex items-center gap-4 px-3 py-3 pl-25 border-b select-none ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"}`}
         onMouseDown={handleDragStart}
       >
-        <div className="flex items-center gap-0 relative z-10">
-          <img
-            src={LoggyMascot}
-            alt="Loggy"
-            className="h-20"
-            draggable={false}
-          />
-          <img src={LoggyName} alt="Loggy" className="w-30" draggable={false} />
-        </div>
         <div
           className="flex-1 relative z-10"
           onMouseDown={(e) => e.stopPropagation()}
