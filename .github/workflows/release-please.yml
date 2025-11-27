@@ -69,7 +69,9 @@ jobs:
 
           # Update Cargo.lock to reflect the new version in Cargo.toml
           cd src-tauri
-          cargo check
+          # Explicitly update the package version in Cargo.lock
+          # cargo check doesn't update Cargo.lock, so we use cargo update
+          cargo update -p loggy
           cd ..
 
           # Commit if there are changes
