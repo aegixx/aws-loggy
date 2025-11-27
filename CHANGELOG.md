@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.5](https://github.com/aegixx/aws-loggy/compare/v1.5.4...v1.5.5) (2025-11-27)
+
+
+### Miscellaneous
+
+* updated trunk config ([747d097](https://github.com/aegixx/aws-loggy/commit/747d0977d4c10ade392d6a9aef40e46faf3b73a4))
+
 ## [1.5.4](https://github.com/aegixx/aws-loggy/compare/v1.5.3...v1.5.4) (2025-11-27)
 
 ### Bug Fixes
