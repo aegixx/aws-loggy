@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.4](https://github.com/aegixx/aws-loggy/compare/v1.5.3...v1.5.4) (2025-11-27)
+
+
+### Bug Fixes
+
+* install Linux dependencies before cargo check ([a85721c](https://github.com/aegixx/aws-loggy/commit/a85721c5f41fe93ac1f660eff5aa7942ce071f66))
+
+
+### Miscellaneous
+
+* update Cargo.lock version to 1.5.2 ([36166c2](https://github.com/aegixx/aws-loggy/commit/36166c28691931b70e36acb41e26e3907b4eab3d))
+* update Cargo.lock version to 1.5.3 ([206d435](https://github.com/aegixx/aws-loggy/commit/206d4358f5e8c2f51aed99607380550134a091ad))
+
 ## [1.5.3](https://github.com/aegixx/aws-loggy/compare/v1.5.2...v1.5.3) (2025-11-27)
 
 
