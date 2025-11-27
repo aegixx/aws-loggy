@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.2](https://github.com/aegixx/aws-loggy/compare/v1.5.1...v1.5.2) (2025-11-27)
+
+
+### Miscellaneous
+
+* update Cargo.lock version to 1.5.1 ([906275a](https://github.com/aegixx/aws-loggy/commit/906275af870f537b58f3e4f9ed2f4c86d8e9c514))
+
+
+### Continuous Integration
+
+* auto-update lock files in release PRs ([104eb0b](https://github.com/aegixx/aws-loggy/commit/104eb0b8180319d7f06e00b256e74a3fbed40175))
+
 ## [1.5.1](https://github.com/aegixx/aws-loggy/compare/v1.5.0...v1.5.1) (2025-11-27)
 
 
