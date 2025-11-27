@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.6](https://github.com/aegixx/aws-loggy/compare/v1.5.5...v1.5.6) (2025-11-27)
+
+
+### Bug Fixes
+
+* use cargo update to update Cargo.lock version in release workflow ([adcf8c7](https://github.com/aegixx/aws-loggy/commit/adcf8c7f235eb2308c0b66244c71898c13bb0a07))
+
+
+### Miscellaneous
+
+* update Cargo.lock version to 1.5.5 ([c0e452c](https://github.com/aegixx/aws-loggy/commit/c0e452c775c4289edbaa07af02af692a49b7a86f))
+
 ## [1.5.5](https://github.com/aegixx/aws-loggy/compare/v1.5.4...v1.5.5) (2025-11-27)
 
 
