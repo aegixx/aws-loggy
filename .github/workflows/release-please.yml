@@ -15,6 +15,10 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
@@ -28,6 +32,65 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr merge ${{ fromJSON(steps.release.outputs.pr).number }} --auto --squash --repo ${{ github.repository }}
+
+      - name: Checkout PR branch
+        if: ${{ steps.release.outputs.pr }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_INFO=${{ steps.release.outputs.pr }}
+          PR_BRANCH=$(echo $PR_INFO | jq -r '.headBranchName')
+          git fetch origin $PR_BRANCH
+          git checkout $PR_BRANCH
+
+      - name: Setup Node.js
+        if: ${{ steps.release.outputs.pr }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Setup Rust
+        if: ${{ steps.release.outputs.pr }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update lock files
+        if: ${{ steps.release.outputs.pr }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_INFO=${{ steps.release.outputs.pr }}
+          PR_BRANCH=$(echo $PR_INFO | jq -r '.headBranchName')
+
+          # Update package-lock.json to reflect the new version in package.json
+          npm install --package-lock-only
+
+          # Update Cargo.lock to reflect the new version in Cargo.toml
+          cd src-tauri
+          cargo check
+          cd ..
+
+          # Commit if there are changes
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          CHANGED_FILES=""
+          if ! git diff --quiet package-lock.json; then
+            git add package-lock.json
+            CHANGED_FILES="package-lock.json"
+          fi
+          if ! git diff --quiet src-tauri/Cargo.lock; then
+            git add src-tauri/Cargo.lock
+            if [ -n "$CHANGED_FILES" ]; then
+              CHANGED_FILES="$CHANGED_FILES and "
+            fi
+            CHANGED_FILES="${CHANGED_FILES}src-tauri/Cargo.lock"
+          fi
+
+          if [ -n "$CHANGED_FILES" ]; then
+            git commit -m "chore: update lock files for version bump"
+            git push origin $PR_BRANCH
+          else
+            echo "No changes to lock files"
+          fi
 
   build-release:
     needs: release-please
