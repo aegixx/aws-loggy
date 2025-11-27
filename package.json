@@ -1,6 +1,6 @@
 {
   "name": "loggy",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "A fast, native desktop app for browsing and tailing AWS CloudWatch logs",
   "license": "MIT",
   "author": "Bryan Stone",
