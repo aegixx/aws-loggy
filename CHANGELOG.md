@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/aegixx/aws-loggy/compare/v1.5.0...v1.5.1) (2025-11-27)
+
+
+### Miscellaneous
+
+* Updated README ([0399912](https://github.com/aegixx/aws-loggy/commit/0399912b76b02f939ad48617442e3f27fa24df27))
+
 ## [1.5.0](https://github.com/aegixx/aws-loggy/compare/v1.4.0...v1.5.0) (2025-11-26)
 
 
