@@ -175,3 +175,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Multi-account support
 - Timeline / histogram view based on volume
 - Stacked timeline view based on log level
+- ! Ability to select/copy multiple messages
