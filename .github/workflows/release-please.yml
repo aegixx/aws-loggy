@@ -52,6 +52,12 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Linux dependencies
+        if: ${{ steps.release.outputs.pr }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
       - name: Update lock files
         if: ${{ steps.release.outputs.pr }}
         env:
