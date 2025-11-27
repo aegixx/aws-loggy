@@ -64,8 +64,8 @@ fn get_aws_config_path() -> Option<PathBuf> {
 /// List available AWS profiles from ~/.aws/config
 #[tauri::command]
 async fn list_aws_profiles() -> Result<Vec<String>, String> {
-    let config_path = get_aws_config_path()
-        .ok_or_else(|| "Could not determine home directory".to_string())?;
+    let config_path =
+        get_aws_config_path().ok_or_else(|| "Could not determine home directory".to_string())?;
 
     if !config_path.exists() {
         return Ok(vec!["default".to_string()]);
@@ -259,7 +259,9 @@ async fn init_aws_client(
     let config = config_loader.load().await;
 
     // Use provided profile or fall back to environment variable
-    let effective_profile = profile.clone().or_else(|| std::env::var("AWS_PROFILE").ok());
+    let effective_profile = profile
+        .clone()
+        .or_else(|| std::env::var("AWS_PROFILE").ok());
     let region = config.region().map(|r| r.to_string());
 
     // Step 1: Verify credentials can be loaded (this catches SSO expiration, missing creds, etc.)
@@ -514,7 +516,9 @@ async fn fetch_logs(
     let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
     let max_events: usize = max_count.map(|l| l as usize).unwrap_or(50_000);
-    let max_bytes: usize = max_size_mb.map(|mb| mb as usize * 1024 * 1024).unwrap_or(100 * 1024 * 1024);
+    let max_bytes: usize = max_size_mb
+        .map(|mb| mb as usize * 1024 * 1024)
+        .unwrap_or(100 * 1024 * 1024);
     let mut all_events: Vec<LogEvent> = Vec::new();
     let mut total_size: usize = 0;
     let mut next_token: Option<String> = None;
@@ -555,10 +559,14 @@ async fn fetch_logs(
                 all_events.extend(events);
 
                 // Emit progress update to frontend
-                app.emit("logs-progress", LogsProgress {
-                    count: all_events.len(),
-                    size_bytes: total_size,
-                }).ok();
+                app.emit(
+                    "logs-progress",
+                    LogsProgress {
+                        count: all_events.len(),
+                        size_bytes: total_size,
+                    },
+                )
+                .ok();
 
                 // Check for more pages
                 next_token = response.next_token.clone();
@@ -567,11 +575,15 @@ async fn fetch_logs(
                 if all_events.len() >= max_events {
                     all_events.truncate(max_events);
                     if next_token.is_some() {
-                        app.emit("logs-truncated", LogsTruncated {
-                            count: all_events.len(),
-                            size_bytes: total_size,
-                            reason: "count".to_string(),
-                        }).ok();
+                        app.emit(
+                            "logs-truncated",
+                            LogsTruncated {
+                                count: all_events.len(),
+                                size_bytes: total_size,
+                                reason: "count".to_string(),
+                            },
+                        )
+                        .ok();
                     }
                     break;
                 }
@@ -579,11 +591,15 @@ async fn fetch_logs(
                 // Check if we've hit size limit
                 if total_size >= max_bytes {
                     if next_token.is_some() {
-                        app.emit("logs-truncated", LogsTruncated {
-                            count: all_events.len(),
-                            size_bytes: total_size,
-                            reason: "size".to_string(),
-                        }).ok();
+                        app.emit(
+                            "logs-truncated",
+                            LogsTruncated {
+                                count: all_events.len(),
+                                size_bytes: total_size,
+                                reason: "size".to_string(),
+                            },
+                        )
+                        .ok();
                     }
                     break;
                 }

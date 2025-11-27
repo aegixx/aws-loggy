@@ -18,9 +18,9 @@
     "app:build": "tauri build",
     "app:build:debug": "tauri build --debug",
     "clean": "rm -rf dist src-tauri/target",
-    "fmt": "trunk fmt",
-    "lint": "trunk check",
-    "lint:fix": "trunk check --fix"
+    "fmt": "trunk fmt --all",
+    "lint": "trunk check --all",
+    "lint:fix": "trunk check --fix --all"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
