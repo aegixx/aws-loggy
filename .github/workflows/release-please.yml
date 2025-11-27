@@ -37,9 +37,8 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
         run: |
-          PR_INFO=${{ steps.release.outputs.pr }}
-          PR_BRANCH=$(echo $PR_INFO | jq -r '.headBranchName')
           git fetch origin $PR_BRANCH
           git checkout $PR_BRANCH
 
@@ -57,10 +56,8 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
         run: |
-          PR_INFO=${{ steps.release.outputs.pr }}
-          PR_BRANCH=$(echo $PR_INFO | jq -r '.headBranchName')
-
           # Update package-lock.json to reflect the new version in package.json
           npm install --package-lock-only
 
