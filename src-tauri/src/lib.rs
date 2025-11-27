@@ -3,6 +3,7 @@ use aws_credential_types::provider::ProvideCredentials;
 use aws_sdk_cloudwatchlogs::{types::FilteredLogEvent, Client as CloudWatchClient};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{
@@ -95,6 +96,171 @@ async fn list_aws_profiles() -> Result<Vec<String>, String> {
     Ok(profiles_vec)
 }
 
+/// Check if a profile uses SSO by looking for sso_start_url in config
+fn profile_uses_sso(profile: Option<&String>) -> bool {
+    get_sso_start_url(profile).is_some()
+}
+
+/// Get the SSO start URL for a profile from AWS config
+fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
+    let config_path = get_aws_config_path()?;
+    if !config_path.exists() {
+        eprintln!("AWS config file not found at: {:?}", config_path);
+        return None;
+    }
+
+    let contents = match std::fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to read AWS config file: {}", e);
+            return None;
+        }
+    };
+
+    // Determine which profile to look for
+    let env_profile = std::env::var("AWS_PROFILE").ok();
+    let profile_name = if let Some(p) = profile {
+        p.as_str()
+    } else {
+        // Check environment variable or default to "default"
+        env_profile.as_deref().unwrap_or("default")
+    };
+
+    eprintln!("Looking for SSO start URL for profile: {}", profile_name);
+
+    let mut in_target_section = false;
+
+    for line in contents.lines() {
+        let line = line.trim();
+
+        // Check if we're entering a profile section
+        if line.starts_with('[') && line.ends_with(']') {
+            let section = &line[1..line.len() - 1];
+
+            if profile_name == "default" {
+                // Looking for [default]
+                in_target_section = section == "default";
+            } else {
+                // Looking for [profile name]
+                if let Some(name) = section.strip_prefix("profile ") {
+                    in_target_section = name == profile_name;
+                } else {
+                    in_target_section = false;
+                }
+            }
+            if in_target_section {
+                eprintln!("Found profile section: {}", line);
+            }
+            continue;
+        }
+
+        // If we're in the target section, look for sso_start_url
+        if in_target_section {
+            if let Some(url) = line.strip_prefix("sso_start_url") {
+                // Handle both "sso_start_url = ..." and "sso_start_url=..." formats
+                let url = url.trim_start_matches(|c: char| c == '=' || c.is_whitespace());
+                if !url.is_empty() {
+                    eprintln!("Found SSO start URL: {}", url);
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+
+    eprintln!("SSO start URL not found for profile: {}", profile_name);
+    None
+}
+
+/// Check if credentials are valid for a profile by attempting to load them
+async fn check_credentials_valid(profile: Option<&String>) -> bool {
+    let mut config_loader = aws_config::defaults(BehaviorVersion::latest());
+    if let Some(p) = profile {
+        config_loader = config_loader.profile_name(p);
+    }
+    let config = config_loader.load().await;
+
+    if let Some(credentials_provider) = config.credentials_provider() {
+        credentials_provider.provide_credentials().await.is_ok()
+    } else {
+        false
+    }
+}
+
+/// Poll for valid credentials after SSO login, then emit refresh event
+async fn poll_for_credentials_and_refresh(
+    app: AppHandle,
+    profile: Option<String>,
+    max_attempts: u32,
+) {
+    let profile_clone = profile.clone();
+    let profile_ref = profile_clone.as_ref();
+
+    for attempt in 1..=max_attempts {
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        emit_debug_log(Some(&app), &format!("Checking credentials (attempt {}/{})...", attempt, max_attempts));
+
+        if check_credentials_valid(profile_ref).await {
+            emit_debug_log(Some(&app), "Credentials are now valid! Emitting refresh event...");
+            // Emit event to trigger frontend refresh
+            app.emit("aws-session-refreshed", ()).ok();
+            return;
+        }
+    }
+
+    emit_debug_log(Some(&app), "Credentials check timeout - user may need to complete SSO login manually");
+}
+
+/// Open SSO login URL for a profile
+/// This uses `aws sso login --profile` to handle the profile-aware SSO login
+/// After opening, it polls for successful authentication and triggers a refresh
+async fn open_sso_login_url(
+    app: AppHandle,
+    profile: Option<&String>,
+) -> Result<(), String> {
+    eprintln!("=== Attempting to open SSO URL for profile ===");
+
+    let profile_clone = profile.cloned();
+
+    // Use AWS CLI to handle profile-aware SSO login
+    let mut cmd = std::process::Command::new("aws");
+    cmd.arg("sso").arg("login");
+
+    if let Some(p) = profile {
+        cmd.arg("--profile").arg(p);
+        eprintln!("Using profile: {}", p);
+    } else {
+        eprintln!("No profile specified, using default");
+    }
+
+    // Spawn the command - it will open the browser automatically
+    match cmd.spawn() {
+        Ok(_) => {
+            eprintln!("Successfully started AWS SSO login");
+
+            // Start polling for credentials to become valid (poll for up to 2 minutes)
+            let app_clone = app.clone();
+            tokio::spawn(async move {
+                poll_for_credentials_and_refresh(app_clone, profile_clone, 60).await;
+            });
+
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("ERROR: Failed to start AWS SSO login: {}", e);
+            Err(format!("Failed to start AWS SSO login: {}", e))
+        }
+    }
+}
+
+/// Emit a debug log message to the frontend
+fn emit_debug_log(app: Option<&AppHandle>, message: &str) {
+    eprintln!("{}", message);
+    if let Some(app_handle) = app {
+        app_handle.emit("debug-log", message).ok();
+    }
+}
+
 /// Trigger SSO login for a profile
 #[tauri::command]
 async fn trigger_sso_login(profile: Option<String>) -> Result<(), String> {
@@ -111,15 +277,66 @@ async fn trigger_sso_login(profile: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
+/// Open SSO login URL in browser for a profile
+#[tauri::command]
+async fn open_sso_url(app: AppHandle, profile: Option<String>) -> Result<(), String> {
+    open_sso_login_url(app, profile.as_ref()).await
+}
+
+/// Get the app version
+#[tauri::command]
+fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Check if an error indicates the SSO session has expired (requires browser re-auth)
 fn is_sso_session_expired(error_msg: &str) -> bool {
+    eprintln!("Checking if error is SSO expiration: {}", error_msg);
     let error_lower = error_msg.to_lowercase();
-    error_lower.contains("token has expired")
+    let is_expired = error_lower.contains("token has expired")
         || error_lower.contains("sso session")
         || error_lower.contains("refresh token")
         || error_lower.contains("re-authenticate")
         || error_lower.contains("accessdeniedexception")
         || error_lower.contains("invalid_grant")
+        || error_lower.contains("expired sso token")
+        || error_lower.contains("sso token")
+        || (error_lower.contains("credential") && error_lower.contains("expired"))
+        || (error_lower.contains("unauthorized") && error_lower.contains("token"))
+        || error_lower.contains("unable to locate credentials")
+        || error_lower.contains("no credentials")
+        || error_lower.contains("failed to load credentials");
+
+    if is_expired {
+        eprintln!("✓ SSO expiration detected!");
+    } else {
+        eprintln!("✗ Not detected as SSO expiration");
+    }
+
+    is_expired
+}
+
+/// Handle SSO session expiration by opening the SSO login URL and emitting event
+async fn handle_sso_expiration(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    profile: Option<&String>,
+) {
+    // Get the current profile from state if not provided
+    let current_profile = if let Some(p) = profile {
+        Some(p.clone())
+    } else {
+        state.current_profile.lock().await.clone()
+    };
+
+    // Try to open the SSO URL
+    if let Err(e) = open_sso_login_url(app.clone(), current_profile.as_ref()).await {
+        eprintln!("Failed to open SSO URL: {}", e);
+        // Continue anyway - we'll still emit the event
+    }
+
+    // Emit the event to notify frontend
+    app.emit("aws-session-expired", ()).ok();
 }
 
 /// Convert AWS SDK errors to human-friendly messages
@@ -248,6 +465,7 @@ pub struct AwsConnectionInfo {
 /// If profile is provided, it will be used instead of the default/environment profile
 #[tauri::command]
 async fn init_aws_client(
+    app: AppHandle,
     state: State<'_, AppState>,
     profile: Option<String>,
 ) -> Result<AwsConnectionInfo, String> {
@@ -271,17 +489,41 @@ async fn init_aws_client(
                 // Credentials loaded successfully
             }
             Err(e) => {
+                // Try to get more detailed error information
                 let error_msg = format!("{}", e);
-                // Provide specific credential error messages
-                if error_msg.to_lowercase().contains("token")
-                    || error_msg.to_lowercase().contains("sso")
-                    || error_msg.to_lowercase().contains("expired")
-                {
+                let error_debug = format!("{:?}", e);
+                let error_source = e.source()
+                    .map(|s| format!("{}", s))
+                    .unwrap_or_default();
+
+                emit_debug_log(Some(&app), "=== Credential provider error in init_aws_client ===");
+                emit_debug_log(Some(&app), &format!("Error: {}", error_msg));
+                emit_debug_log(Some(&app), &format!("Error debug: {}", error_debug));
+                emit_debug_log(Some(&app), &format!("Error source: {}", error_source));
+                emit_debug_log(Some(&app), &format!("Profile: {:?}", effective_profile));
+
+                // Check all error representations for SSO expiration
+                let is_expired = is_sso_session_expired(&error_msg)
+                    || is_sso_session_expired(&error_debug)
+                    || is_sso_session_expired(&error_source);
+
+                // If profile uses SSO and we get any credential error, assume it's SSO expiration
+                let uses_sso = profile_uses_sso(effective_profile.as_ref());
+                emit_debug_log(Some(&app), &format!("Profile uses SSO: {}", uses_sso));
+                let should_try_sso = is_expired || (uses_sso && error_msg.contains("credential"));
+
+                if should_try_sso {
+                    // Try to open SSO URL automatically
+                    emit_debug_log(Some(&app), &format!("SSO session expired detected (or SSO profile with credential error), attempting to open SSO URL for profile: {:?}", effective_profile));
+                    if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
+                        emit_debug_log(Some(&app), &format!("Failed to open SSO URL: {}", e));
+                    }
                     return Err(
                         "Your AWS session has expired. Please run 'aws sso login' to refresh."
                             .to_string(),
                     );
                 }
+                emit_debug_log(Some(&app), "Error does not match SSO expiration patterns, returning generic error");
                 return Err(format!(
                     "AWS credentials error: {}. Please run 'aws sso login' or check your AWS configuration.",
                     error_msg
@@ -319,6 +561,17 @@ async fn init_aws_client(
         }
         Err(e) => {
             let error_msg = format!("{}", e);
+            // Check for SSO expiration in API errors too
+            if is_sso_session_expired(&error_msg) {
+                // Try to open SSO URL automatically
+                if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
+                    eprintln!("Failed to open SSO URL: {}", e);
+                }
+                return Err(
+                    "Your AWS session has expired. Please run 'aws sso login' to refresh."
+                        .to_string(),
+                );
+            }
             // At this point, credentials are valid, so it's likely a network or permission issue
             if error_msg.to_lowercase().contains("accessdenied")
                 || error_msg.to_lowercase().contains("not authorized")
@@ -338,6 +591,7 @@ async fn init_aws_client(
 /// If profile is provided, switches to that profile; otherwise uses the current profile
 #[tauri::command]
 async fn reconnect_aws(
+    app: AppHandle,
     state: State<'_, AppState>,
     profile: Option<String>,
 ) -> Result<AwsConnectionInfo, String> {
@@ -376,16 +630,41 @@ async fn reconnect_aws(
                 // Credentials loaded successfully
             }
             Err(e) => {
+                // Try to get more detailed error information
                 let error_msg = format!("{}", e);
-                if error_msg.to_lowercase().contains("token")
-                    || error_msg.to_lowercase().contains("sso")
-                    || error_msg.to_lowercase().contains("expired")
-                {
+                let error_debug = format!("{:?}", e);
+                let error_source = e.source()
+                    .map(|s| format!("{}", s))
+                    .unwrap_or_default();
+
+                emit_debug_log(Some(&app), "=== Credential provider error in reconnect_aws ===");
+                emit_debug_log(Some(&app), &format!("Error: {}", error_msg));
+                emit_debug_log(Some(&app), &format!("Error debug: {}", error_debug));
+                emit_debug_log(Some(&app), &format!("Error source: {}", error_source));
+                emit_debug_log(Some(&app), &format!("Profile: {:?}", effective_profile));
+
+                // Check all error representations for SSO expiration
+                let is_expired = is_sso_session_expired(&error_msg)
+                    || is_sso_session_expired(&error_debug)
+                    || is_sso_session_expired(&error_source);
+
+                // If profile uses SSO and we get any credential error, assume it's SSO expiration
+                let uses_sso = profile_uses_sso(effective_profile.as_ref());
+                emit_debug_log(Some(&app), &format!("Profile uses SSO: {}", uses_sso));
+                let should_try_sso = is_expired || (uses_sso && error_msg.contains("credential"));
+
+                if should_try_sso {
+                    // Try to open SSO URL automatically
+                    emit_debug_log(Some(&app), &format!("SSO session expired detected (or SSO profile with credential error), attempting to open SSO URL for profile: {:?}", effective_profile));
+                    if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
+                        emit_debug_log(Some(&app), &format!("Failed to open SSO URL: {}", e));
+                    }
                     return Err(
                         "Your AWS session has expired. Please run 'aws sso login' to refresh."
                             .to_string(),
                     );
                 }
+                emit_debug_log(Some(&app), "Error does not match SSO expiration patterns, returning generic error");
                 return Err(format!(
                     "AWS credentials error: {}. Please run 'aws sso login' or check your AWS configuration.",
                     error_msg
@@ -422,6 +701,19 @@ async fn reconnect_aws(
         }
         Err(e) => {
             let error_msg = format!("{}", e);
+            emit_debug_log(Some(&app), &format!("API error in reconnect_aws: {}", error_msg));
+            // Check for SSO expiration in API errors too
+            if is_sso_session_expired(&error_msg) {
+                // Try to open SSO URL automatically
+                emit_debug_log(Some(&app), "SSO expiration detected in API call, opening URL");
+                if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
+                    emit_debug_log(Some(&app), &format!("Failed to open SSO URL: {}", e));
+                }
+                return Err(
+                    "Your AWS session has expired. Please run 'aws sso login' to refresh."
+                        .to_string(),
+                );
+            }
             if error_msg.to_lowercase().contains("accessdenied")
                 || error_msg.to_lowercase().contains("not authorized")
             {
@@ -474,7 +766,7 @@ async fn list_log_groups(
             Err(e) => {
                 let error_msg = format!("{}", e);
                 if is_sso_session_expired(&error_msg) {
-                    app.emit("aws-session-expired", ()).ok();
+                    handle_sso_expiration(&app, &state, None).await;
                 }
                 return Err(humanize_aws_error(&error_msg));
             }
@@ -611,7 +903,7 @@ async fn fetch_logs(
             Err(e) => {
                 let error_msg = format!("{}", e);
                 if is_sso_session_expired(&error_msg) {
-                    app.emit("aws-session-expired", ()).ok();
+                    handle_sso_expiration(&app, &state, None).await;
                 }
                 return Err(humanize_aws_error(&error_msg));
             }
@@ -669,7 +961,7 @@ async fn fetch_logs_paginated(
         Err(e) => {
             let error_msg = format!("{}", e);
             if is_sso_session_expired(&error_msg) {
-                app.emit("aws-session-expired", ()).ok();
+                handle_sso_expiration(&app, &state, None).await;
             }
             Err(humanize_aws_error(&error_msg))
         }
@@ -779,6 +1071,8 @@ pub fn run() {
             reconnect_aws,
             list_aws_profiles,
             trigger_sso_login,
+            open_sso_url,
+            get_app_version,
             list_log_groups,
             fetch_logs,
             fetch_logs_paginated,

@@ -83,7 +83,10 @@ No test framework currently configured. Tests welcome as future enhancement.
 
 - AWS credentials use default provider chain (profiles, SSO, env vars)
 - SSO credentials auto-refresh within a valid SSO session (no manual intervention needed)
-- When SSO session expires, frontend receives `aws-session-expired` event; user must re-auth via `aws sso login`
+- When SSO session expires, the app automatically opens the SSO login URL in the browser using `aws sso login --profile <profile>`
+- After opening SSO login, the app polls every 2 seconds (up to 2 minutes) to detect when credentials become valid
+- When credentials are valid, `aws-session-refreshed` event is emitted and the connection automatically refreshes
+- Frontend also receives `aws-session-expired` event for UI feedback
 - `reconnect_aws` Tauri command re-initializes the AWS client after credential refresh
 - `refreshConnection` store action calls `reconnect_aws` and re-fetches logs with current filters
 - Log cache limits configurable in Settings (default: 50,000 entries OR 100 MB)

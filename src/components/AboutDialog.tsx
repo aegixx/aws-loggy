@@ -1,5 +1,6 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
 import LoggyMascot from "../assets/loggy-mascot.png";
 import LoggyName from "../assets/loggy-name.png";
@@ -13,12 +14,25 @@ const GITHUB_URL = "https://github.com/aegixx/aws-loggy";
 
 export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
   const { theme } = useSettingsStore();
+  const [version, setVersion] = useState<string>("");
 
   // Determine if dark mode
   const systemPrefersDark =
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+
+  // Load app version
+  useEffect(() => {
+    if (isOpen) {
+      invoke<string>("get_app_version")
+        .then((v) => setVersion(v))
+        .catch((err) => {
+          console.error("Failed to get app version:", err);
+          setVersion("Unknown");
+        });
+    }
+  }, [isOpen]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -81,7 +95,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
           <p
             className={`text-sm font-medium ${isDark ? "text-emerald-400" : "text-emerald-600"}`}
           >
-            Version 1.1.0
+            Version {version || "Loading..."}
           </p>
         </div>
 

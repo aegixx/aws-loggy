@@ -97,6 +97,14 @@ function App() {
         setLoadingProgress(event.payload.count, event.payload.size_bytes);
       },
     );
+    const unlistenDebug = listen<string>("debug-log", (event) => {
+      console.log("[Backend]", event.payload);
+    });
+    const unlistenSessionRefreshed = listen("aws-session-refreshed", () => {
+      // Automatically refresh connection when SSO login is successful
+      console.log("SSO session refreshed, reconnecting...");
+      refreshConnection();
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
@@ -104,6 +112,8 @@ function App() {
       unlistenRefresh.then((fn) => fn());
       unlistenTruncated.then((fn) => fn());
       unlistenProgress.then((fn) => fn());
+      unlistenDebug.then((fn) => fn());
+      unlistenSessionRefreshed.then((fn) => fn());
     };
   }, [openSettings, refreshConnection, setLoadingProgress]);
 

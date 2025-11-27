@@ -76,8 +76,11 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 - Automatically supports profiles, SSO, IAM roles, environment variables
 - SSO credentials auto-refresh within a valid SSO session
-- When SSO session expires, `aws-session-expired` event emitted to frontend
-- `reconnect_aws` command re-initializes client after user re-authenticates
+- When SSO session expires, the app automatically opens the SSO login URL in the browser
+- The app polls for valid credentials after opening SSO login (every 2 seconds, up to 2 minutes)
+- When credentials become valid, `aws-session-refreshed` event is emitted and connection auto-refreshes
+- `aws-session-expired` event is also emitted to frontend for UI feedback
+- `reconnect_aws` command re-initializes client after credential refresh
 
 ### Architecture Overview
 
