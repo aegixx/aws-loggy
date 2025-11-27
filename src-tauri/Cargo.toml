@@ -1,6 +1,6 @@
 [package]
 name = "loggy"
-version = "1.5.2"
+version = "1.5.3"
 description = "A fast, native desktop app for browsing and tailing AWS CloudWatch logs"
 authors = ["Bryan Stone"]
 license = "MIT"

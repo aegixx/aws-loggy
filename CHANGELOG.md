@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.3](https://github.com/aegixx/aws-loggy/compare/v1.5.2...v1.5.3) (2025-11-27)
+
+
+### Bug Fixes
+
+* use GitHub Actions fromJSON for PR branch parsing ([0330d54](https://github.com/aegixx/aws-loggy/commit/0330d5446cda6156fab25f3c023b54be2a439244))
+
 ## [1.5.2](https://github.com/aegixx/aws-loggy/compare/v1.5.1...v1.5.2) (2025-11-27)
 
 
