@@ -1,0 +1,74 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Tauri Debug",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path=./src-tauri/Cargo.toml",
+          "--no-default-features"
+        ]
+      },
+      "preLaunchTask": "vite:dev",
+      "sourceLanguages": ["rust"],
+      "env": {
+        "RUST_BACKTRACE": "1",
+        "HOME": "${env:HOME}",
+        "AWS_CONFIG_FILE": "${env:HOME}/.aws/config",
+        "AWS_SHARED_CREDENTIALS_FILE": "${env:HOME}/.aws/credentials",
+        "AWS_PROFILE": "${input:awsProfile}"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Tauri Debug (Manual Vite)",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path=./src-tauri/Cargo.toml",
+          "--no-default-features"
+        ]
+      },
+      "sourceLanguages": ["rust"],
+      "env": {
+        "RUST_BACKTRACE": "1",
+        "HOME": "${env:HOME}",
+        "AWS_CONFIG_FILE": "${env:HOME}/.aws/config",
+        "AWS_SHARED_CREDENTIALS_FILE": "${env:HOME}/.aws/credentials",
+        "AWS_PROFILE": "${input:awsProfile}"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Tauri Debug (Default Profile)",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path=./src-tauri/Cargo.toml",
+          "--no-default-features"
+        ]
+      },
+      "preLaunchTask": "vite:dev",
+      "sourceLanguages": ["rust"],
+      "env": {
+        "RUST_BACKTRACE": "1",
+        "HOME": "${env:HOME}",
+        "AWS_CONFIG_FILE": "${env:HOME}/.aws/config",
+        "AWS_SHARED_CREDENTIALS_FILE": "${env:HOME}/.aws/credentials"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "awsProfile",
+      "type": "promptString",
+      "description": "Enter AWS profile name (from ~/.aws/config)",
+      "default": "default"
+    }
+  ]
+}

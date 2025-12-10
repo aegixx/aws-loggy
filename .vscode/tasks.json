@@ -1,0 +1,46 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "vite:dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "fileLocation": "relative",
+        "pattern": {
+          "regexp": "^(.*):(\\d+):(\\d+): (error|warning): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "ready in \\d+"
+        }
+      }
+    },
+    {
+      "label": "tauri:dev",
+      "type": "shell",
+      "command": "npm run start",
+      "problemMatcher": []
+    },
+    {
+      "label": "tauri:build",
+      "type": "shell",
+      "command": "npm run app:build",
+      "problemMatcher": []
+    },
+    {
+      "label": "tauri:build:debug",
+      "type": "shell",
+      "command": "npm run app:build:debug",
+      "problemMatcher": []
+    }
+  ]
+}
