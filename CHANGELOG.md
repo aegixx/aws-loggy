@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/aegixx/aws-loggy/compare/v1.6.0...v1.6.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* resolve tailing bugs when clearing logs and resetting filters ([bf566bb](https://github.com/aegixx/aws-loggy/commit/bf566bb52b9d9a1fdd72cb601674f0f04ce73f5f))
+
 ## [1.6.0](https://github.com/aegixx/aws-loggy/compare/v1.5.6...v1.6.0) (2025-12-10)
 
 
