@@ -56,7 +56,7 @@ No test framework currently configured. Tests welcome as future enhancement.
 ### Modifying log parsing
 
 - Edit `parseLogLevel()` in `src/stores/logStore.ts`
-- Default log levels: `error`, `warn`, `info`, `debug`, `system`, `unknown`
+- Default log levels: `error`, `warn`, `info`, `debug`, `trace`, `system`, `unknown`
 - Log levels are configurable in Settings (colors, keywords, default visibility)
 
 ### Adding Tauri commands
@@ -71,6 +71,7 @@ No test framework currently configured. Tests welcome as future enhancement.
 | ------------------ | -------------------------------------------- |
 | `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
+| `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
 | `⌘,` / `Ctrl+,`    | Open Settings                                |
 | `Tab`              | Focus log viewer for keyboard navigation     |
 | `↑` / `↓`          | Navigate between log rows                    |

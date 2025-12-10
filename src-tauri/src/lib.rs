@@ -992,6 +992,11 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+L")
                 .build(app)?;
 
+            let clear_item = MenuItemBuilder::new("Clear")
+                .id("clear")
+                .accelerator("CmdOrCtrl+K")
+                .build(app)?;
+
             // App submenu (macOS application menu)
             let app_submenu = SubmenuBuilder::new(app, "Loggy")
                 .item(&about_item)
@@ -1021,6 +1026,7 @@ pub fn run() {
             // View submenu
             let view_submenu = SubmenuBuilder::new(app, "View")
                 .item(&refresh_item)
+                .item(&clear_item)
                 .item(&focus_filter_item)
                 .separator()
                 .fullscreen()
@@ -1053,6 +1059,7 @@ pub fn run() {
             let preferences_id = preferences_item.id().clone();
             let about_id = about_item.id().clone();
             let refresh_id = refresh_item.id().clone();
+            let clear_id = clear_item.id().clone();
 
             app.on_menu_event(move |app_handle, event| {
                 if *event.id() == preferences_id {
@@ -1061,6 +1068,8 @@ pub fn run() {
                     app_handle.emit("open-about", ()).ok();
                 } else if *event.id() == refresh_id {
                     app_handle.emit("refresh-logs", ()).ok();
+                } else if *event.id() == clear_id {
+                    app_handle.emit("clear-logs", ()).ok();
                 }
             });
 

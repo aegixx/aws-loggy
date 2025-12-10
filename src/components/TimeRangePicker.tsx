@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from "react";
+import DatePicker from "react-datepicker";
+import { MdDateRange, MdArrowDropDown } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import "react-datepicker/dist/react-datepicker.css";
 
 interface TimePreset {
   label: string;
@@ -15,21 +18,12 @@ const TIME_PRESETS: TimePreset[] = [
   { label: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
 ];
 
-function formatDateTimeLocal(timestamp: number): string {
-  const date = new Date(timestamp);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function parseDateTimeLocal(value: string): number {
-  return new Date(value).getTime();
-}
-
 export function TimeRangePicker() {
   const {
     isTailing,
     startTail,
     stopTail,
+    clearLogs,
     setTimeRange,
     selectedLogGroup,
     timeRange,
@@ -37,12 +31,10 @@ export function TimeRangePicker() {
   const { theme } = useSettingsStore();
   const [showCustom, setShowCustom] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>("15m");
-  const [customStart, setCustomStart] = useState(() =>
-    formatDateTimeLocal(Date.now() - 60 * 60 * 1000),
+  const [customStart, setCustomStart] = useState<Date>(
+    () => new Date(Date.now() - 60 * 60 * 1000),
   );
-  const [customEnd, setCustomEnd] = useState(() =>
-    formatDateTimeLocal(Date.now()),
-  );
+  const [customEnd, setCustomEnd] = useState<Date>(() => new Date());
   const customRef = useRef<HTMLDivElement>(null);
 
   // Track system preference for theme
@@ -68,12 +60,17 @@ export function TimeRangePicker() {
     }
   }, [timeRange, isTailing]);
 
-  // Close custom picker when clicking outside
+  // Close custom picker when clicking outside (but not when clicking in datepicker portal)
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (customRef.current && !customRef.current.contains(e.target as Node)) {
-        setShowCustom(false);
-      }
+      const target = e.target as Node;
+      const portalEl = document.getElementById("datepicker-portal");
+
+      // Don't close if clicking inside the dropdown or inside the datepicker portal
+      if (customRef.current?.contains(target)) return;
+      if (portalEl?.contains(target)) return;
+
+      setShowCustom(false);
     }
     if (showCustom) {
       document.addEventListener("mousedown", handleClickOutside);
@@ -84,7 +81,8 @@ export function TimeRangePicker() {
 
   const handleLiveClick = () => {
     if (isTailing) {
-      stopTail();
+      // Already tailing - clear logs and reset timestamp (like clicking clear)
+      clearLogs();
     } else {
       setActivePreset(null);
       startTail();
@@ -102,13 +100,37 @@ export function TimeRangePicker() {
   const handleCustomApply = () => {
     if (isTailing) stopTail();
     setActivePreset("custom");
-    const start = parseDateTimeLocal(customStart);
-    const end = parseDateTimeLocal(customEnd);
-    setTimeRange({ start, end });
+    setTimeRange({ start: customStart.getTime(), end: customEnd.getTime() });
     setShowCustom(false);
   };
 
   const isDisabled = !selectedLogGroup;
+
+  // Custom input component for consistent styling
+  const CustomInput = ({
+    value,
+    onClick,
+    label,
+  }: {
+    value?: string;
+    onClick?: () => void;
+    label: string;
+  }) => (
+    <div className="w-full">
+      <label
+        className={`block text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+      >
+        {label}
+      </label>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`w-full rounded px-2 py-1.5 text-sm text-left focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer ${isDark ? "bg-gray-900 border border-gray-700 text-gray-300 hover:bg-gray-800" : "bg-gray-50 border border-gray-300 text-gray-700 hover:bg-gray-100"}`}
+      >
+        {value}
+      </button>
+    </div>
+  );
 
   return (
     <div className="flex items-center gap-1 relative">
@@ -148,71 +170,60 @@ export function TimeRangePicker() {
         </button>
       ))}
 
-      {/* Custom button */}
+      {/* Custom date range button */}
       <div ref={customRef} className="relative">
         <button
           onClick={() => setShowCustom(!showCustom)}
           disabled={isDisabled}
-          className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
+          className={`px-1.5 py-1 rounded transition-colors flex items-center ${
             activePreset === "custom" && !isTailing
               ? "bg-blue-600 text-white"
               : isDark
                 ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
                 : "bg-gray-200 hover:bg-gray-300 text-gray-700"
           } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
+          title="Custom date range"
         >
-          Custom
-          <svg
-            className="w-3 h-3"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
+          <MdDateRange className="w-4 h-4" />
+          <MdArrowDropDown className="w-4 h-4 -ml-0.5" />
         </button>
 
         {/* Custom picker dropdown */}
         {showCustom && (
           <div
-            className={`absolute top-full right-0 mt-1 p-3 rounded-lg shadow-xl border z-50 w-72 ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"}`}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleCustomApply();
-              }
-            }}
+            className={`absolute top-full right-0 mt-1 p-3 rounded-lg shadow-xl border z-50 ${isDark ? "bg-gray-800 border-gray-700 datepicker-dark" : "bg-white border-gray-300"}`}
+            style={{ minWidth: "200px" }}
           >
-            <div className="space-y-3">
-              <div>
-                <label
-                  className={`block text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
-                >
-                  Start
-                </label>
-                <input
-                  type="datetime-local"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                  className={`w-full rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 text-gray-300" : "bg-gray-50 border border-gray-300 text-gray-700"}`}
+            <div className="flex flex-col gap-3">
+              <div className="w-full">
+                <DatePicker
+                  selected={customStart}
+                  onChange={(date) => date && setCustomStart(date)}
+                  showTimeSelect
+                  timeIntervals={30}
+                  timeFormat="HH:mm"
+                  dateFormat="MMM d, yyyy HH:mm"
+                  maxDate={customEnd}
+                  customInput={<CustomInput label="Start" />}
+                  calendarClassName={isDark ? "datepicker-dark" : ""}
+                  wrapperClassName="w-full"
+                  portalId="datepicker-portal"
                 />
               </div>
-              <div>
-                <label
-                  className={`block text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
-                >
-                  End
-                </label>
-                <input
-                  type="datetime-local"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                  className={`w-full rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 text-gray-300" : "bg-gray-50 border border-gray-300 text-gray-700"}`}
+              <div className="w-full">
+                <DatePicker
+                  selected={customEnd}
+                  onChange={(date) => date && setCustomEnd(date)}
+                  showTimeSelect
+                  timeIntervals={30}
+                  timeFormat="HH:mm"
+                  dateFormat="MMM d, yyyy HH:mm"
+                  minDate={customStart}
+                  maxDate={new Date()}
+                  customInput={<CustomInput label="End" />}
+                  calendarClassName={isDark ? "datepicker-dark" : ""}
+                  wrapperClassName="w-full"
+                  portalId="datepicker-portal"
                 />
               </div>
               <button

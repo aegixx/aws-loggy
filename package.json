@@ -28,13 +28,16 @@
     "@tauri-apps/plugin-opener": "^2",
     "date-fns": "^4.1.0",
     "react": "^19.1.0",
+    "react-datepicker": "^9.0.0",
     "react-dom": "^19.1.0",
+    "react-icons": "^5.5.0",
     "react-window": "^2.2.3",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
+    "@types/react-datepicker": "^6.2.0",
     "@types/react-dom": "^19.1.6",
     "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^4.6.0",

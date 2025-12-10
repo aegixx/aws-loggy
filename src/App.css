@@ -67,3 +67,85 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-500;
 }
+
+/* React DatePicker dark theme */
+.datepicker-dark {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #e5e7eb !important;
+}
+
+.datepicker-dark .react-datepicker__header {
+  background-color: #374151 !important;
+  border-bottom-color: #4b5563 !important;
+}
+
+.datepicker-dark .react-datepicker__current-month,
+.datepicker-dark .react-datepicker__day-name,
+.datepicker-dark .react-datepicker-time__header {
+  color: #e5e7eb !important;
+}
+
+.datepicker-dark .react-datepicker__day {
+  color: #d1d5db !important;
+}
+
+.datepicker-dark .react-datepicker__day:hover {
+  background-color: #4b5563 !important;
+}
+
+.datepicker-dark .react-datepicker__day--selected,
+.datepicker-dark .react-datepicker__day--keyboard-selected {
+  background-color: #2563eb !important;
+  color: white !important;
+}
+
+.datepicker-dark .react-datepicker__day--disabled {
+  color: #6b7280 !important;
+}
+
+.datepicker-dark .react-datepicker__day--outside-month {
+  color: #6b7280 !important;
+}
+
+.datepicker-dark .react-datepicker__time-container {
+  border-left-color: #4b5563 !important;
+}
+
+.datepicker-dark .react-datepicker__time {
+  background-color: #1f2937 !important;
+}
+
+.datepicker-dark .react-datepicker__time-box {
+  background-color: #1f2937 !important;
+}
+
+.datepicker-dark .react-datepicker__time-list-item {
+  color: #d1d5db !important;
+}
+
+.datepicker-dark .react-datepicker__time-list-item:hover {
+  background-color: #4b5563 !important;
+}
+
+.datepicker-dark .react-datepicker__time-list-item--selected {
+  background-color: #2563eb !important;
+  color: white !important;
+}
+
+.datepicker-dark .react-datepicker__navigation-icon::before {
+  border-color: #9ca3af !important;
+}
+
+.datepicker-dark .react-datepicker__navigation:hover *::before {
+  border-color: #e5e7eb !important;
+}
+
+.datepicker-dark .react-datepicker__triangle {
+  display: none;
+}
+
+/* Ensure datepicker portal appears above dropdown */
+#datepicker-portal .react-datepicker-popper {
+  z-index: 100 !important;
+}

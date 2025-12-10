@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { MdFilterAltOff, MdDeleteOutline } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { TimeRangePicker } from "./TimeRangePicker";
@@ -12,8 +13,8 @@ export function FilterBar() {
     toggleLevel,
     isTailing,
     clearLogs,
+    resetFilters,
     logs,
-    filteredLogs,
     selectedLogGroup,
   } = useLogStore();
   const { theme, logLevels } = useSettingsStore();
@@ -91,30 +92,16 @@ export function FilterBar() {
           )}
         </div>
 
-        {/* Log count */}
-        <div
-          className={`text-sm whitespace-nowrap ${isDark ? "text-gray-400" : "text-gray-600"}`}
-        >
-          {filteredLogs.length !== logs.length ? (
-            <span>
-              {filteredLogs.length.toLocaleString()} /{" "}
-              {logs.length.toLocaleString()}
-            </span>
-          ) : (
-            <span>{logs.length.toLocaleString()} logs</span>
-          )}
-        </div>
-
         {/* Time range picker */}
         <TimeRangePicker />
 
-        {/* Clear button */}
+        {/* Reset button (icon) */}
         <button
-          onClick={clearLogs}
-          disabled={logs.length === 0}
-          className={`px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer rounded ${isDark ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+          onClick={resetFilters}
+          className={`p-1.5 rounded transition-colors cursor-pointer ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
+          title="Reset filters to defaults"
         >
-          Clear
+          <MdFilterAltOff className="w-4 h-4" />
         </button>
 
         {/* Tail indicator */}
@@ -126,7 +113,7 @@ export function FilterBar() {
         )}
       </div>
 
-      {/* Bottom row: Level toggles */}
+      {/* Bottom row: Level toggles + Clear button */}
       <div className="flex items-center gap-2">
         <span
           className={`text-xs mr-1 ${isDark ? "text-gray-500" : "text-gray-600"}`}
@@ -173,6 +160,19 @@ export function FilterBar() {
             </button>
           );
         })}
+
+        {/* Spacer to push clear button to right */}
+        <div className="flex-1" />
+
+        {/* Clear button (icon) */}
+        <button
+          onClick={clearLogs}
+          disabled={logs.length === 0}
+          className={`p-1 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
+          title="Clear logs (⌘K)"
+        >
+          <MdDeleteOutline className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

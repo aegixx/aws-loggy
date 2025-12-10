@@ -7,6 +7,10 @@ import {
   getSortedLogLevels,
 } from "./settingsStore";
 
+// Module-level variables to track tail state (survives HMR)
+let tailIntervalId: ReturnType<typeof setInterval> | null = null;
+let tailStartTimestamp: number | null = null;
+
 interface AwsConnectionInfo {
   profile: string | null;
   region: string | null;
@@ -47,7 +51,6 @@ interface LogStore {
 
   // Live tail
   isTailing: boolean;
-  tailInterval: ReturnType<typeof setInterval> | null;
 
   // Actions
   initializeAws: () => Promise<void>;
@@ -63,6 +66,7 @@ interface LogStore {
   startTail: () => void;
   stopTail: () => void;
   clearLogs: () => void;
+  resetFilters: () => void;
   resetState: () => void;
   setLoadingProgress: (count: number, sizeBytes: number) => void;
 }
@@ -217,7 +221,6 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectedLogIndex: null,
   timeRange: null,
   isTailing: false,
-  tailInterval: null,
 
   initializeAws: async () => {
     set({ isConnecting: true, connectionError: null });
@@ -295,6 +298,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   selectLogGroup: (name: string) => {
+    console.log("[User Activity] Select log group:", name);
     const { stopTail, fetchLogs, timeRange } = get();
     const { getDefaultDisabledLevels, setLastSelectedLogGroup } =
       useSettingsStore.getState();
@@ -375,6 +379,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   setFilterText: (text: string) => {
+    console.log("[User Activity] Set filter text:", text || "(empty)");
     const { logs, disabledLevels } = get();
     const filtered = filterLogs(logs, text, disabledLevels);
     set({
@@ -390,8 +395,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const newDisabled = new Set(disabledLevels);
     if (newDisabled.has(level)) {
       newDisabled.delete(level);
+      console.log("[User Activity] Enable level:", level);
     } else {
       newDisabled.add(level);
+      console.log("[User Activity] Disable level:", level);
     }
     const filtered = filterLogs(logs, filterText, newDisabled);
     set({
@@ -403,6 +410,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   setExpandedLogIndex: (index: number | null) => {
+    console.log(
+      "[User Activity]",
+      index !== null ? `Expand log at index ${index}` : "Collapse log",
+    );
     set({ expandedLogIndex: index });
   },
 
@@ -411,6 +422,13 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   setTimeRange: (range: { start: number; end: number | null } | null) => {
+    if (range) {
+      const startDate = new Date(range.start).toISOString();
+      const endDate = range.end ? new Date(range.end).toISOString() : "now";
+      console.log("[User Activity] Set time range:", startDate, "to", endDate);
+    } else {
+      console.log("[User Activity] Clear time range");
+    }
     set({ timeRange: range });
     if (range) {
       get().fetchLogs(range.start, range.end ?? undefined);
@@ -418,20 +436,39 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   startTail: () => {
-    const { isTailing, fetchLogs, selectedLogGroup } = get();
-    if (isTailing || !selectedLogGroup) return;
+    const { isTailing, selectedLogGroup } = get();
+    if (!selectedLogGroup) return;
 
-    // Initial fetch
-    const fifteenMinutesAgo = Date.now() - 15 * 60 * 1000;
-    fetchLogs(fifteenMinutesAgo);
+    // If already tailing, don't start another interval
+    if (isTailing) return;
 
-    // Set up polling
-    const interval = setInterval(async () => {
+    // Defensive: clear any orphaned interval (survives HMR)
+    if (tailIntervalId) {
+      clearInterval(tailIntervalId);
+      tailIntervalId = null;
+    }
+
+    console.log("[User Activity] Start live tail");
+
+    // Track when tail started - used to filter out older logs
+    tailStartTimestamp = Date.now();
+
+    // Clear existing logs - live tail starts fresh from now
+    set({
+      logs: [],
+      filteredLogs: [],
+      expandedLogIndex: null,
+      selectedLogIndex: null,
+    });
+
+    // Set up polling with module-level variable (survives HMR)
+    tailIntervalId = setInterval(async () => {
       const { logs, filterText, disabledLevels } = get();
+      // If logs exist, fetch from last timestamp; otherwise look back 30s to account for CloudWatch delivery latency
       const lastTimestamp =
-        logs.length > 0
-          ? logs[logs.length - 1].timestamp
-          : Date.now() - 15 * 60 * 1000;
+        logs.length > 0 ? logs[logs.length - 1].timestamp : Date.now() - 30000;
+
+      console.log("[Backend Activity] Polling from timestamp:", lastTimestamp);
 
       try {
         const newLogs = await invoke<LogEvent[]>("fetch_logs", {
@@ -443,7 +480,29 @@ export const useLogStore = create<LogStore>((set, get) => ({
         });
 
         if (newLogs.length > 0) {
-          const parsedNew = newLogs.map(parseLogEvent);
+          // Filter out logs older than when the tail started (handles lookback window)
+          const filteredByTime = tailStartTimestamp
+            ? newLogs.filter((log) => log.timestamp >= tailStartTimestamp!)
+            : newLogs;
+
+          if (filteredByTime.length === 0) {
+            return;
+          }
+
+          // Once we've received logs past our start timestamp, we've caught up - disable filter for performance
+          if (tailStartTimestamp) {
+            console.log(
+              "[Backend Activity] Caught up to tail start, disabling time filter",
+            );
+            tailStartTimestamp = null;
+          }
+
+          console.log(
+            "[Backend Activity] Fetched",
+            filteredByTime.length,
+            "new logs",
+          );
+          const parsedNew = filteredByTime.map(parseLogEvent);
           const allLogs = [...get().logs, ...parsedNew];
 
           // Keep max 50000 logs in memory
@@ -453,22 +512,49 @@ export const useLogStore = create<LogStore>((set, get) => ({
           set({ logs: trimmedLogs, filteredLogs: filtered });
         }
       } catch (error) {
-        console.error("Tail fetch error:", error);
+        console.error("[Backend Activity] Tail fetch error:", error);
       }
     }, 2000);
 
-    set({ isTailing: true, tailInterval: interval });
+    set({ isTailing: true });
   },
 
   stopTail: () => {
-    const { tailInterval } = get();
-    if (tailInterval) {
-      clearInterval(tailInterval);
+    if (tailIntervalId) {
+      console.log("[User Activity] Stop live tail");
+      clearInterval(tailIntervalId);
+      tailIntervalId = null;
     }
-    set({ isTailing: false, tailInterval: null });
+    tailStartTimestamp = null;
+    set({ isTailing: false });
   },
 
   clearLogs: () => {
+    console.log("[User Activity] Clear logs");
+    const { selectedLogGroup, fetchLogs, timeRange, isTailing } = get();
+
+    // If tailing, reset the tail start timestamp so we only show logs from now
+    if (isTailing) {
+      tailStartTimestamp = Date.now();
+    }
+
+    // Clear logs but keep current filters
+    set({
+      logs: [],
+      filteredLogs: [],
+      expandedLogIndex: null,
+      selectedLogIndex: null,
+    });
+
+    // If tailing, don't re-fetch - the tail will pick up new logs from now
+    // If not tailing, re-fetch with current time range
+    if (selectedLogGroup && !isTailing) {
+      fetchLogs(timeRange?.start, timeRange?.end ?? undefined);
+    }
+  },
+
+  resetFilters: () => {
+    console.log("[User Activity] Reset filters to defaults");
     const { selectedLogGroup, fetchLogs } = get();
     const { getDefaultDisabledLevels } = useSettingsStore.getState();
 

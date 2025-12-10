@@ -118,8 +118,19 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
       textColor: "#6b7280",
       backgroundColor: "transparent",
     },
-    keywords: ["debug", "trace", "verbose"],
+    keywords: ["debug"],
     priority: 3,
+    defaultEnabled: true,
+  },
+  {
+    id: "trace",
+    name: "Trace",
+    style: {
+      textColor: "#a78bfa",
+      backgroundColor: "transparent",
+    },
+    keywords: ["trace"],
+    priority: 4,
     defaultEnabled: true,
   },
   {
@@ -137,7 +148,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
       "RequestId",
       "EXTENSION",
     ],
-    priority: 4,
+    priority: 5,
     defaultEnabled: true,
   },
 ];
@@ -323,7 +334,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 7,
+      version: 8,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -414,6 +425,59 @@ export const useSettingsStore = create<SettingsStore>()(
           return {
             ...v6Data,
             awsProfile: null,
+          };
+        }
+
+        if (version === 7) {
+          // Add TRACE level between DEBUG and SYSTEM
+          const v7Data = persisted as {
+            theme: Theme;
+            logLevels: LogLevelConfig[];
+            lastSelectedLogGroup: string | null;
+            cacheLimits: CacheLimits;
+            awsProfile: string | null;
+          };
+
+          // Check if trace level already exists
+          const hasTrace = v7Data.logLevels.some((l) => l.id === "trace");
+          if (hasTrace) {
+            return v7Data;
+          }
+
+          // Remove "trace" from debug keywords and add new TRACE level
+          const updatedLevels = v7Data.logLevels.map((level) => {
+            if (level.id === "debug") {
+              return {
+                ...level,
+                keywords: level.keywords.filter((k) => k !== "trace"),
+              };
+            }
+            if (level.id === "system") {
+              return { ...level, priority: level.priority + 1 };
+            }
+            return level;
+          });
+
+          // Find debug level to determine trace priority
+          const debugLevel = updatedLevels.find((l) => l.id === "debug");
+          const tracePriority = (debugLevel?.priority ?? 3) + 1;
+
+          // Insert TRACE level
+          updatedLevels.push({
+            id: "trace",
+            name: "Trace",
+            style: {
+              textColor: "#a78bfa",
+              backgroundColor: "transparent",
+            },
+            keywords: ["trace"],
+            priority: tracePriority,
+            defaultEnabled: true,
+          });
+
+          return {
+            ...v7Data,
+            logLevels: updatedLevels,
           };
         }
 

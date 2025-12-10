@@ -44,6 +44,7 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 | ------------------ | -------------------------------------------- |
 | `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
+| `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
 | `⌘,` / `Ctrl+,`    | Open Settings                                |
 | `Tab`              | Focus log viewer for keyboard navigation     |
 | `↑` / `↓`          | Navigate between log rows                    |
@@ -143,7 +144,7 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 1. **Text Search**: Simple substring match across log message
 2. **JSON Field Query**: `field:value` or `field.nested:value` syntax
-3. **Log Level**: Quick toggles for ERROR, WARN, INFO, DEBUG, SYSTEM
+3. **Log Level**: Quick toggles for ERROR, WARN, INFO, DEBUG, TRACE, SYSTEM
 
 **Implementation:**
 
@@ -164,6 +165,7 @@ Priority order for determining log level:
 - WARN: Yellow (`log-warn` class)
 - INFO: Blue (`log-info` class)
 - DEBUG: Gray (`log-debug` class)
+- TRACE: Violet (`log-trace` class)
 - SYSTEM: Gray with subtle background (`log-system` class)
 
 ## Project Structure
@@ -222,6 +224,8 @@ aws-loggy/
 - `react-window` - Virtual scrolling
 - `tailwindcss` - Styling
 - `date-fns` - Date utilities
+- `react-icons` - Material Design icons
+- `react-datepicker` - Date/time picker component
 
 ## Scripts
 

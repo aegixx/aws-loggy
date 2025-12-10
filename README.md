@@ -12,7 +12,7 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 - **Live Log Tailing** - Stream new log events in real-time with auto-scroll
 - **Instant Filtering** - Client-side filtering as you type (no AWS roundtrip)
 - **JSON Query Syntax** - Filter by JSON fields with `field:value` or `field.nested:value`
-- **Log Level Detection** - Automatic colorization based on log level (ERROR, WARN, INFO, DEBUG, SYSTEM)
+- **Log Level Detection** - Automatic colorization based on log level (ERROR, WARN, INFO, DEBUG, TRACE, SYSTEM)
 - **Customizable Colors** - Configure log level colors and detection patterns via Settings (Cmd-,)
 - **JSON Syntax Highlighting** - Collapsible, colorized JSON viewer for structured logs
 - **Virtualized Rendering** - Smooth scrolling through 50,000+ log entries
@@ -73,7 +73,7 @@ Download the latest release for your platform from the [Releases](https://github
    - JSON field: `level:error` matches logs where the `level` JSON field equals "error"
    - Nested field: `user.id:123` matches nested JSON fields
 
-6. **Toggle Log Levels** - Click level badges (ERROR, WARN, INFO, DEBUG) to show/hide specific levels.
+6. **Toggle Log Levels** - Click level badges (ERROR, WARN, INFO, DEBUG, TRACE, SYSTEM) to show/hide specific levels.
 
 7. **View Details** - Click any log row to expand and see the full message with JSON highlighting.
 
@@ -83,6 +83,7 @@ Download the latest release for your platform from the [Releases](https://github
 | ------------------ | -------------------------------------------- |
 | `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
+| `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
 | `⌘,` / `Ctrl+,`    | Open Settings                                |
 | `Tab`              | Focus log viewer for keyboard navigation     |
 | `↑` / `↓`          | Navigate between log rows                    |

@@ -17,6 +17,7 @@ function App() {
     initializeAws,
     refreshConnection,
     resetState,
+    clearLogs,
     setLoadingProgress,
     isConnected,
     isConnecting,
@@ -105,6 +106,9 @@ function App() {
       console.log("SSO session refreshed, reconnecting...");
       refreshConnection();
     });
+    const unlistenClear = listen("clear-logs", () => {
+      clearLogs();
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
@@ -114,8 +118,9 @@ function App() {
       unlistenProgress.then((fn) => fn());
       unlistenDebug.then((fn) => fn());
       unlistenSessionRefreshed.then((fn) => fn());
+      unlistenClear.then((fn) => fn());
     };
-  }, [openSettings, refreshConnection, setLoadingProgress]);
+  }, [openSettings, refreshConnection, setLoadingProgress, clearLogs]);
 
   // Handle keyboard shortcuts (fallback for non-menu shortcuts)
   useEffect(() => {
@@ -132,11 +137,16 @@ function App() {
           // Always refresh connection (picks up credential changes) and re-query logs
           refreshConnection();
         }
+        // CMD-K (or Ctrl-K) to clear logs
+        if (e.key === "k") {
+          e.preventDefault();
+          clearLogs();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openSettings, refreshConnection]);
+  }, [openSettings, refreshConnection, clearLogs]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     // Only start dragging on left mouse button and if not clicking interactive elements
@@ -339,6 +349,9 @@ function App() {
 
       {/* Status bar */}
       <StatusBar />
+
+      {/* Portal for DatePicker popups */}
+      <div id="datepicker-portal" className={isDark ? "datepicker-dark" : ""} />
     </div>
   );
 }
