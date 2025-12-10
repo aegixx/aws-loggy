@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/aegixx/aws-loggy/compare/v1.5.6...v1.6.0) (2025-12-10)
+
+
+### Features
+
+* add react-datepicker for custom date range and Material icons ([360acbc](https://github.com/aegixx/aws-loggy/commit/360acbc2b30e9f56ba43d7a850b0007462a78a06))
+
 ## [1.5.6](https://github.com/aegixx/aws-loggy/compare/v1.5.5...v1.5.6) (2025-11-27)
 
 
