@@ -464,9 +464,15 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Set up polling with module-level variable (survives HMR)
     tailIntervalId = setInterval(async () => {
       const { logs, filterText, disabledLevels } = get();
-      // If logs exist, fetch from last timestamp; otherwise look back 30s to account for CloudWatch delivery latency
+      // If logs exist, fetch from last timestamp
+      // If starting fresh with tailStartTimestamp set, poll from that point (no lookback)
+      // Otherwise look back 30s to account for CloudWatch delivery latency
       const lastTimestamp =
-        logs.length > 0 ? logs[logs.length - 1].timestamp : Date.now() - 30000;
+        logs.length > 0
+          ? logs[logs.length - 1].timestamp
+          : tailStartTimestamp
+            ? tailStartTimestamp - 1
+            : Date.now() - 30000;
 
       console.log("[Backend Activity] Polling from timestamp:", lastTimestamp);
 
@@ -555,8 +561,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   resetFilters: () => {
     console.log("[User Activity] Reset filters to defaults");
-    const { selectedLogGroup, fetchLogs } = get();
+    const { selectedLogGroup, fetchLogs, stopTail } = get();
     const { getDefaultDisabledLevels } = useSettingsStore.getState();
+
+    // Stop any active tail first
+    stopTail();
 
     // Reset all filters to defaults and clear logs
     set({
