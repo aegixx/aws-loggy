@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.0](https://github.com/aegixx/aws-loggy/compare/v1.6.1...v1.7.0) (2025-12-18)
+
+
+### Features
+
+* add drag-select to copy multiple log messages ([a696e6b](https://github.com/aegixx/aws-loggy/commit/a696e6bfde2c533b948e34dd2fccf7cb49c16b10))
+
+
+### Miscellaneous
+
+* update Cargo.lock version ([79b93aa](https://github.com/aegixx/aws-loggy/commit/79b93aaedf01aa19476b0599e1c3d28554ca2355))
+
 ## [1.6.1](https://github.com/aegixx/aws-loggy/compare/v1.6.0...v1.6.1) (2025-12-10)
 
 
