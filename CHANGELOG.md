@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/aegixx/aws-loggy/compare/v1.7.0...v1.7.1) (2025-12-18)
+
+
+### Bug Fixes
+
+* ensure lock files are included in release PRs ([9367f9e](https://github.com/aegixx/aws-loggy/commit/9367f9ed87e329db718e683ab282b02aacbaff1d))
+
 ## [1.7.0](https://github.com/aegixx/aws-loggy/compare/v1.6.1...v1.7.0) (2025-12-18)
 
 
