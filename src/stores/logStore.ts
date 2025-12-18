@@ -46,6 +46,9 @@ interface LogStore {
   // Selected row for keyboard navigation
   selectedLogIndex: number | null;
 
+  // Multi-selection for drag-select and copy
+  selectedLogIndices: Set<number>;
+
   // Time range
   timeRange: { start: number; end: number | null } | null;
 
@@ -62,6 +65,8 @@ interface LogStore {
   toggleLevel: (level: LogLevel) => void;
   setExpandedLogIndex: (index: number | null) => void;
   setSelectedLogIndex: (index: number | null) => void;
+  setSelectedLogIndices: (indices: Set<number>) => void;
+  clearSelection: () => void;
   setTimeRange: (range: { start: number; end: number | null } | null) => void;
   startTail: () => void;
   stopTail: () => void;
@@ -219,6 +224,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   filteredLogs: [],
   expandedLogIndex: null,
   selectedLogIndex: null,
+  selectedLogIndices: new Set(),
   timeRange: null,
   isTailing: false,
 
@@ -387,6 +393,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       filteredLogs: filtered,
       expandedLogIndex: null,
       selectedLogIndex: null,
+      selectedLogIndices: new Set(),
     });
   },
 
@@ -406,6 +413,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       filteredLogs: filtered,
       expandedLogIndex: null,
       selectedLogIndex: null,
+      selectedLogIndices: new Set(),
     });
   },
 
@@ -419,6 +427,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   setSelectedLogIndex: (index: number | null) => {
     set({ selectedLogIndex: index });
+  },
+
+  setSelectedLogIndices: (indices: Set<number>) => {
+    set({ selectedLogIndices: indices });
+  },
+
+  clearSelection: () => {
+    set({ selectedLogIndices: new Set() });
   },
 
   setTimeRange: (range: { start: number; end: number | null } | null) => {
@@ -550,6 +566,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       filteredLogs: [],
       expandedLogIndex: null,
       selectedLogIndex: null,
+      selectedLogIndices: new Set(),
     });
 
     // If tailing, don't re-fetch - the tail will pick up new logs from now
@@ -576,6 +593,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       timeRange: null,
       expandedLogIndex: null,
       selectedLogIndex: null,
+      selectedLogIndices: new Set(),
     });
 
     // Trigger a fresh query with default time range
@@ -605,6 +623,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       timeRange: null,
       expandedLogIndex: null,
       selectedLogIndex: null,
+      selectedLogIndices: new Set(),
       error: null,
       isLoading: false,
       loadingProgress: 0,

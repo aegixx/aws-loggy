@@ -30,7 +30,9 @@ interface LogRowProps {
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
   selectedIndex: number | null;
-  onRowClick: (index: number) => void;
+  selectedIndices: Set<number>;
+  onRowMouseDown: (index: number, e: React.MouseEvent) => void;
+  onRowMouseEnter: (index: number) => void;
   onClose: () => void;
   logLevels: LogLevelConfig[];
   isDark: boolean;
@@ -42,7 +44,9 @@ interface RowComponentPropsWithCustom {
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
   selectedIndex: number | null;
-  onRowClick: (index: number) => void;
+  selectedIndices: Set<number>;
+  onRowMouseDown: (index: number, e: React.MouseEvent) => void;
+  onRowMouseEnter: (index: number) => void;
   onClose: () => void;
   logLevels: LogLevelConfig[];
   isDark: boolean;
@@ -54,7 +58,9 @@ function LogRow({
   logs,
   expandedIndex,
   selectedIndex,
-  onRowClick,
+  selectedIndices,
+  onRowMouseDown,
+  onRowMouseEnter,
   onClose,
   logLevels,
   isDark,
@@ -171,13 +177,16 @@ function LogRow({
 
   const isExpanded = expandedIndex === actualLogIndex;
   const isSelected = selectedIndex === actualLogIndex;
+  const isMultiSelected = selectedIndices.has(actualLogIndex);
   const levelStyle = getLogLevelStyle(log.level, logLevels);
 
-  // Determine row styling based on expanded/selected state
+  // Determine row styling based on expanded/selected/multi-selected state
   let rowClasses =
-    "flex items-center px-3 font-mono text-xs border-b cursor-pointer transition-colors border-l-2 ";
+    "flex items-center px-3 font-mono text-xs border-b cursor-pointer transition-colors border-l-2 select-none ";
   if (isExpanded) {
     rowClasses += `border-l-blue-500 ${isDark ? "bg-blue-900/30" : "bg-blue-100"}`;
+  } else if (isMultiSelected) {
+    rowClasses += `border-l-blue-400 ${isDark ? "bg-blue-900/40" : "bg-blue-100/80"}`;
   } else if (isSelected) {
     rowClasses += `border-l-blue-400 ${isDark ? "bg-gray-700/50 ring-1 ring-inset ring-blue-500/50" : "bg-blue-50 ring-1 ring-inset ring-blue-300"}`;
   } else {
@@ -190,9 +199,12 @@ function LogRow({
         ...style,
         color: levelStyle.color,
         backgroundColor:
-          isExpanded || isSelected ? undefined : levelStyle.backgroundColor,
+          isExpanded || isSelected || isMultiSelected
+            ? undefined
+            : levelStyle.backgroundColor,
       }}
-      onClick={() => onRowClick(actualLogIndex)}
+      onMouseDown={(e) => onRowMouseDown(actualLogIndex, e)}
+      onMouseEnter={() => onRowMouseEnter(actualLogIndex)}
       className={rowClasses}
     >
       <span
@@ -218,6 +230,9 @@ export function LogViewer() {
     setExpandedLogIndex,
     selectedLogIndex,
     setSelectedLogIndex,
+    selectedLogIndices,
+    setSelectedLogIndices,
+    clearSelection,
   } = useLogStore();
   const { theme, logLevels } = useSettingsStore();
 
@@ -242,6 +257,15 @@ export function LogViewer() {
   const prevLogCount = useRef(0);
   const userScrolledAway = useRef(false);
 
+  // Drag selection state
+  const [dragStart, setDragStart] = useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCurrentIndex = useRef<number | null>(null);
+
   const handleRowClick = useCallback(
     (index: number) => {
       // Set selection and toggle expansion
@@ -254,6 +278,79 @@ export function LogViewer() {
   const handleCloseDetail = useCallback(() => {
     setExpandedLogIndex(null);
   }, [setExpandedLogIndex]);
+
+  // Drag selection handlers
+  const handleRowMouseDown = useCallback(
+    (index: number, e: React.MouseEvent) => {
+      // Only start drag on left mouse button
+      if (e.button !== 0) return;
+      setDragStart({ index, x: e.clientX, y: e.clientY });
+      dragCurrentIndex.current = index;
+    },
+    [],
+  );
+
+  const handleContainerMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!dragStart) return;
+
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Start dragging once threshold is exceeded
+      if (!isDragging && distance > 5) {
+        setIsDragging(true);
+        clearSelection();
+      }
+
+      if (isDragging && dragCurrentIndex.current !== null) {
+        // Calculate selection range
+        const startIdx = dragStart.index;
+        const endIdx = dragCurrentIndex.current;
+        const minIdx = Math.min(startIdx, endIdx);
+        const maxIdx = Math.max(startIdx, endIdx);
+
+        const newSelection = new Set<number>();
+        for (let i = minIdx; i <= maxIdx; i++) {
+          newSelection.add(i);
+        }
+        setSelectedLogIndices(newSelection);
+      }
+    },
+    [dragStart, isDragging, clearSelection, setSelectedLogIndices],
+  );
+
+  const handleContainerMouseUp = useCallback(() => {
+    if (!isDragging && dragStart) {
+      // Was a click, not a drag - clear any multi-selection and trigger row expansion
+      clearSelection();
+      handleRowClick(dragStart.index);
+    }
+    setDragStart(null);
+    setIsDragging(false);
+    dragCurrentIndex.current = null;
+  }, [isDragging, dragStart, handleRowClick, clearSelection]);
+
+  // Track which row the mouse is over during drag
+  const handleRowMouseEnter = useCallback(
+    (index: number) => {
+      if (dragStart && isDragging) {
+        dragCurrentIndex.current = index;
+        // Update selection range
+        const startIdx = dragStart.index;
+        const minIdx = Math.min(startIdx, index);
+        const maxIdx = Math.max(startIdx, index);
+
+        const newSelection = new Set<number>();
+        for (let i = minIdx; i <= maxIdx; i++) {
+          newSelection.add(i);
+        }
+        setSelectedLogIndices(newSelection);
+      }
+    },
+    [dragStart, isDragging, setSelectedLogIndices],
+  );
 
   // Get visible row count for page navigation
   const getVisibleRowCount = useCallback(() => {
@@ -307,9 +404,24 @@ export function LogViewer() {
           }
           return;
         case "Escape":
+          e.preventDefault();
           if (expandedLogIndex !== null) {
-            e.preventDefault();
             setExpandedLogIndex(null);
+          }
+          if (selectedLogIndices.size > 0) {
+            clearSelection();
+          }
+          return;
+        case "c":
+          // Handle Cmd+C / Ctrl+C for copying selected messages
+          if ((e.metaKey || e.ctrlKey) && selectedLogIndices.size > 0) {
+            e.preventDefault();
+            const messages = [...selectedLogIndices]
+              .sort((a, b) => a - b)
+              .map((i) => filteredLogs[i]?.message)
+              .filter(Boolean)
+              .join("\n");
+            navigator.clipboard.writeText(messages);
           }
           return;
       }
@@ -329,12 +441,14 @@ export function LogViewer() {
       }
     },
     [
-      filteredLogs.length,
+      filteredLogs,
       selectedLogIndex,
       expandedLogIndex,
       setSelectedLogIndex,
       setExpandedLogIndex,
       getVisibleRowCount,
+      selectedLogIndices,
+      clearSelection,
     ],
   );
 
@@ -475,9 +589,12 @@ export function LogViewer() {
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-hidden focus:outline-none"
+      className={`flex-1 overflow-hidden focus:outline-none ${isDragging ? "select-none" : ""}`}
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      onMouseMove={handleContainerMouseMove}
+      onMouseUp={handleContainerMouseUp}
+      onMouseLeave={handleContainerMouseUp}
     >
       <List<LogRowProps>
         listRef={listRef}
@@ -488,7 +605,9 @@ export function LogViewer() {
           logs: filteredLogs,
           expandedIndex: expandedLogIndex,
           selectedIndex: selectedLogIndex,
-          onRowClick: handleRowClick,
+          selectedIndices: selectedLogIndices,
+          onRowMouseDown: handleRowMouseDown,
+          onRowMouseEnter: handleRowMouseEnter,
           onClose: handleCloseDetail,
           logLevels,
           isDark,
