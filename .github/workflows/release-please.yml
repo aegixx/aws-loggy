@@ -26,13 +26,6 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      - name: Enable auto-merge for release PR
-        if: ${{ steps.release.outputs.pr }}
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge ${{ fromJSON(steps.release.outputs.pr).number }} --auto --squash --repo ${{ github.repository }}
-
       - name: Checkout PR branch
         if: ${{ steps.release.outputs.pr }}
         env:
@@ -96,6 +89,13 @@ jobs:
           else
             echo "No changes to lock files"
           fi
+
+      - name: Enable auto-merge for release PR
+        if: ${{ steps.release.outputs.pr }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge ${{ fromJSON(steps.release.outputs.pr).number }} --auto --squash --repo ${{ github.repository }}
 
   build-release:
     needs: release-please
