@@ -24,31 +24,8 @@
   }
 }
 
-/* Log colorization classes - using CSS variables from settings */
-.log-error {
-  color: var(--log-error-text, #f87171);
-  background-color: var(--log-error-bg, rgba(127, 29, 29, 0.3));
-}
-
-.log-warn {
-  color: var(--log-warn-text, #facc15);
-  background-color: var(--log-warn-bg, rgba(113, 63, 18, 0.2));
-}
-
-.log-info {
-  color: var(--log-info-text, #93c5fd);
-  background-color: var(--log-info-bg, transparent);
-}
-
-.log-debug {
-  color: var(--log-debug-text, #6b7280);
-  background-color: var(--log-debug-bg, transparent);
-}
-
-.log-unknown {
-  color: var(--log-unknown-text, #d1d5db);
-  background-color: var(--log-unknown-bg, transparent);
-}
+/* Log level CSS variables are set dynamically by App.tsx using color-mix()
+   for theme-adaptive colors. Inline styles reference these variables. */
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback } from "react";
 import {
   useSettingsStore,
   getSortedLogLevels,
@@ -6,25 +6,22 @@ import {
   type LogLevelConfig,
 } from "../stores/settingsStore";
 
-function rgbaToHex(rgba: string): string {
-  if (rgba === "transparent" || rgba === "rgba(0, 0, 0, 0)") {
-    return "#000000";
+// Helper to compute adaptive preview colors using color-mix formulas
+function getPreviewColors(
+  baseColor: string,
+  isDark: boolean,
+): { text: string; bg: string } {
+  if (isDark) {
+    return {
+      text: `color-mix(in srgb, ${baseColor} 90%, white)`,
+      bg: `color-mix(in srgb, ${baseColor} 20%, black)`,
+    };
+  } else {
+    return {
+      text: `color-mix(in srgb, ${baseColor} 70%, black)`,
+      bg: `color-mix(in srgb, ${baseColor} 15%, white)`,
+    };
   }
-  if (rgba.startsWith("#")) {
-    return rgba;
-  }
-  const match = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-  if (match) {
-    const r = parseInt(match[1]).toString(16).padStart(2, "0");
-    const g = parseInt(match[2]).toString(16).padStart(2, "0");
-    const b = parseInt(match[3]).toString(16).padStart(2, "0");
-    return `#${r}${g}${b}`;
-  }
-  return "#000000";
-}
-
-function isTransparent(color: string): boolean {
-  return color === "transparent" || color === "rgba(0, 0, 0, 0)";
 }
 
 interface LogLevelEditorProps {
@@ -48,38 +45,9 @@ function LogLevelEditor({
     removeLogLevel,
     moveLogLevel,
   } = useSettingsStore();
-  const [bgEnabled, setBgEnabled] = useState(
-    !isTransparent(level.style.backgroundColor),
-  );
 
-  const handleTextColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLogLevelStyle(level.id, { textColor: e.target.value });
-  };
-
-  const handleBgColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (bgEnabled) {
-      const hex = e.target.value;
-      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-      if (result) {
-        const rgba = `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, 0.3)`;
-        setLogLevelStyle(level.id, { backgroundColor: rgba });
-      }
-    }
-  };
-
-  const handleBgToggle = () => {
-    if (bgEnabled) {
-      setLogLevelStyle(level.id, { backgroundColor: "transparent" });
-      setBgEnabled(false);
-    } else {
-      const textHex = rgbaToHex(level.style.textColor);
-      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(textHex);
-      if (result) {
-        const rgba = `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, 0.2)`;
-        setLogLevelStyle(level.id, { backgroundColor: rgba });
-      }
-      setBgEnabled(true);
-    }
+  const handleBaseColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLogLevelStyle(level.id, { baseColor: e.target.value });
   };
 
   const handleKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,6 +61,10 @@ function LogLevelEditor({
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLogLevelName(level.id, e.target.value);
   };
+
+  // Compute preview colors for both themes
+  const darkPreview = getPreviewColors(level.style.baseColor, true);
+  const lightPreview = getPreviewColors(level.style.baseColor, false);
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 space-y-4">
@@ -149,15 +121,28 @@ function LogLevelEditor({
           className="flex-1 px-2 py-1 bg-gray-900 border border-gray-700 rounded text-sm font-medium text-gray-200"
         />
 
-        {/* Preview */}
-        <div
-          className="px-3 py-1 rounded text-sm font-mono whitespace-nowrap"
-          style={{
-            color: level.style.textColor,
-            backgroundColor: level.style.backgroundColor,
-          }}
-        >
-          Sample log
+        {/* Dual theme preview */}
+        <div className="flex gap-1">
+          <div
+            className="px-2 py-1 rounded text-xs font-mono whitespace-nowrap"
+            style={{
+              color: darkPreview.text,
+              backgroundColor: darkPreview.bg,
+            }}
+            title="Dark mode preview"
+          >
+            Dark
+          </div>
+          <div
+            className="px-2 py-1 rounded text-xs font-mono whitespace-nowrap bg-gray-100"
+            style={{
+              color: lightPreview.text,
+              backgroundColor: lightPreview.bg,
+            }}
+            title="Light mode preview"
+          >
+            Light
+          </div>
         </div>
 
         {/* Delete button */}
@@ -183,44 +168,22 @@ function LogLevelEditor({
         </button>
       </div>
 
-      {/* Colors */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Text Color</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="color"
-              value={rgbaToHex(level.style.textColor)}
-              onChange={handleTextColorChange}
-              className="w-8 h-8 rounded cursor-pointer bg-transparent border border-gray-600"
-            />
-            <span className="text-xs font-mono text-gray-500">
-              {level.style.textColor}
-            </span>
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">
-            Background
-            <button
-              onClick={handleBgToggle}
-              className="ml-2 text-xs text-blue-400 hover:text-blue-300 cursor-pointer"
-            >
-              {bgEnabled ? "(disable)" : "(enable)"}
-            </button>
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="color"
-              value={rgbaToHex(level.style.backgroundColor)}
-              onChange={handleBgColorChange}
-              disabled={!bgEnabled}
-              className={`w-8 h-8 rounded cursor-pointer bg-transparent border border-gray-600 ${!bgEnabled ? "opacity-30" : ""}`}
-            />
-            <span className="text-xs font-mono text-gray-500">
-              {bgEnabled ? level.style.backgroundColor : "transparent"}
-            </span>
-          </div>
+      {/* Base Color */}
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Base Color</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={level.style.baseColor}
+            onChange={handleBaseColorChange}
+            className="w-8 h-8 rounded cursor-pointer bg-transparent border border-gray-600"
+          />
+          <span className="text-xs font-mono text-gray-500">
+            {level.style.baseColor}
+          </span>
+          <span className="text-xs text-gray-600 ml-2">
+            (auto-adjusts for dark/light themes)
+          </span>
         </div>
       </div>
 

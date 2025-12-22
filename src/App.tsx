@@ -155,9 +155,6 @@ function App() {
     }
   }, []);
 
-  // Get CSS variables for log level colors
-  const cssVars = getLogLevelCssVars(logLevels);
-
   // Track system preference for theme
   const [systemPrefersDark, setSystemPrefersDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -174,6 +171,9 @@ function App() {
 
   // Compute effective dark mode
   const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+
+  // Get CSS variables for log level colors (theme-adaptive via color-mix)
+  const cssVars = getLogLevelCssVars(logLevels, isDark);
 
   return (
     <div

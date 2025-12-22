@@ -4,8 +4,7 @@ import { persist } from "zustand/middleware";
 export type Theme = "dark" | "light" | "system";
 
 export interface LogLevelStyle {
-  textColor: string;
-  backgroundColor: string;
+  baseColor: string; // Single user-configured color; text/bg derived via color-mix()
 }
 
 export interface LogLevelConfig {
@@ -92,10 +91,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
   {
     id: "error",
     name: "Error",
-    style: {
-      textColor: "#f87171",
-      backgroundColor: "rgba(127, 29, 29, 0.3)",
-    },
+    style: { baseColor: "#ef4444" }, // red-500
     keywords: ["error", "fatal", "err", "critical", "crit"],
     priority: 0,
     defaultEnabled: true,
@@ -103,10 +99,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
   {
     id: "warn",
     name: "Warning",
-    style: {
-      textColor: "#facc15",
-      backgroundColor: "rgba(113, 63, 18, 0.2)",
-    },
+    style: { baseColor: "#eab308" }, // yellow-500
     keywords: ["warn", "warning"],
     priority: 1,
     defaultEnabled: true,
@@ -114,10 +107,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
   {
     id: "info",
     name: "Info",
-    style: {
-      textColor: "#93c5fd",
-      backgroundColor: "transparent",
-    },
+    style: { baseColor: "#3b82f6" }, // blue-500
     keywords: ["info"],
     priority: 2,
     defaultEnabled: true,
@@ -125,10 +115,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
   {
     id: "debug",
     name: "Debug",
-    style: {
-      textColor: "#669c35",
-      backgroundColor: "transparent",
-    },
+    style: { baseColor: "#22c55e" }, // green-500
     keywords: ["debug"],
     priority: 3,
     defaultEnabled: true,
@@ -136,10 +123,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
   {
     id: "trace",
     name: "Trace",
-    style: {
-      textColor: "#785700",
-      backgroundColor: "transparent",
-    },
+    style: { baseColor: "#a855f7" }, // purple-500
     keywords: ["trace"],
     priority: 4,
     defaultEnabled: true,
@@ -147,10 +131,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
   {
     id: "system",
     name: "System",
-    style: {
-      textColor: "#6b7280",
-      backgroundColor: "transparent",
-    },
+    style: { baseColor: "#6b7280" }, // gray-500
     keywords: [
       "INIT_REPORT",
       "REPORT",
@@ -294,10 +275,7 @@ export const useSettingsStore = create<SettingsStore>()(
         const newLevel: LogLevelConfig = {
           id: generateId(),
           name: "New Level",
-          style: {
-            textColor: "#a78bfa", // purple-400
-            backgroundColor: "transparent",
-          },
+          style: { baseColor: "#a78bfa" }, // purple-400
           keywords: [],
           priority: maxPriority + 1,
           defaultEnabled: true,
@@ -357,7 +335,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 9,
+      version: 10,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -488,14 +466,14 @@ export const useSettingsStore = create<SettingsStore>()(
           const debugLevel = updatedLevels.find((l) => l.id === "debug");
           const tracePriority = (debugLevel?.priority ?? 3) + 1;
 
-          // Insert TRACE level
+          // Insert TRACE level (using old format - v9→v10 migration will convert)
           updatedLevels.push({
             id: "trace",
             name: "Trace",
             style: {
               textColor: "#a78bfa",
               backgroundColor: "transparent",
-            },
+            } as unknown as LogLevelStyle,
             keywords: ["trace"],
             priority: tracePriority,
             defaultEnabled: true,
@@ -524,6 +502,34 @@ export const useSettingsStore = create<SettingsStore>()(
           };
         }
 
+        if (version === 9) {
+          // Migrate from textColor/backgroundColor to baseColor
+          const v9Data = persisted as {
+            theme: Theme;
+            logLevels: Array<{
+              id: string;
+              name: string;
+              style: { textColor: string; backgroundColor: string };
+              keywords: string[];
+              priority: number;
+              defaultEnabled: boolean;
+            }>;
+            lastSelectedLogGroup: string | null;
+            cacheLimits: CacheLimits;
+            awsProfile: string | null;
+            persistedDisabledLevels: string[];
+            persistedTimeRange: { start: number; end: number | null } | null;
+            persistedTimePreset: string | null;
+          };
+          return {
+            ...v9Data,
+            logLevels: v9Data.logLevels.map((level) => ({
+              ...level,
+              style: { baseColor: level.style.textColor }, // Use textColor as base
+            })),
+          };
+        }
+
         return persisted as {
           theme: Theme;
           logLevels: LogLevelConfig[];
@@ -539,18 +545,31 @@ export const useSettingsStore = create<SettingsStore>()(
   ),
 );
 
-// Helper to get CSS variables for log level styles
+// Helper to get CSS variables for log level styles with theme-adaptive colors
 export function getLogLevelCssVars(
   logLevels: LogLevelConfig[],
+  isDark: boolean,
 ): Record<string, string> {
   const vars: Record<string, string> = {};
+
   for (const level of logLevels) {
-    vars[`--log-${level.id}-text`] = level.style.textColor;
-    vars[`--log-${level.id}-bg`] = level.style.backgroundColor;
+    const base = level.style.baseColor;
+
+    if (isDark) {
+      // Dark mode: lighter text for readability, subtle tinted background
+      vars[`--log-${level.id}-text`] = `color-mix(in srgb, ${base} 90%, white)`;
+      vars[`--log-${level.id}-bg`] = `color-mix(in srgb, ${base} 20%, black)`;
+    } else {
+      // Light mode: darker text for contrast, very subtle tinted background
+      vars[`--log-${level.id}-text`] = `color-mix(in srgb, ${base} 70%, black)`;
+      vars[`--log-${level.id}-bg`] = `color-mix(in srgb, ${base} 15%, white)`;
+    }
   }
-  // Add unknown/default level styling
-  vars["--log-unknown-text"] = "#d1d5db";
+
+  // Unknown/default level styling
+  vars["--log-unknown-text"] = isDark ? "#d1d5db" : "#6b7280";
   vars["--log-unknown-bg"] = "transparent";
+
   return vars;
 }
 

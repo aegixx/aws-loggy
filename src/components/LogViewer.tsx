@@ -1,28 +1,21 @@
 import { useRef, useEffect, useCallback, useState, CSSProperties } from "react";
 import { List, ListImperativeAPI } from "react-window";
 import { useLogStore } from "../stores/logStore";
-import { useSettingsStore, type LogLevelConfig } from "../stores/settingsStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
 import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
 const DETAIL_HEIGHT = 200;
 
-function getLogLevelStyle(
-  level: string,
-  logLevels: LogLevelConfig[],
-): { color: string; backgroundColor: string } {
-  const config = logLevels.find((l) => l.id === level);
-  if (config) {
-    return {
-      color: config.style.textColor,
-      backgroundColor: config.style.backgroundColor,
-    };
-  }
-  // Default for unknown level
+function getLogLevelStyle(level: string): {
+  color: string;
+  backgroundColor: string;
+} {
+  // Use CSS variables (set by App.tsx with theme-adaptive color-mix values)
   return {
-    color: "#d1d5db",
-    backgroundColor: "transparent",
+    color: `var(--log-${level}-text, var(--log-unknown-text, #d1d5db))`,
+    backgroundColor: `var(--log-${level}-bg, var(--log-unknown-bg, transparent))`,
   };
 }
 
@@ -34,7 +27,6 @@ interface LogRowProps {
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
   onRowMouseEnter: (index: number) => void;
   onClose: () => void;
-  logLevels: LogLevelConfig[];
   isDark: boolean;
 }
 
@@ -48,7 +40,6 @@ interface RowComponentPropsWithCustom {
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
   onRowMouseEnter: (index: number) => void;
   onClose: () => void;
-  logLevels: LogLevelConfig[];
   isDark: boolean;
 }
 
@@ -62,7 +53,6 @@ function LogRow({
   onRowMouseDown,
   onRowMouseEnter,
   onClose,
-  logLevels,
   isDark,
 }: RowComponentPropsWithCustom) {
   // If there's an expanded row, indices after it are shifted by 1
@@ -178,7 +168,7 @@ function LogRow({
   const isExpanded = expandedIndex === actualLogIndex;
   const isSelected = selectedIndex === actualLogIndex;
   const isMultiSelected = selectedIndices.has(actualLogIndex);
-  const levelStyle = getLogLevelStyle(log.level, logLevels);
+  const levelStyle = getLogLevelStyle(log.level);
 
   // Determine row styling based on expanded/selected/multi-selected state
   let rowClasses =
@@ -234,7 +224,7 @@ export function LogViewer() {
     setSelectedLogIndices,
     clearSelection,
   } = useLogStore();
-  const { theme, logLevels } = useSettingsStore();
+  const { theme } = useSettingsStore();
 
   // Track system preference for theme
   const [systemPrefersDark, setSystemPrefersDark] = useState(
@@ -609,7 +599,6 @@ export function LogViewer() {
           onRowMouseDown: handleRowMouseDown,
           onRowMouseEnter: handleRowMouseEnter,
           onClose: handleCloseDetail,
-          logLevels,
           isDark,
         }}
         onRowsRendered={handleRowsRendered}

@@ -161,12 +161,15 @@ Priority order for determining log level:
 
 ### Colorization
 
-- ERROR/FATAL: Red (`log-error` class)
-- WARN: Yellow (`log-warn` class)
-- INFO: Blue (`log-info` class)
-- DEBUG: Gray (`log-debug` class)
-- TRACE: Violet (`log-trace` class)
-- SYSTEM: Gray with subtle background (`log-system` class)
+Log level colors are theme-adaptive, automatically adjusting for dark and light modes using CSS `color-mix()`:
+
+- **Configuration**: Each log level has a single `baseColor` configurable in Settings
+- **Theme Adaptation**: Colors are computed at runtime:
+  - Dark mode: Text lightened, subtle dark-tinted background
+  - Light mode: Text darkened, subtle light-tinted background
+- **CSS Variables**: Colors are applied via `--log-{level}-text` and `--log-{level}-bg` CSS variables
+
+Default levels: ERROR (red), WARN (yellow), INFO (blue), DEBUG (green), TRACE (purple), SYSTEM (gray)
 
 ## Project Structure
 

@@ -132,9 +132,9 @@ export function FilterBar() {
               style={
                 isEnabled
                   ? {
-                      color: levelConfig.style.textColor,
-                      backgroundColor: levelConfig.style.backgroundColor,
-                      borderColor: levelConfig.style.textColor + "80",
+                      color: `var(--log-${levelConfig.id}-text)`,
+                      backgroundColor: `var(--log-${levelConfig.id}-bg)`,
+                      borderColor: `color-mix(in srgb, var(--log-${levelConfig.id}-text) 50%, transparent)`,
                     }
                   : isDark
                     ? {
