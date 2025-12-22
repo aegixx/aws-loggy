@@ -347,190 +347,174 @@ export const useSettingsStore = create<SettingsStore>()(
         persistedTimePreset: state.persistedTimePreset,
       }),
       migrate: (persisted, version) => {
-        const data = persisted as { logLevels?: unknown; theme?: Theme };
+        // Use chaining pattern: each migration runs if version <= N, then chains to next
+        // This ensures users on v7 or v8 also run v9->v10 migration
+        let data = persisted as Record<string, unknown>;
+        let currentVersion = version ?? 0;
 
-        if (version === 0 || version === undefined) {
-          // Migrate from old Record<LogLevel, Config> format
+        // v0 -> v1: Migrate from old Record<LogLevel, Config> format
+        if (currentVersion <= 0) {
           if (data.logLevels && !Array.isArray(data.logLevels)) {
-            return {
+            data = {
               theme: "system" as Theme,
               logLevels: migrateFromOldFormat(
                 data.logLevels as Record<OldLogLevel, OldLogLevelConfig>,
               ),
             };
           }
+          currentVersion = 1;
         }
 
-        if (version === 1) {
-          // Migrate from v1 array format (may have "unknown" level)
+        // v1 -> v2: Migrate from v1 array format (may have "unknown" level)
+        if (currentVersion <= 1) {
           if (data.logLevels && Array.isArray(data.logLevels)) {
-            return {
+            data = {
               theme: "system" as Theme,
               logLevels: migrateFromArrayFormat(
                 data.logLevels as LogLevelConfig[],
               ),
             };
           }
+          currentVersion = 2;
         }
 
-        if (version === 2) {
-          // Add theme to existing v2 data
-          return {
+        // v2 -> v3: Add theme to existing v2 data
+        if (currentVersion <= 2) {
+          data = {
             theme: "system" as Theme,
             logLevels: data.logLevels as LogLevelConfig[],
           };
+          currentVersion = 3;
         }
 
-        if (version === 3) {
-          // Add defaultEnabled to existing v3 data (default to true for existing levels)
+        // v3 -> v4: Add defaultEnabled to existing v3 data
+        if (currentVersion <= 3) {
           const levels = data.logLevels as LogLevelConfig[];
-          return {
-            theme: data.theme ?? ("system" as Theme),
+          data = {
+            theme: (data.theme as Theme) ?? ("system" as Theme),
             logLevels: levels.map((level) => ({
               ...level,
               defaultEnabled: level.defaultEnabled ?? true,
             })),
             lastSelectedLogGroup: null,
           };
+          currentVersion = 4;
         }
 
-        if (version === 4) {
-          // Add lastSelectedLogGroup to existing v4 data
-          return {
-            theme: data.theme ?? ("system" as Theme),
-            logLevels: data.logLevels as LogLevelConfig[],
-            lastSelectedLogGroup: null,
+        // v4 -> v5: Add lastSelectedLogGroup and cacheLimits
+        if (currentVersion <= 4) {
+          data = {
+            ...data,
+            lastSelectedLogGroup: data.lastSelectedLogGroup ?? null,
             cacheLimits: DEFAULT_CACHE_LIMITS,
           };
+          currentVersion = 5;
         }
 
-        if (version === 5) {
-          // Add cacheLimits to existing v5 data
-          const v5Data = persisted as {
-            theme: Theme;
-            logLevels: LogLevelConfig[];
-            lastSelectedLogGroup: string | null;
-          };
-          return {
-            ...v5Data,
-            cacheLimits: DEFAULT_CACHE_LIMITS,
+        // v5 -> v6: Add cacheLimits (if missing) and awsProfile
+        if (currentVersion <= 5) {
+          data = {
+            ...data,
+            cacheLimits:
+              (data.cacheLimits as CacheLimits) ?? DEFAULT_CACHE_LIMITS,
             awsProfile: null,
           };
+          currentVersion = 6;
         }
 
-        if (version === 6) {
-          // Add awsProfile to existing v6 data
-          const v6Data = persisted as {
-            theme: Theme;
-            logLevels: LogLevelConfig[];
-            lastSelectedLogGroup: string | null;
-            cacheLimits: CacheLimits;
+        // v6 -> v7: Add awsProfile (if missing)
+        if (currentVersion <= 6) {
+          data = {
+            ...data,
+            awsProfile: data.awsProfile ?? null,
           };
-          return {
-            ...v6Data,
-            awsProfile: null,
-          };
+          currentVersion = 7;
         }
 
-        if (version === 7) {
-          // Add TRACE level between DEBUG and SYSTEM
-          const v7Data = persisted as {
-            theme: Theme;
-            logLevels: LogLevelConfig[];
-            lastSelectedLogGroup: string | null;
-            cacheLimits: CacheLimits;
-            awsProfile: string | null;
-          };
+        // v7 -> v8: Add TRACE level between DEBUG and SYSTEM
+        if (currentVersion <= 7) {
+          const logLevels = data.logLevels as LogLevelConfig[];
+          const hasTrace = logLevels.some((l) => l.id === "trace");
 
-          // Check if trace level already exists
-          const hasTrace = v7Data.logLevels.some((l) => l.id === "trace");
-          if (hasTrace) {
-            return v7Data;
+          if (!hasTrace) {
+            // Remove "trace" from debug keywords and add new TRACE level
+            const updatedLevels = logLevels.map((level) => {
+              if (level.id === "debug") {
+                return {
+                  ...level,
+                  keywords: level.keywords.filter((k) => k !== "trace"),
+                };
+              }
+              if (level.id === "system") {
+                return { ...level, priority: level.priority + 1 };
+              }
+              return level;
+            });
+
+            // Find debug level to determine trace priority
+            const debugLevel = updatedLevels.find((l) => l.id === "debug");
+            const tracePriority = (debugLevel?.priority ?? 3) + 1;
+
+            // Insert TRACE level (using old textColor/backgroundColor format)
+            updatedLevels.push({
+              id: "trace",
+              name: "Trace",
+              style: {
+                textColor: "#a78bfa",
+                backgroundColor: "transparent",
+              },
+              keywords: ["trace"],
+              priority: tracePriority,
+              defaultEnabled: true,
+            } as unknown as LogLevelConfig);
+
+            data = { ...data, logLevels: updatedLevels };
           }
+          currentVersion = 8;
+        }
 
-          // Remove "trace" from debug keywords and add new TRACE level
-          const updatedLevels = v7Data.logLevels.map((level) => {
-            if (level.id === "debug") {
-              return {
-                ...level,
-                keywords: level.keywords.filter((k) => k !== "trace"),
-              };
-            }
-            if (level.id === "system") {
-              return { ...level, priority: level.priority + 1 };
-            }
-            return level;
-          });
+        // v8 -> v9: Add persisted filter state
+        if (currentVersion <= 8) {
+          data = {
+            ...data,
+            persistedDisabledLevels:
+              (data.persistedDisabledLevels as string[]) ?? [],
+            persistedTimeRange: data.persistedTimeRange ?? null,
+            persistedTimePreset: data.persistedTimePreset ?? null,
+          };
+          currentVersion = 9;
+        }
 
-          // Find debug level to determine trace priority
-          const debugLevel = updatedLevels.find((l) => l.id === "debug");
-          const tracePriority = (debugLevel?.priority ?? 3) + 1;
-
-          // Insert TRACE level (using old format - v9→v10 migration will convert)
-          updatedLevels.push({
-            id: "trace",
-            name: "Trace",
+        // v9 -> v10: Migrate from textColor/backgroundColor to baseColor
+        if (currentVersion <= 9) {
+          const logLevels = data.logLevels as Array<{
+            id: string;
+            name: string;
             style: {
-              textColor: "#a78bfa",
-              backgroundColor: "transparent",
-            } as unknown as LogLevelStyle,
-            keywords: ["trace"],
-            priority: tracePriority,
-            defaultEnabled: true,
-          });
+              textColor?: string;
+              backgroundColor?: string;
+              baseColor?: string;
+            };
+            keywords: string[];
+            priority: number;
+            defaultEnabled: boolean;
+          }>;
 
-          return {
-            ...v7Data,
-            logLevels: updatedLevels,
-          };
-        }
-
-        if (version === 8) {
-          // Add persisted filter state
-          const v8Data = persisted as {
-            theme: Theme;
-            logLevels: LogLevelConfig[];
-            lastSelectedLogGroup: string | null;
-            cacheLimits: CacheLimits;
-            awsProfile: string | null;
-          };
-          return {
-            ...v8Data,
-            persistedDisabledLevels: [],
-            persistedTimeRange: null,
-            persistedTimePreset: null,
-          };
-        }
-
-        if (version === 9) {
-          // Migrate from textColor/backgroundColor to baseColor
-          const v9Data = persisted as {
-            theme: Theme;
-            logLevels: Array<{
-              id: string;
-              name: string;
-              style: { textColor: string; backgroundColor: string };
-              keywords: string[];
-              priority: number;
-              defaultEnabled: boolean;
-            }>;
-            lastSelectedLogGroup: string | null;
-            cacheLimits: CacheLimits;
-            awsProfile: string | null;
-            persistedDisabledLevels: string[];
-            persistedTimeRange: { start: number; end: number | null } | null;
-            persistedTimePreset: string | null;
-          };
-          return {
-            ...v9Data,
-            logLevels: v9Data.logLevels.map((level) => ({
+          data = {
+            ...data,
+            logLevels: logLevels.map((level) => ({
               ...level,
-              style: { baseColor: level.style.textColor }, // Use textColor as base
+              style: {
+                // Use baseColor if already present, otherwise use textColor
+                baseColor:
+                  level.style.baseColor ?? level.style.textColor ?? "#6b7280",
+              },
             })),
           };
+          currentVersion = 10;
         }
 
-        return persisted as {
+        return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
           lastSelectedLogGroup: string | null;
@@ -559,16 +543,21 @@ export function getLogLevelCssVars(
       // Dark mode: lighter text for readability, subtle tinted background
       vars[`--log-${level.id}-text`] = `color-mix(in srgb, ${base} 90%, white)`;
       vars[`--log-${level.id}-bg`] = `color-mix(in srgb, ${base} 20%, black)`;
+      vars[`--log-${level.id}-border`] =
+        `color-mix(in srgb, ${base} 40%, transparent)`;
     } else {
       // Light mode: darker text for contrast, very subtle tinted background
       vars[`--log-${level.id}-text`] = `color-mix(in srgb, ${base} 70%, black)`;
       vars[`--log-${level.id}-bg`] = `color-mix(in srgb, ${base} 15%, white)`;
+      vars[`--log-${level.id}-border`] =
+        `color-mix(in srgb, ${base} 35%, transparent)`;
     }
   }
 
   // Unknown/default level styling
   vars["--log-unknown-text"] = isDark ? "#d1d5db" : "#6b7280";
   vars["--log-unknown-bg"] = "transparent";
+  vars["--log-unknown-border"] = isDark ? "#374151" : "#d1d5db";
 
   return vars;
 }

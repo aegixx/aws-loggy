@@ -7,8 +7,8 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-    AppHandle, Emitter, State,
+    menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
+    AppHandle, Emitter, Manager, State,
 };
 use tokio::sync::Mutex;
 
@@ -55,6 +55,13 @@ impl Default for AppState {
             current_profile: Arc::new(Mutex::new(None)),
         }
     }
+}
+
+/// State for theme menu items (needed for sync_theme_menu command)
+pub struct MenuState {
+    pub theme_dark: CheckMenuItem<tauri::Wry>,
+    pub theme_light: CheckMenuItem<tauri::Wry>,
+    pub theme_system: CheckMenuItem<tauri::Wry>,
 }
 
 /// Get the AWS config directory path
@@ -458,6 +465,29 @@ pub struct AwsError {
 pub struct AwsConnectionInfo {
     pub profile: Option<String>,
     pub region: Option<String>,
+}
+
+/// Sync the theme menu checkmarks with the current theme
+#[tauri::command]
+fn sync_theme_menu(menu_state: State<'_, MenuState>, theme: String) -> Result<(), String> {
+    let is_dark = theme == "dark";
+    let is_light = theme == "light";
+    let is_system = theme == "system";
+
+    menu_state
+        .theme_dark
+        .set_checked(is_dark)
+        .map_err(|e| e.to_string())?;
+    menu_state
+        .theme_light
+        .set_checked(is_light)
+        .map_err(|e| e.to_string())?;
+    menu_state
+        .theme_system
+        .set_checked(is_system)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// Initialize the AWS CloudWatch client using the default credential chain
@@ -997,6 +1027,34 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+K")
                 .build(app)?;
 
+            // Theme menu items (checkable)
+            let theme_dark_item = tauri::menu::CheckMenuItemBuilder::new("Dark")
+                .id("theme-dark")
+                .checked(false)
+                .build(app)?;
+            let theme_light_item = tauri::menu::CheckMenuItemBuilder::new("Light")
+                .id("theme-light")
+                .checked(false)
+                .build(app)?;
+            let theme_system_item = tauri::menu::CheckMenuItemBuilder::new("System")
+                .id("theme-system")
+                .checked(true) // Default to system
+                .build(app)?;
+
+            // Store theme menu items in state for sync_theme_menu command
+            app.manage(MenuState {
+                theme_dark: theme_dark_item.clone(),
+                theme_light: theme_light_item.clone(),
+                theme_system: theme_system_item.clone(),
+            });
+
+            // Theme submenu
+            let theme_submenu = SubmenuBuilder::new(app, "Theme")
+                .item(&theme_dark_item)
+                .item(&theme_light_item)
+                .item(&theme_system_item)
+                .build()?;
+
             // App submenu (macOS application menu)
             let app_submenu = SubmenuBuilder::new(app, "Loggy")
                 .item(&about_item)
@@ -1029,6 +1087,8 @@ pub fn run() {
                 .item(&clear_item)
                 .item(&focus_filter_item)
                 .separator()
+                .item(&theme_submenu)
+                .separator()
                 .fullscreen()
                 .build()?;
 
@@ -1055,11 +1115,20 @@ pub fn run() {
 
             app.set_menu(menu)?;
 
-            // Handle menu events
+            // Handle menu events - clone menu item references for use in closure
             let preferences_id = preferences_item.id().clone();
             let about_id = about_item.id().clone();
             let refresh_id = refresh_item.id().clone();
             let clear_id = clear_item.id().clone();
+            let theme_dark_id = theme_dark_item.id().clone();
+            let theme_light_id = theme_light_item.id().clone();
+            let theme_system_id = theme_system_item.id().clone();
+
+            // Clone CheckMenuItems for direct access in event handler
+            // (menu.get() doesn't search submenus)
+            let theme_dark = theme_dark_item.clone();
+            let theme_light = theme_light_item.clone();
+            let theme_system = theme_system_item.clone();
 
             app.on_menu_event(move |app_handle, event| {
                 if *event.id() == preferences_id {
@@ -1070,6 +1139,24 @@ pub fn run() {
                     app_handle.emit("refresh-logs", ()).ok();
                 } else if *event.id() == clear_id {
                     app_handle.emit("clear-logs", ()).ok();
+                } else if *event.id() == theme_dark_id {
+                    // Update checkmarks using direct references
+                    theme_dark.set_checked(true).ok();
+                    theme_light.set_checked(false).ok();
+                    theme_system.set_checked(false).ok();
+                    app_handle.emit("set-theme", "dark").ok();
+                } else if *event.id() == theme_light_id {
+                    // Update checkmarks using direct references
+                    theme_dark.set_checked(false).ok();
+                    theme_light.set_checked(true).ok();
+                    theme_system.set_checked(false).ok();
+                    app_handle.emit("set-theme", "light").ok();
+                } else if *event.id() == theme_system_id {
+                    // Update checkmarks using direct references
+                    theme_dark.set_checked(false).ok();
+                    theme_light.set_checked(false).ok();
+                    theme_system.set_checked(true).ok();
+                    app_handle.emit("set-theme", "system").ok();
                 }
             });
 
@@ -1085,6 +1172,7 @@ pub fn run() {
             list_log_groups,
             fetch_logs,
             fetch_logs_paginated,
+            sync_theme_menu,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

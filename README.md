@@ -85,6 +85,8 @@ Download the latest release for your platform from the [Releases](https://github
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
 | `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
 | `⌘,` / `Ctrl+,`    | Open Settings                                |
+| `⌘A` / `Ctrl+A`    | Select all visible logs                      |
+| `⌘C` / `Ctrl+C`    | Copy selected messages to clipboard          |
 | `Tab`              | Focus log viewer for keyboard navigation     |
 | `↑` / `↓`          | Navigate between log rows                    |
 | `Page Up` / `Down` | Jump one page at a time                      |
@@ -176,4 +178,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Multi-account support
 - Timeline / histogram view based on volume
 - Stacked timeline view based on log level
-- ! Ability to select/copy multiple messages

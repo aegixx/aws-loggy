@@ -24,8 +24,14 @@ function App() {
     connectionError,
     awsInfo,
   } = useLogStore();
-  const { theme, logLevels, openSettings, awsProfile, setAwsProfile } =
-    useSettingsStore();
+  const {
+    theme,
+    logLevels,
+    openSettings,
+    awsProfile,
+    setAwsProfile,
+    setTheme,
+  } = useSettingsStore();
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [truncationWarning, setTruncationWarning] = useState<{
     count: number;
@@ -44,6 +50,13 @@ function App() {
       .then((profiles) => setAvailableProfiles(profiles))
       .catch((err) => console.error("Failed to load profiles:", err));
   }, [initializeAws]);
+
+  // Sync theme menu checkmarks with persisted theme on startup and when theme changes
+  useEffect(() => {
+    invoke("sync_theme_menu", { theme }).catch((err) =>
+      console.error("Failed to sync theme menu:", err),
+    );
+  }, [theme]);
 
   const handleProfileChange = async (newProfile: string) => {
     const profileValue = newProfile === "default" ? null : newProfile;
@@ -109,6 +122,10 @@ function App() {
     const unlistenClear = listen("clear-logs", () => {
       clearLogs();
     });
+    const unlistenTheme = listen<string>("set-theme", (event) => {
+      const newTheme = event.payload as "dark" | "light" | "system";
+      setTheme(newTheme);
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
@@ -119,8 +136,15 @@ function App() {
       unlistenDebug.then((fn) => fn());
       unlistenSessionRefreshed.then((fn) => fn());
       unlistenClear.then((fn) => fn());
+      unlistenTheme.then((fn) => fn());
     };
-  }, [openSettings, refreshConnection, setLoadingProgress, clearLogs]);
+  }, [
+    openSettings,
+    refreshConnection,
+    setLoadingProgress,
+    clearLogs,
+    setTheme,
+  ]);
 
   // Handle keyboard shortcuts (fallback for non-menu shortcuts)
   useEffect(() => {

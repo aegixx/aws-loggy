@@ -73,6 +73,8 @@ No test framework currently configured. Tests welcome as future enhancement.
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
 | `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
 | `⌘,` / `Ctrl+,`    | Open Settings                                |
+| `⌘A` / `Ctrl+A`    | Select all visible logs                      |
+| `⌘C` / `Ctrl+C`    | Copy selected messages to clipboard          |
 | `Tab`              | Focus log viewer for keyboard navigation     |
 | `↑` / `↓`          | Navigate between log rows                    |
 | `Page Up` / `Down` | Jump one page at a time                      |

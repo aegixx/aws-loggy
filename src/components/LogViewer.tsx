@@ -202,9 +202,7 @@ function LogRow({
       >
         {log.formattedTime}
       </span>
-      <span className="flex-1 truncate" title={log.message}>
-        {log.message}
-      </span>
+      <span className="flex-1 truncate">{log.message}</span>
     </div>
   );
 }
@@ -313,14 +311,29 @@ export function LogViewer() {
 
   const handleContainerMouseUp = useCallback(() => {
     if (!isDragging && dragStart) {
-      // Was a click, not a drag - clear any multi-selection and trigger row expansion
+      // Was a click on a row, not a drag - clear any multi-selection and trigger row expansion
       clearSelection();
       handleRowClick(dragStart.index);
+    } else if (!dragStart && !isDragging) {
+      // Clicked on empty space (not on any row) - clear selection
+      clearSelection();
+      if (expandedLogIndex !== null) {
+        setExpandedLogIndex(null);
+      }
+      setSelectedLogIndex(null);
     }
     setDragStart(null);
     setIsDragging(false);
     dragCurrentIndex.current = null;
-  }, [isDragging, dragStart, handleRowClick, clearSelection]);
+  }, [
+    isDragging,
+    dragStart,
+    handleRowClick,
+    clearSelection,
+    expandedLogIndex,
+    setExpandedLogIndex,
+    setSelectedLogIndex,
+  ]);
 
   // Track which row the mouse is over during drag
   const handleRowMouseEnter = useCallback(
@@ -412,6 +425,20 @@ export function LogViewer() {
               .filter(Boolean)
               .join("\n");
             navigator.clipboard.writeText(messages);
+          }
+          return;
+        case "a":
+          // Handle Cmd+A / Ctrl+A to select all visible logs
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            const allIndices = new Set<number>(
+              Array.from({ length: filteredLogs.length }, (_, i) => i),
+            );
+            setSelectedLogIndices(allIndices);
+            // Collapse any expanded log when selecting all
+            if (expandedLogIndex !== null) {
+              setExpandedLogIndex(null);
+            }
           }
           return;
       }
