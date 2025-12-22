@@ -28,13 +28,30 @@ export function TimeRangePicker() {
     selectedLogGroup,
     timeRange,
   } = useLogStore();
-  const { theme } = useSettingsStore();
+  const { theme, persistedTimePreset, persistedTimeRange } = useSettingsStore();
   const [showCustom, setShowCustom] = useState(false);
-  const [activePreset, setActivePreset] = useState<string | null>("15m");
-  const [customStart, setCustomStart] = useState<Date>(
-    () => new Date(Date.now() - 60 * 60 * 1000),
+  // Initialize activePreset from persisted value, default to "15m"
+  const [activePreset, setActivePreset] = useState<string | null>(
+    () => persistedTimePreset ?? "15m",
   );
-  const [customEnd, setCustomEnd] = useState<Date>(() => new Date());
+  const [customStart, setCustomStart] = useState<Date>(() => {
+    // If we have a persisted custom range, use it
+    if (persistedTimePreset === "custom" && persistedTimeRange) {
+      return new Date(persistedTimeRange.start);
+    }
+    return new Date(Date.now() - 60 * 60 * 1000);
+  });
+  const [customEnd, setCustomEnd] = useState<Date>(() => {
+    // If we have a persisted custom range with an end time, use it
+    if (
+      persistedTimePreset === "custom" &&
+      persistedTimeRange &&
+      persistedTimeRange.end
+    ) {
+      return new Date(persistedTimeRange.end);
+    }
+    return new Date();
+  });
   const customRef = useRef<HTMLDivElement>(null);
 
   // Track system preference for theme
@@ -94,13 +111,16 @@ export function TimeRangePicker() {
     setActivePreset(preset.label);
     setShowCustom(false);
     const now = Date.now();
-    setTimeRange({ start: now - preset.ms, end: null });
+    setTimeRange({ start: now - preset.ms, end: null }, preset.label);
   };
 
   const handleCustomApply = () => {
     if (isTailing) stopTail();
     setActivePreset("custom");
-    setTimeRange({ start: customStart.getTime(), end: customEnd.getTime() });
+    setTimeRange(
+      { start: customStart.getTime(), end: customEnd.getTime() },
+      "custom",
+    );
     setShowCustom(false);
   };
 

@@ -56,6 +56,11 @@ interface SettingsStore {
   // AWS profile (persisted)
   awsProfile: string | null;
 
+  // Persisted filter state (stored as array for JSON serialization)
+  persistedDisabledLevels: string[];
+  persistedTimeRange: { start: number; end: number | null } | null;
+  persistedTimePreset: string | null; // "15m", "1h", "6h", "24h", "7d", "custom", or null
+
   // Settings dialog visibility
   isSettingsOpen: boolean;
 
@@ -75,6 +80,12 @@ interface SettingsStore {
   openSettings: () => void;
   closeSettings: () => void;
   getDefaultDisabledLevels: () => Set<string>;
+  setPersistedDisabledLevels: (levels: Set<string>) => void;
+  setPersistedTimeRange: (
+    range: { start: number; end: number | null } | null,
+    preset?: string | null,
+  ) => void;
+  getPersistedDisabledLevelsAsSet: () => Set<string>;
 }
 
 const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
@@ -115,7 +126,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
     id: "debug",
     name: "Debug",
     style: {
-      textColor: "#6b7280",
+      textColor: "#669c35",
       backgroundColor: "transparent",
     },
     keywords: ["debug"],
@@ -126,7 +137,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
     id: "trace",
     name: "Trace",
     style: {
-      textColor: "#a78bfa",
+      textColor: "#785700",
       backgroundColor: "transparent",
     },
     keywords: ["trace"],
@@ -137,8 +148,8 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
     id: "system",
     name: "System",
     style: {
-      textColor: "#9ca3af",
-      backgroundColor: "rgba(75, 85, 99, 0.2)",
+      textColor: "#6b7280",
+      backgroundColor: "transparent",
     },
     keywords: [
       "INIT_REPORT",
@@ -149,7 +160,7 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
       "EXTENSION",
     ],
     priority: 5,
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
 ];
 
@@ -233,6 +244,9 @@ export const useSettingsStore = create<SettingsStore>()(
       lastSelectedLogGroup: null,
       cacheLimits: DEFAULT_CACHE_LIMITS,
       awsProfile: null,
+      persistedDisabledLevels: [],
+      persistedTimeRange: null,
+      persistedTimePreset: null,
       isSettingsOpen: false,
 
       setTheme: (theme) => set({ theme }),
@@ -331,16 +345,28 @@ export const useSettingsStore = create<SettingsStore>()(
             .map((level) => level.id),
         );
       },
+
+      setPersistedDisabledLevels: (levels) =>
+        set({ persistedDisabledLevels: Array.from(levels) }),
+
+      setPersistedTimeRange: (range, preset) =>
+        set({ persistedTimeRange: range, persistedTimePreset: preset ?? null }),
+
+      getPersistedDisabledLevelsAsSet: () =>
+        new Set(get().persistedDisabledLevels),
     }),
     {
       name: "loggy-settings",
-      version: 8,
+      version: 9,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
         lastSelectedLogGroup: state.lastSelectedLogGroup,
         cacheLimits: state.cacheLimits,
         awsProfile: state.awsProfile,
+        persistedDisabledLevels: state.persistedDisabledLevels,
+        persistedTimeRange: state.persistedTimeRange,
+        persistedTimePreset: state.persistedTimePreset,
       }),
       migrate: (persisted, version) => {
         const data = persisted as { logLevels?: unknown; theme?: Theme };
@@ -481,12 +507,32 @@ export const useSettingsStore = create<SettingsStore>()(
           };
         }
 
+        if (version === 8) {
+          // Add persisted filter state
+          const v8Data = persisted as {
+            theme: Theme;
+            logLevels: LogLevelConfig[];
+            lastSelectedLogGroup: string | null;
+            cacheLimits: CacheLimits;
+            awsProfile: string | null;
+          };
+          return {
+            ...v8Data,
+            persistedDisabledLevels: [],
+            persistedTimeRange: null,
+            persistedTimePreset: null,
+          };
+        }
+
         return persisted as {
           theme: Theme;
           logLevels: LogLevelConfig[];
           lastSelectedLogGroup: string | null;
           cacheLimits: CacheLimits;
           awsProfile: string | null;
+          persistedDisabledLevels: string[];
+          persistedTimeRange: { start: number; end: number | null } | null;
+          persistedTimePreset: string | null;
         };
       },
     },
