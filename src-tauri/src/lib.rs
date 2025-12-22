@@ -1027,6 +1027,11 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+K")
                 .build(app)?;
 
+            let find_item = MenuItemBuilder::new("Find")
+                .id("find")
+                .accelerator("CmdOrCtrl+F")
+                .build(app)?;
+
             // Theme menu items (checkable)
             let theme_dark_item = tauri::menu::CheckMenuItemBuilder::new("Dark")
                 .id("theme-dark")
@@ -1079,6 +1084,8 @@ pub fn run() {
                 .copy()
                 .paste()
                 .select_all()
+                .separator()
+                .item(&find_item)
                 .build()?;
 
             // View submenu
@@ -1120,6 +1127,7 @@ pub fn run() {
             let about_id = about_item.id().clone();
             let refresh_id = refresh_item.id().clone();
             let clear_id = clear_item.id().clone();
+            let find_id = find_item.id().clone();
             let theme_dark_id = theme_dark_item.id().clone();
             let theme_light_id = theme_light_item.id().clone();
             let theme_system_id = theme_system_item.id().clone();
@@ -1139,6 +1147,8 @@ pub fn run() {
                     app_handle.emit("refresh-logs", ()).ok();
                 } else if *event.id() == clear_id {
                     app_handle.emit("clear-logs", ()).ok();
+                } else if *event.id() == find_id {
+                    app_handle.emit("open-find", ()).ok();
                 } else if *event.id() == theme_dark_id {
                     // Update checkmarks using direct references
                     theme_dark.set_checked(true).ok();

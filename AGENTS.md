@@ -19,8 +19,11 @@ See `DESIGN.md` for full architecture documentation.
 - `src/stores/settingsStore.ts` - Zustand store with persisted settings (colors, patterns)
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/FilterBar.tsx` - Filter input and level toggles
+- `src/components/FindBar.tsx` - Find-in-log search bar (CMD-F)
 - `src/components/SettingsDialog.tsx` - Settings dialog (CMD-,)
 - `src/components/StatusBar.tsx` - Status bar with log counts and cache usage
+- `src/hooks/useFindInLog.ts` - Find-in-log state management hook
+- `src/utils/highlightMatches.ts` - Text search and highlight utilities
 - `src/types/index.ts` - TypeScript type definitions
 
 ## Development
@@ -69,6 +72,7 @@ No test framework currently configured. Tests welcome as future enhancement.
 
 | Shortcut           | Action                                       |
 | ------------------ | -------------------------------------------- |
+| `⌘F` / `Ctrl+F`    | Find text in logs                            |
 | `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
 | `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |

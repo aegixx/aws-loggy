@@ -1,10 +1,16 @@
 import { useState, useCallback, type ReactNode } from "react";
+import {
+  highlightText,
+  type HighlightOptions,
+} from "../utils/highlightMatches";
 
 interface JsonSyntaxHighlightProps {
   data: unknown;
   indent?: number;
   defaultExpanded?: boolean;
   isDark?: boolean;
+  searchTerm?: string;
+  searchOptions?: HighlightOptions;
 }
 
 interface CollapsibleContainerProps {
@@ -83,6 +89,8 @@ function renderValue(
   defaultExpanded: boolean,
   path: string,
   isDark: boolean,
+  searchTerm?: string,
+  searchOptions?: HighlightOptions,
 ): ReactNode {
   const comma = isLast ? "" : ",";
 
@@ -113,9 +121,13 @@ function renderValue(
   }
 
   if (typeof value === "string") {
+    const stringContent =
+      searchTerm && searchOptions
+        ? highlightText(value, searchTerm, searchOptions)
+        : value;
     return (
       <span className={isDark ? "text-green-400" : "text-green-600"}>
-        "{value}"{comma}
+        "{stringContent}"{comma}
       </span>
     );
   }
@@ -148,6 +160,8 @@ function renderValue(
               defaultExpanded,
               `${path}[${index}]`,
               isDark,
+              searchTerm,
+              searchOptions,
             )}
           </div>
         ))}
@@ -191,6 +205,8 @@ function renderValue(
               defaultExpanded,
               `${path}.${key}`,
               isDark,
+              searchTerm,
+              searchOptions,
             )}
           </div>
         ))}
@@ -212,10 +228,21 @@ export function JsonSyntaxHighlight({
   indent = 0,
   defaultExpanded = true,
   isDark = true,
+  searchTerm,
+  searchOptions,
 }: JsonSyntaxHighlightProps) {
   return (
     <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-all">
-      {renderValue(data, indent, true, defaultExpanded, "root", isDark)}
+      {renderValue(
+        data,
+        indent,
+        true,
+        defaultExpanded,
+        "root",
+        isDark,
+        searchTerm,
+        searchOptions,
+      )}
     </pre>
   );
 }

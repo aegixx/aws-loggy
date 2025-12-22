@@ -126,6 +126,16 @@ function App() {
       const newTheme = event.payload as "dark" | "light" | "system";
       setTheme(newTheme);
     });
+    const unlistenFind = listen("open-find", () => {
+      // Dispatch synthetic keyboard event to trigger find bar in LogViewer
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "f",
+          metaKey: true,
+          bubbles: true,
+        }),
+      );
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
@@ -137,6 +147,7 @@ function App() {
       unlistenSessionRefreshed.then((fn) => fn());
       unlistenClear.then((fn) => fn());
       unlistenTheme.then((fn) => fn());
+      unlistenFind.then((fn) => fn());
     };
   }, [
     openSettings,
