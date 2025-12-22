@@ -67,7 +67,10 @@ interface LogStore {
   setSelectedLogIndex: (index: number | null) => void;
   setSelectedLogIndices: (indices: Set<number>) => void;
   clearSelection: () => void;
-  setTimeRange: (range: { start: number; end: number | null } | null) => void;
+  setTimeRange: (
+    range: { start: number; end: number | null } | null,
+    preset?: string | null,
+  ) => void;
   startTail: () => void;
   stopTail: () => void;
   clearLogs: () => void;
@@ -244,8 +247,50 @@ export const useLogStore = create<LogStore>((set, get) => ({
       });
       await get().loadLogGroups();
 
+      // Restore persisted filter state
+      const {
+        lastSelectedLogGroup,
+        getPersistedDisabledLevelsAsSet,
+        persistedTimeRange,
+        persistedTimePreset,
+        getDefaultDisabledLevels,
+      } = useSettingsStore.getState();
+
+      const persistedLevels = getPersistedDisabledLevelsAsSet();
+
+      // Recalculate time range from preset (so "1h" is always relative to now)
+      const presetToMs: Record<string, number> = {
+        "15m": 15 * 60 * 1000,
+        "1h": 60 * 60 * 1000,
+        "6h": 6 * 60 * 60 * 1000,
+        "24h": 24 * 60 * 60 * 1000,
+        "7d": 7 * 24 * 60 * 60 * 1000,
+      };
+
+      let restoredTimeRange: { start: number; end: number | null } | null =
+        null;
+      if (persistedTimePreset && presetToMs[persistedTimePreset]) {
+        // Recalculate relative time range from now
+        const now = Date.now();
+        restoredTimeRange = {
+          start: now - presetToMs[persistedTimePreset],
+          end: null,
+        };
+      } else if (persistedTimePreset === "custom" && persistedTimeRange) {
+        // Use absolute timestamps for custom ranges
+        restoredTimeRange = persistedTimeRange;
+      }
+      // If no preset or unknown, leave timeRange as null (will use default 15m)
+
+      set({
+        disabledLevels:
+          persistedLevels.size > 0
+            ? persistedLevels
+            : getDefaultDisabledLevels(),
+        timeRange: restoredTimeRange,
+      });
+
       // Auto-select last used log group if available
-      const { lastSelectedLogGroup } = useSettingsStore.getState();
       const { logGroups, selectLogGroup } = get();
       if (
         lastSelectedLogGroup &&
@@ -306,15 +351,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectLogGroup: (name: string) => {
     console.log("[User Activity] Select log group:", name);
     const { stopTail, fetchLogs, timeRange } = get();
-    const { getDefaultDisabledLevels, setLastSelectedLogGroup } =
-      useSettingsStore.getState();
+    const { setLastSelectedLogGroup } = useSettingsStore.getState();
     stopTail();
     set({
       selectedLogGroup: name,
       logs: [],
       filteredLogs: [],
       error: null,
-      disabledLevels: getDefaultDisabledLevels(),
+      // Keep current disabledLevels - don't reset on log group switch
     });
 
     // Persist selection to settings
@@ -399,6 +443,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   toggleLevel: (level: LogLevel) => {
     const { logs, filterText, disabledLevels } = get();
+    const { setPersistedDisabledLevels } = useSettingsStore.getState();
     const newDisabled = new Set(disabledLevels);
     if (newDisabled.has(level)) {
       newDisabled.delete(level);
@@ -415,6 +460,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       selectedLogIndex: null,
       selectedLogIndices: new Set(),
     });
+    // Persist the change
+    setPersistedDisabledLevels(newDisabled);
   },
 
   setExpandedLogIndex: (index: number | null) => {
@@ -437,7 +484,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
     set({ selectedLogIndices: new Set() });
   },
 
-  setTimeRange: (range: { start: number; end: number | null } | null) => {
+  setTimeRange: (
+    range: { start: number; end: number | null } | null,
+    preset?: string | null,
+  ) => {
+    const { setPersistedTimeRange } = useSettingsStore.getState();
     if (range) {
       const startDate = new Date(range.start).toISOString();
       const endDate = range.end ? new Date(range.end).toISOString() : "now";
@@ -446,6 +497,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       console.log("[User Activity] Clear time range");
     }
     set({ timeRange: range });
+    // Persist the change (including preset label for restoration)
+    setPersistedTimeRange(range, preset);
     if (range) {
       get().fetchLogs(range.start, range.end ?? undefined);
     }
@@ -579,22 +632,32 @@ export const useLogStore = create<LogStore>((set, get) => ({
   resetFilters: () => {
     console.log("[User Activity] Reset filters to defaults");
     const { selectedLogGroup, fetchLogs, stopTail } = get();
-    const { getDefaultDisabledLevels } = useSettingsStore.getState();
+    const {
+      getDefaultDisabledLevels,
+      setPersistedDisabledLevels,
+      setPersistedTimeRange,
+    } = useSettingsStore.getState();
 
     // Stop any active tail first
     stopTail();
+
+    const defaultDisabled = getDefaultDisabledLevels();
 
     // Reset all filters to defaults and clear logs
     set({
       logs: [],
       filteredLogs: [],
       filterText: "",
-      disabledLevels: getDefaultDisabledLevels(),
+      disabledLevels: defaultDisabled,
       timeRange: null,
       expandedLogIndex: null,
       selectedLogIndex: null,
       selectedLogIndices: new Set(),
     });
+
+    // Persist the reset values
+    setPersistedDisabledLevels(defaultDisabled);
+    setPersistedTimeRange(null);
 
     // Trigger a fresh query with default time range
     if (selectedLogGroup) {
@@ -604,8 +667,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   resetState: () => {
     const { stopTail } = get();
-    const { getDefaultDisabledLevels, setLastSelectedLogGroup } =
-      useSettingsStore.getState();
+    const { setLastSelectedLogGroup } = useSettingsStore.getState();
 
     // Stop any active tail
     stopTail();
@@ -613,14 +675,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Clear persisted log group selection
     setLastSelectedLogGroup(null);
 
-    // Reset all state to initial values
+    // Reset state but keep filters (disabledLevels, timeRange, filterText)
     set({
       selectedLogGroup: null,
       logs: [],
       filteredLogs: [],
-      filterText: "",
-      disabledLevels: getDefaultDisabledLevels(),
-      timeRange: null,
+      // Keep filterText, disabledLevels, timeRange - user can reset manually
       expandedLogIndex: null,
       selectedLogIndex: null,
       selectedLogIndices: new Set(),

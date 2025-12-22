@@ -1,28 +1,27 @@
 import { useRef, useEffect, useCallback, useState, CSSProperties } from "react";
 import { List, ListImperativeAPI } from "react-window";
 import { useLogStore } from "../stores/logStore";
-import { useSettingsStore, type LogLevelConfig } from "../stores/settingsStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
+import { FindBar } from "./FindBar";
+import { useFindInLog } from "../hooks/useFindInLog";
+import {
+  highlightText,
+  type HighlightOptions,
+} from "../utils/highlightMatches";
 import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
 const DETAIL_HEIGHT = 200;
 
-function getLogLevelStyle(
-  level: string,
-  logLevels: LogLevelConfig[],
-): { color: string; backgroundColor: string } {
-  const config = logLevels.find((l) => l.id === level);
-  if (config) {
-    return {
-      color: config.style.textColor,
-      backgroundColor: config.style.backgroundColor,
-    };
-  }
-  // Default for unknown level
+function getLogLevelStyle(level: string): {
+  color: string;
+  backgroundColor: string;
+} {
+  // Use CSS variables (set by App.tsx with theme-adaptive color-mix values)
   return {
-    color: "#d1d5db",
-    backgroundColor: "transparent",
+    color: `var(--log-${level}-text, var(--log-unknown-text, #d1d5db))`,
+    backgroundColor: `var(--log-${level}-bg, var(--log-unknown-bg, transparent))`,
   };
 }
 
@@ -34,8 +33,15 @@ interface LogRowProps {
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
   onRowMouseEnter: (index: number) => void;
   onClose: () => void;
-  logLevels: LogLevelConfig[];
   isDark: boolean;
+  // Find/search props
+  searchTerm?: string;
+  searchOptions?: HighlightOptions;
+  currentMatchLogIndex?: number | null;
+  globalCurrentMatchIndex?: number;
+  getMatchesForLog?: (
+    logIndex: number,
+  ) => { index: number; start: number; length: number }[];
 }
 
 interface RowComponentPropsWithCustom {
@@ -48,8 +54,15 @@ interface RowComponentPropsWithCustom {
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
   onRowMouseEnter: (index: number) => void;
   onClose: () => void;
-  logLevels: LogLevelConfig[];
   isDark: boolean;
+  // Find/search props
+  searchTerm?: string;
+  searchOptions?: HighlightOptions;
+  currentMatchLogIndex?: number | null;
+  globalCurrentMatchIndex?: number;
+  getMatchesForLog?: (
+    logIndex: number,
+  ) => { index: number; start: number; length: number }[];
 }
 
 function LogRow({
@@ -62,8 +75,12 @@ function LogRow({
   onRowMouseDown,
   onRowMouseEnter,
   onClose,
-  logLevels,
   isDark,
+  searchTerm,
+  searchOptions,
+  currentMatchLogIndex,
+  globalCurrentMatchIndex,
+  getMatchesForLog,
 }: RowComponentPropsWithCustom) {
   // If there's an expanded row, indices after it are shifted by 1
   const isDetailRow = expandedIndex !== null && index === expandedIndex + 1;
@@ -106,7 +123,7 @@ function LogRow({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with metadata */}
-        <div className="flex items-start justify-between mb-2 flex-shrink-0">
+        <div className="flex items-start justify-between mb-2 shrink-0">
           <div className="flex items-center gap-4 text-xs">
             <span className={isDark ? "text-gray-400" : "text-gray-600"}>
               <span className={isDark ? "text-gray-600" : "text-gray-500"}>
@@ -158,12 +175,34 @@ function LogRow({
           className={`rounded p-2 overflow-auto flex-1 min-h-0 ${isDark ? "bg-gray-950" : "bg-gray-100"}`}
         >
           {log.parsedJson ? (
-            <JsonSyntaxHighlight data={log.parsedJson} isDark={isDark} />
+            <JsonSyntaxHighlight
+              data={log.parsedJson}
+              isDark={isDark}
+              searchTerm={searchTerm}
+              searchOptions={searchOptions}
+            />
           ) : (
             <pre
               className={`font-mono text-sm leading-relaxed whitespace-pre-wrap break-all ${isDark ? "text-gray-300" : "text-gray-700"}`}
             >
-              {log.message}
+              {searchTerm && searchOptions && getMatchesForLog
+                ? (() => {
+                    const logMatches = getMatchesForLog(expandedIndex);
+                    if (logMatches.length === 0) return log.message;
+                    const currentMatchInLog =
+                      currentMatchLogIndex === expandedIndex
+                        ? logMatches.findIndex(
+                            (m) => m.index === globalCurrentMatchIndex,
+                          )
+                        : undefined;
+                    return highlightText(
+                      log.message,
+                      searchTerm,
+                      searchOptions,
+                      currentMatchInLog,
+                    );
+                  })()
+                : log.message}
             </pre>
           )}
         </div>
@@ -178,7 +217,7 @@ function LogRow({
   const isExpanded = expandedIndex === actualLogIndex;
   const isSelected = selectedIndex === actualLogIndex;
   const isMultiSelected = selectedIndices.has(actualLogIndex);
-  const levelStyle = getLogLevelStyle(log.level, logLevels);
+  const levelStyle = getLogLevelStyle(log.level);
 
   // Determine row styling based on expanded/selected/multi-selected state
   let rowClasses =
@@ -208,12 +247,30 @@ function LogRow({
       className={rowClasses}
     >
       <span
-        className={`w-36 flex-shrink-0 ${isDark ? "text-gray-500" : "text-gray-500"}`}
+        className={`w-36 shrink-0 ${isDark ? "text-gray-500" : "text-gray-500"}`}
       >
         {log.formattedTime}
       </span>
-      <span className="flex-1 truncate" title={log.message}>
-        {log.message}
+      <span className="flex-1 truncate">
+        {searchTerm && searchOptions && getMatchesForLog
+          ? (() => {
+              const logMatches = getMatchesForLog(actualLogIndex);
+              if (logMatches.length === 0) return log.message;
+              // Find which match in this log is the current one (if any)
+              const currentMatchInLog =
+                currentMatchLogIndex === actualLogIndex
+                  ? logMatches.findIndex(
+                      (m) => m.index === globalCurrentMatchIndex,
+                    )
+                  : undefined;
+              return highlightText(
+                log.message,
+                searchTerm,
+                searchOptions,
+                currentMatchInLog,
+              );
+            })()
+          : log.message}
       </span>
     </div>
   );
@@ -234,7 +291,7 @@ export function LogViewer() {
     setSelectedLogIndices,
     clearSelection,
   } = useLogStore();
-  const { theme, logLevels } = useSettingsStore();
+  const { theme } = useSettingsStore();
 
   // Track system preference for theme
   const [systemPrefersDark, setSystemPrefersDark] = useState(
@@ -256,6 +313,35 @@ export function LogViewer() {
   const shouldAutoScroll = useRef(true);
   const prevLogCount = useRef(0);
   const userScrolledAway = useRef(false);
+
+  // Callback to navigate to a log when find navigates to a match
+  const handleNavigateToLog = useCallback(
+    (logIndex: number) => {
+      setSelectedLogIndex(logIndex);
+      // Scroll to the log
+      if (listRef.current) {
+        listRef.current.scrollToRow({
+          index:
+            expandedLogIndex !== null && logIndex > expandedLogIndex
+              ? logIndex + 1
+              : logIndex,
+          align: "smart",
+        });
+      }
+    },
+    [setSelectedLogIndex, expandedLogIndex],
+  );
+
+  // Find-in-log state and actions - searches across all visible logs
+  const [findState, findActions] = useFindInLog(
+    filteredLogs,
+    handleNavigateToLog,
+  );
+  const findInputRef = (
+    findActions as typeof findActions & {
+      inputRef: React.RefObject<HTMLInputElement>;
+    }
+  ).inputRef;
 
   // Drag selection state
   const [dragStart, setDragStart] = useState<{
@@ -323,14 +409,29 @@ export function LogViewer() {
 
   const handleContainerMouseUp = useCallback(() => {
     if (!isDragging && dragStart) {
-      // Was a click, not a drag - clear any multi-selection and trigger row expansion
+      // Was a click on a row, not a drag - clear any multi-selection and trigger row expansion
       clearSelection();
       handleRowClick(dragStart.index);
+    } else if (!dragStart && !isDragging) {
+      // Clicked on empty space (not on any row) - clear selection
+      clearSelection();
+      if (expandedLogIndex !== null) {
+        setExpandedLogIndex(null);
+      }
+      setSelectedLogIndex(null);
     }
     setDragStart(null);
     setIsDragging(false);
     dragCurrentIndex.current = null;
-  }, [isDragging, dragStart, handleRowClick, clearSelection]);
+  }, [
+    isDragging,
+    dragStart,
+    handleRowClick,
+    clearSelection,
+    expandedLogIndex,
+    setExpandedLogIndex,
+    setSelectedLogIndex,
+  ]);
 
   // Track which row the mouse is over during drag
   const handleRowMouseEnter = useCallback(
@@ -358,9 +459,32 @@ export function LogViewer() {
     return Math.floor(containerRef.current.clientHeight / ROW_HEIGHT);
   }, []);
 
+  // Window-level listener for CMD+F (triggered by menu)
+  useEffect(() => {
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        if (findState.isOpen) {
+          findActions.focusInput();
+        } else {
+          findActions.open();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => window.removeEventListener("keydown", handleWindowKeyDown);
+  }, [findState.isOpen, findActions]);
+
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Close find bar with Escape if it's open
+      if (e.key === "Escape" && findState.isOpen) {
+        e.preventDefault();
+        findActions.close();
+        return;
+      }
+
       if (filteredLogs.length === 0) return;
 
       const currentIndex = selectedLogIndex ?? -1;
@@ -424,6 +548,20 @@ export function LogViewer() {
             navigator.clipboard.writeText(messages);
           }
           return;
+        case "a":
+          // Handle Cmd+A / Ctrl+A to select all visible logs
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            const allIndices = new Set<number>(
+              Array.from({ length: filteredLogs.length }, (_, i) => i),
+            );
+            setSelectedLogIndices(allIndices);
+            // Collapse any expanded log when selecting all
+            if (expandedLogIndex !== null) {
+              setExpandedLogIndex(null);
+            }
+          }
+          return;
       }
 
       if (newIndex !== null && newIndex !== currentIndex) {
@@ -449,6 +587,8 @@ export function LogViewer() {
       getVisibleRowCount,
       selectedLogIndices,
       clearSelection,
+      findState.isOpen,
+      findActions,
     ],
   );
 
@@ -589,13 +729,30 @@ export function LogViewer() {
   return (
     <div
       ref={containerRef}
-      className={`flex-1 overflow-hidden focus:outline-none ${isDragging ? "select-none" : ""}`}
+      className={`flex-1 overflow-hidden focus:outline-none relative ${isDragging ? "select-none" : ""}`}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onMouseMove={handleContainerMouseMove}
       onMouseUp={handleContainerMouseUp}
       onMouseLeave={handleContainerMouseUp}
     >
+      {/* Find bar */}
+      <FindBar
+        isOpen={findState.isOpen}
+        onClose={findActions.close}
+        searchTerm={findState.searchTerm}
+        onSearchTermChange={findActions.setSearchTerm}
+        options={findState.options}
+        onToggleOption={findActions.toggleOption}
+        currentMatchIndex={findState.currentMatchIndex}
+        totalMatches={findState.matches.length}
+        onNavigate={(dir) =>
+          dir === "next" ? findActions.goToNext() : findActions.goToPrev()
+        }
+        inputRef={findInputRef}
+        isDark={isDark}
+      />
+
       <List<LogRowProps>
         listRef={listRef}
         rowCount={rowCount}
@@ -609,8 +766,15 @@ export function LogViewer() {
           onRowMouseDown: handleRowMouseDown,
           onRowMouseEnter: handleRowMouseEnter,
           onClose: handleCloseDetail,
-          logLevels,
           isDark,
+          // Find/search props
+          searchTerm: findState.isOpen ? findState.searchTerm : undefined,
+          searchOptions: findState.isOpen ? findState.options : undefined,
+          currentMatchLogIndex: findState.currentLogIndex,
+          globalCurrentMatchIndex: findState.currentMatchIndex,
+          getMatchesForLog: findState.isOpen
+            ? findState.getMatchesForLog
+            : undefined,
         }}
         onRowsRendered={handleRowsRendered}
         overscanCount={20}

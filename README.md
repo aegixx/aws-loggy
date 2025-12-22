@@ -15,6 +15,7 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 - **Log Level Detection** - Automatic colorization based on log level (ERROR, WARN, INFO, DEBUG, TRACE, SYSTEM)
 - **Customizable Colors** - Configure log level colors and detection patterns via Settings (Cmd-,)
 - **JSON Syntax Highlighting** - Collapsible, colorized JSON viewer for structured logs
+- **Find in Logs** - Search within the selected log entry with regex, case-sensitive, and whole-word options
 - **Virtualized Rendering** - Smooth scrolling through 50,000+ log entries
 - **Native Performance** - Built with Tauri for small bundle size and low memory usage
 - **Persistent State** - Remembers your last selected log group across sessions
@@ -81,10 +82,13 @@ Download the latest release for your platform from the [Releases](https://github
 
 | Shortcut           | Action                                       |
 | ------------------ | -------------------------------------------- |
+| `⌘F` / `Ctrl+F`    | Find text in logs                            |
 | `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
 | `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
 | `⌘,` / `Ctrl+,`    | Open Settings                                |
+| `⌘A` / `Ctrl+A`    | Select all visible logs                      |
+| `⌘C` / `Ctrl+C`    | Copy selected messages to clipboard          |
 | `Tab`              | Focus log viewer for keyboard navigation     |
 | `↑` / `↓`          | Navigate between log rows                    |
 | `Page Up` / `Down` | Jump one page at a time                      |
@@ -157,7 +161,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Control over default font size, family, & line height
 - JSON expand/collapse
 - Log group typeahead search
-- Support CMD-F/Ctrl-F for text search within current log messages (highlighting matches)
 - Ability to filter by request ID (i.e. select a specific message and see full context)
 - On unfilter, scroll to maintain selected row position
 - Add right-click menu (copy, show related, etc)
@@ -176,4 +179,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Multi-account support
 - Timeline / histogram view based on volume
 - Stacked timeline view based on log level
-- ! Ability to select/copy multiple messages

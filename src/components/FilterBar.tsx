@@ -132,20 +132,24 @@ export function FilterBar() {
               style={
                 isEnabled
                   ? {
-                      color: levelConfig.style.textColor,
-                      backgroundColor: levelConfig.style.backgroundColor,
-                      borderColor: levelConfig.style.textColor + "80",
+                      color: `var(--log-${levelConfig.id}-text)`,
+                      backgroundColor: `var(--log-${levelConfig.id}-bg)`,
+                      borderColor: `var(--log-${levelConfig.id}-border)`,
                     }
                   : isDark
                     ? {
                         color: "#4b5563",
                         backgroundColor: "#1f2937",
                         borderColor: "#374151",
+                        textDecoration: "line-through",
+                        opacity: 0.5,
                       }
                     : {
                         color: "#9ca3af",
                         backgroundColor: "#e5e7eb",
                         borderColor: "#d1d5db",
+                        textDecoration: "line-through",
+                        opacity: 0.5,
                       }
               }
             >

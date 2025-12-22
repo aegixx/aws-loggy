@@ -24,30 +24,45 @@
   }
 }
 
-/* Log colorization classes - using CSS variables from settings */
-.log-error {
-  color: var(--log-error-text, #f87171);
-  background-color: var(--log-error-bg, rgba(127, 29, 29, 0.3));
+/* Log level CSS variables are set dynamically by App.tsx using color-mix()
+   for theme-adaptive colors. Inline styles reference these variables. */
+
+/* Find/Search highlight styles */
+.find-highlight {
+  @apply bg-yellow-300/60 text-inherit rounded-sm px-0.5 -mx-0.5;
 }
 
-.log-warn {
-  color: var(--log-warn-text, #facc15);
-  background-color: var(--log-warn-bg, rgba(113, 63, 18, 0.2));
+.find-highlight-current {
+  @apply bg-orange-400/80 text-inherit rounded-sm px-0.5 -mx-0.5 ring-1 ring-orange-500;
 }
 
-.log-info {
-  color: var(--log-info-text, #93c5fd);
-  background-color: var(--log-info-bg, transparent);
+/* Dark mode find highlight variants */
+@media (prefers-color-scheme: dark) {
+  .find-highlight {
+    @apply bg-yellow-500/40;
+  }
+
+  .find-highlight-current {
+    @apply bg-orange-500/60 ring-orange-400;
+  }
 }
 
-.log-debug {
-  color: var(--log-debug-text, #6b7280);
-  background-color: var(--log-debug-bg, transparent);
+/* Manual dark mode override (when theme is explicitly set to dark) */
+.dark .find-highlight {
+  @apply bg-yellow-500/40;
 }
 
-.log-unknown {
-  color: var(--log-unknown-text, #d1d5db);
-  background-color: var(--log-unknown-bg, transparent);
+.dark .find-highlight-current {
+  @apply bg-orange-500/60 ring-orange-400;
+}
+
+/* Light mode override (when theme is explicitly set to light) */
+.light .find-highlight {
+  @apply bg-yellow-300/60;
+}
+
+.light .find-highlight-current {
+  @apply bg-orange-400/80 ring-orange-500;
 }
 
 /* Scrollbar styling */
