@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/aegixx/aws-loggy/compare/v1.7.1...v1.8.0) (2025-12-22)
+
+
+### Features
+
+* add find-in-logs, theme menu, and UX improvements ([#23](https://github.com/aegixx/aws-loggy/issues/23)) ([b18f0a8](https://github.com/aegixx/aws-loggy/commit/b18f0a85b2e516b3becc7e1755b7db248746fe9e))
+
 ## [1.7.1](https://github.com/aegixx/aws-loggy/compare/v1.7.0...v1.7.1) (2025-12-18)
 
 
