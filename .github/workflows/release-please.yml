@@ -95,7 +95,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge ${{ fromJSON(steps.release.outputs.pr).number }} --auto --squash --repo ${{ github.repository }}
+        run: gh pr merge ${{ fromJSON(steps.release.outputs.pr).number }} --auto --squash --delete-branch --repo ${{ github.repository }}
 
   build-release:
     needs: release-please
