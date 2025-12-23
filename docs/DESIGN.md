@@ -42,6 +42,7 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 | Shortcut           | Action                                       |
 | ------------------ | -------------------------------------------- |
+| `⌘F` / `Ctrl+F`    | Find text in logs                            |
 | `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
 | `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
