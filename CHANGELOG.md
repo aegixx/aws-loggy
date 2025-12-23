@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/aegixx/aws-loggy/compare/v1.8.0...v1.8.1) (2025-12-23)
+
+
+### Bug Fixes
+
+* improve JSON expand/collapse UX in expanded log view ([5331e41](https://github.com/aegixx/aws-loggy/commit/5331e412b3a76c628f52e7fe603de76e1b12a2ff))
+
 ## [1.8.0](https://github.com/aegixx/aws-loggy/compare/v1.7.1...v1.8.0) (2025-12-22)
 
 
