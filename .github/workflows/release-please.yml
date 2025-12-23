@@ -30,7 +30,7 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          PR_BRANCH: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName || '' }}
         run: |
           git fetch origin $PR_BRANCH
           git checkout $PR_BRANCH
@@ -55,7 +55,7 @@ jobs:
         if: ${{ steps.release.outputs.pr }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          PR_BRANCH: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName || '' }}
         run: |
           # Update package-lock.json to reflect the new version in package.json
           npm install --package-lock-only
@@ -95,7 +95,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge ${{ fromJSON(steps.release.outputs.pr).number }} --auto --squash --delete-branch --repo ${{ github.repository }}
+        run: gh pr merge ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number || '' }} --auto --squash --delete-branch --repo ${{ github.repository }}
 
   build-release:
     needs: release-please
