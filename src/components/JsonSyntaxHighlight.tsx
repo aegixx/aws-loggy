@@ -45,6 +45,7 @@ function CollapsibleContainer({
           className={`transition-colors cursor-pointer ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"}`}
           title="Click to expand"
         >
+          <span className="mr-1">▶</span>
           <span className={isDark ? "text-gray-400" : "text-gray-500"}>
             {openBracket}
           </span>
@@ -71,6 +72,7 @@ function CollapsibleContainer({
         className={`transition-colors cursor-pointer ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-500 hover:text-gray-700"}`}
         title="Click to collapse"
       >
+        <span className="mr-1">▼</span>
         {openBracket}
       </button>
       <div style={{ paddingLeft: "1rem" }}>{children}</div>

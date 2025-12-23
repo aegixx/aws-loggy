@@ -121,6 +121,8 @@ function LogRow({
         style={style}
         className={`border-l-2 border-l-blue-500 px-3 py-2 flex flex-col ${isDark ? "bg-gray-900" : "bg-white"}`}
         onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
       >
         {/* Header with metadata */}
         <div className="flex items-start justify-between mb-2 shrink-0">
