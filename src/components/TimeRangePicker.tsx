@@ -218,13 +218,20 @@ export function TimeRangePicker() {
               <div className="w-full">
                 <DatePicker
                   selected={customStart}
-                  onChange={(date) => date && setCustomStart(date)}
+                  onChange={(date) => {
+                    if (date) {
+                      setCustomStart(date);
+                      if (date > customEnd) {
+                        setCustomEnd(date);
+                      }
+                    }
+                  }}
                   showTimeSelect
                   timeIntervals={30}
                   timeFormat="HH:mm"
                   dateFormat="MMM d, yyyy HH:mm"
-                  maxDate={customEnd}
-                  customInput={<CustomInput label="Start" />}
+                  maxDate={new Date()}
+                  customInput={<CustomInput label="Start (UTC)" />}
                   calendarClassName={isDark ? "datepicker-dark" : ""}
                   wrapperClassName="w-full"
                   portalId="datepicker-portal"
@@ -233,14 +240,20 @@ export function TimeRangePicker() {
               <div className="w-full">
                 <DatePicker
                   selected={customEnd}
-                  onChange={(date) => date && setCustomEnd(date)}
+                  onChange={(date) => {
+                    if (date) {
+                      setCustomEnd(date);
+                      if (date < customStart) {
+                        setCustomStart(date);
+                      }
+                    }
+                  }}
                   showTimeSelect
                   timeIntervals={30}
                   timeFormat="HH:mm"
                   dateFormat="MMM d, yyyy HH:mm"
-                  minDate={customStart}
                   maxDate={new Date()}
-                  customInput={<CustomInput label="End" />}
+                  customInput={<CustomInput label="End (UTC)" />}
                   calendarClassName={isDark ? "datepicker-dark" : ""}
                   wrapperClassName="w-full"
                   portalId="datepicker-portal"
