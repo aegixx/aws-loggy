@@ -19,6 +19,7 @@ function App() {
     resetState,
     clearLogs,
     setLoadingProgress,
+    setSessionExpired,
     isConnected,
     isConnecting,
     connectionError,
@@ -119,6 +120,10 @@ function App() {
       console.log("SSO session refreshed, reconnecting...");
       refreshConnection();
     });
+    const unlistenSessionExpired = listen("aws-session-expired", () => {
+      console.log("AWS session expired");
+      setSessionExpired();
+    });
     const unlistenClear = listen("clear-logs", () => {
       clearLogs();
     });
@@ -145,6 +150,7 @@ function App() {
       unlistenProgress.then((fn) => fn());
       unlistenDebug.then((fn) => fn());
       unlistenSessionRefreshed.then((fn) => fn());
+      unlistenSessionExpired.then((fn) => fn());
       unlistenClear.then((fn) => fn());
       unlistenTheme.then((fn) => fn());
       unlistenFind.then((fn) => fn());
@@ -153,6 +159,7 @@ function App() {
     openSettings,
     refreshConnection,
     setLoadingProgress,
+    setSessionExpired,
     clearLogs,
     setTheme,
   ]);

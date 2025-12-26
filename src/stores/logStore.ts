@@ -77,6 +77,7 @@ interface LogStore {
   resetFilters: () => void;
   resetState: () => void;
   setLoadingProgress: (count: number, sizeBytes: number) => void;
+  setSessionExpired: () => void;
 }
 
 function parseLogLevel(
@@ -694,5 +695,13 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   setLoadingProgress: (count: number, sizeBytes: number) => {
     set({ loadingProgress: count, loadingSizeBytes: sizeBytes });
+  },
+
+  setSessionExpired: () => {
+    set({
+      isConnected: false,
+      connectionError:
+        "Your AWS session has expired. Please complete SSO login in your browser.",
+    });
   },
 }));
