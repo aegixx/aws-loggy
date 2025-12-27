@@ -268,25 +268,32 @@ function LogRow({
         {log.formattedTime}
       </span>
       <span className="flex-1 truncate">
-        {searchTerm && searchOptions && getMatchesForLog
-          ? (() => {
-              const logMatches = getMatchesForLog(actualLogIndex);
-              if (logMatches.length === 0) return log.message;
-              // Find which match in this log is the current one (if any)
-              const currentMatchInLog =
-                currentMatchLogIndex === actualLogIndex
-                  ? logMatches.findIndex(
-                      (m) => m.index === globalCurrentMatchIndex,
-                    )
-                  : undefined;
-              return highlightText(
-                log.message,
-                searchTerm,
-                searchOptions,
-                currentMatchInLog,
-              );
-            })()
-          : log.message}
+        {(() => {
+          // Truncate very large messages for row display (full message available in detail view)
+          const displayMessage =
+            log.message.length > 2000
+              ? log.message.substring(0, 2000)
+              : log.message;
+
+          if (searchTerm && searchOptions && getMatchesForLog) {
+            const logMatches = getMatchesForLog(actualLogIndex);
+            if (logMatches.length === 0) return displayMessage;
+            // Find which match in this log is the current one (if any)
+            const currentMatchInLog =
+              currentMatchLogIndex === actualLogIndex
+                ? logMatches.findIndex(
+                    (m) => m.index === globalCurrentMatchIndex,
+                  )
+                : undefined;
+            return highlightText(
+              displayMessage,
+              searchTerm,
+              searchOptions,
+              currentMatchInLog,
+            );
+          }
+          return displayMessage;
+        })()}
       </span>
     </div>
   );
@@ -571,6 +578,13 @@ export function LogViewer() {
     setExpandedLogIndex,
     setSelectedLogIndex,
   ]);
+
+  // Handle mouse leaving the container - only clean up drag state, don't collapse expanded row
+  const handleContainerMouseLeave = useCallback(() => {
+    setDragStart(null);
+    setIsDragging(false);
+    dragCurrentIndex.current = null;
+  }, []);
 
   // Track which row the mouse is over during drag
   const handleRowMouseEnter = useCallback(
@@ -881,7 +895,7 @@ export function LogViewer() {
       onKeyDown={handleKeyDown}
       onMouseMove={handleContainerMouseMove}
       onMouseUp={handleContainerMouseUp}
-      onMouseLeave={handleContainerMouseUp}
+      onMouseLeave={handleContainerMouseLeave}
     >
       {/* Find bar */}
       <FindBar

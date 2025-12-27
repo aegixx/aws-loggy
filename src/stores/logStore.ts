@@ -11,6 +11,22 @@ import {
 let tailIntervalId: ReturnType<typeof setInterval> | null = null;
 let tailStartTimestamp: number | null = null;
 
+// Cache for compiled keyword regex patterns (avoids recompiling on every log)
+const keywordRegexCache = new Map<string, RegExp>();
+
+function getKeywordRegex(keyword: string): RegExp {
+  const key = keyword.toLowerCase();
+  let regex = keywordRegexCache.get(key);
+  if (!regex) {
+    regex = new RegExp(
+      `(?:^|[\\s\\t\\[\\]():])${key}(?:[\\s\\t\\[\\]():]|$)`,
+      "i",
+    );
+    keywordRegexCache.set(key, regex);
+  }
+  return regex;
+}
+
 interface AwsConnectionInfo {
   profile: string | null;
   region: string | null;
@@ -105,13 +121,7 @@ function parseLogLevel(
   // Priority 2: Check for keyword in message (surrounded by whitespace or at boundaries)
   for (const level of sortedLevels) {
     for (const keyword of level.keywords) {
-      const keywordLower = keyword.toLowerCase();
-      // Match keyword surrounded by non-word characters or at string boundaries
-      const regex = new RegExp(
-        `(?:^|[\\s\\t\\[\\]():])${keywordLower}(?:[\\s\\t\\[\\]():]|$)`,
-        "i",
-      );
-      if (regex.test(message)) {
+      if (getKeywordRegex(keyword).test(message)) {
         return level.id;
       }
     }
@@ -131,6 +141,99 @@ function tryParseJson(message: string): Record<string, unknown> | null {
     // Not valid JSON
   }
   return null;
+}
+
+/**
+ * Checks if a message is incomplete JSON (starts with { but has unbalanced braces).
+ * CloudWatch splits large log messages across multiple events, and this detects the fragments.
+ */
+function isIncompleteJson(msg: string): boolean {
+  const trimmed = msg.trim();
+  if (!trimmed.startsWith("{")) return false;
+
+  // Count braces - incomplete if unbalanced
+  let depth = 0;
+  let inString = false;
+  let prevChar = "";
+
+  for (const char of trimmed) {
+    // Track string boundaries (handle escaped quotes)
+    if (char === '"' && prevChar !== "\\") {
+      inString = !inString;
+    }
+    // Only count braces outside of strings
+    if (!inString) {
+      if (char === "{") depth++;
+      if (char === "}") depth--;
+    }
+    prevChar = char;
+  }
+
+  return depth !== 0;
+}
+
+/**
+ * Checks if a candidate log event should be merged with the first fragment.
+ * Fragments must have the same log stream and timestamps within a small window.
+ * CloudWatch fragments can have slightly different timestamps (1-20ms apart).
+ */
+const MERGE_TIMESTAMP_THRESHOLD_MS = 100;
+
+function shouldMerge(
+  first: LogEvent,
+  candidate: LogEvent,
+  accumulated: string,
+): boolean {
+  // Same stream (required)
+  if (first.log_stream_name !== candidate.log_stream_name) return false;
+
+  // Timestamps within threshold (CloudWatch fragments can be 1-20ms apart)
+  if (
+    Math.abs(first.timestamp - candidate.timestamp) >
+    MERGE_TIMESTAMP_THRESHOLD_MS
+  )
+    return false;
+
+  // Accumulated JSON still incomplete
+  return isIncompleteJson(accumulated);
+}
+
+/**
+ * Merges fragmented log events back into complete messages.
+ * CloudWatch splits large messages (e.g., SQL queries with thousands of parameters)
+ * across multiple events with the same timestamp and log stream.
+ */
+function mergeFragmentedLogs(logs: LogEvent[]): LogEvent[] {
+  const result: LogEvent[] = [];
+  let i = 0;
+
+  while (i < logs.length) {
+    const current = logs[i];
+
+    // Check if this looks like a fragment (incomplete JSON)
+    if (isIncompleteJson(current.message)) {
+      // Try to merge with subsequent events from same stream/timestamp
+      let merged = current.message;
+      let j = i + 1;
+
+      while (j < logs.length && shouldMerge(current, logs[j], merged)) {
+        merged += logs[j].message;
+        j++;
+      }
+
+      // Create merged event (preserves first fragment's metadata)
+      result.push({
+        ...current,
+        message: merged,
+      });
+      i = j;
+    } else {
+      result.push(current);
+      i++;
+    }
+  }
+
+  return result;
 }
 
 function formatTimestamp(timestamp: number): string {
@@ -406,11 +509,13 @@ export const useLogStore = create<LogStore>((set, get) => ({
         maxSizeMb: cacheLimits.maxSizeMb,
       });
 
-      const parsedLogs = rawLogs.map(parseLogEvent);
+      // Merge fragmented logs before parsing (CloudWatch splits large messages)
+      const mergedLogs = mergeFragmentedLogs(rawLogs);
+      const parsedLogs = mergedLogs.map(parseLogEvent);
       const filtered = filterLogs(parsedLogs, filterText, disabledLevels);
 
-      // Calculate total size of loaded logs
-      const totalSize = rawLogs.reduce(
+      // Calculate total size of loaded logs (use merged to reflect actual content)
+      const totalSize = mergedLogs.reduce(
         (sum, log) => sum + log.message.length,
         0,
       );
@@ -578,7 +683,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
             filteredByTime.length,
             "new logs",
           );
-          const parsedNew = filteredByTime.map(parseLogEvent);
+          // Merge fragmented logs before parsing
+          const mergedNew = mergeFragmentedLogs(filteredByTime);
+          const parsedNew = mergedNew.map(parseLogEvent);
           const allLogs = [...get().logs, ...parsedNew];
 
           // Keep max 50000 logs in memory
