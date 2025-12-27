@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ContextMenuProps {
   x: number;
@@ -9,13 +9,20 @@ interface ContextMenuProps {
   onRefresh: () => void;
   onClear: () => void;
   onFindBy: () => void;
-  onFilterBy: () => void;
+  onFilterBySelection: () => void;
+  onFilterByRequestId: () => void;
+  onFilterByTraceId: () => void;
+  onFilterByClientIP: () => void;
   hasTextSelection: boolean;
   selectedText: string;
+  requestId: string | null;
+  traceId: string | null;
+  clientIP: string | null;
 }
 
 const MENU_WIDTH = 220;
-const MENU_HEIGHT = 180;
+const MENU_HEIGHT = 200;
+const SUBMENU_WIDTH = 200;
 
 function truncateText(text: string, maxLength: number = 20): string {
   if (text.length <= maxLength) return text;
@@ -31,15 +38,31 @@ export function ContextMenu({
   onRefresh,
   onClear,
   onFindBy,
-  onFilterBy,
+  onFilterBySelection,
+  onFilterByRequestId,
+  onFilterByTraceId,
+  onFilterByClientIP,
   hasTextSelection,
   selectedText,
+  requestId,
+  traceId,
+  clientIP,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [showFilterSubmenu, setShowFilterSubmenu] = useState(false);
+  const filterItemRef = useRef<HTMLDivElement>(null);
 
   // Calculate position to keep menu within viewport
   const adjustedX = x + MENU_WIDTH > window.innerWidth ? x - MENU_WIDTH : x;
   const adjustedY = y + MENU_HEIGHT > window.innerHeight ? y - MENU_HEIGHT : y;
+
+  // Calculate submenu position
+  const submenuOnLeft =
+    adjustedX + MENU_WIDTH + SUBMENU_WIDTH > window.innerWidth;
+
+  // Check if any filter option is available
+  const hasAnyFilterOption =
+    hasTextSelection || !!requestId || !!traceId || !!clientIP;
 
   // Close on click outside (use capture phase to catch events before stopPropagation)
   useEffect(() => {
@@ -102,7 +125,7 @@ export function ContextMenu({
         className={`${menuItemBase} ${menuItemEnabled}`}
         onClick={() => handleItemClick(onCopy)}
       >
-        <span>Copy</span>
+        <span>{hasTextSelection ? "Copy selection" : "Copy"}</span>
         <span className={shortcutClass}>Cmd+C</span>
       </div>
 
@@ -119,14 +142,67 @@ export function ContextMenu({
         </span>
       </div>
 
-      {/* Filter by... */}
+      {/* Filter by with submenu */}
       <div
-        className={`${menuItemBase} ${hasTextSelection ? menuItemEnabled : menuItemDisabled}`}
-        onClick={() => handleItemClick(onFilterBy, !hasTextSelection)}
+        ref={filterItemRef}
+        className={`${menuItemBase} relative ${hasAnyFilterOption ? menuItemEnabled : menuItemDisabled}`}
+        onMouseEnter={() => hasAnyFilterOption && setShowFilterSubmenu(true)}
+        onMouseLeave={() => setShowFilterSubmenu(false)}
       >
-        <span>
-          {hasTextSelection ? `Filter "${truncatedText}"` : "Filter by..."}
-        </span>
+        <span>Filter by</span>
+        <span className={shortcutClass}>▶</span>
+
+        {/* Filter submenu */}
+        {showFilterSubmenu && hasAnyFilterOption && (
+          <div
+            className={`absolute z-50 min-w-[180px] py-1 rounded-md shadow-lg border ${
+              isDark
+                ? "bg-gray-800 border-gray-700"
+                : "bg-white border-gray-300 shadow-md"
+            }`}
+            style={{
+              top: -4,
+              left: submenuOnLeft ? -SUBMENU_WIDTH - 4 : "100%",
+              marginLeft: submenuOnLeft ? 0 : 4,
+            }}
+            onMouseEnter={() => setShowFilterSubmenu(true)}
+            onMouseLeave={() => setShowFilterSubmenu(false)}
+          >
+            {/* Selection option */}
+            <div
+              className={`${menuItemBase} ${hasTextSelection ? menuItemEnabled : menuItemDisabled}`}
+              onClick={() =>
+                handleItemClick(onFilterBySelection, !hasTextSelection)
+              }
+            >
+              <span>Selection</span>
+            </div>
+
+            {/* RequestId option */}
+            <div
+              className={`${menuItemBase} ${requestId ? menuItemEnabled : menuItemDisabled}`}
+              onClick={() => handleItemClick(onFilterByRequestId, !requestId)}
+            >
+              <span>Request ID</span>
+            </div>
+
+            {/* TraceId option */}
+            <div
+              className={`${menuItemBase} ${traceId ? menuItemEnabled : menuItemDisabled}`}
+              onClick={() => handleItemClick(onFilterByTraceId, !traceId)}
+            >
+              <span>Trace ID</span>
+            </div>
+
+            {/* ClientIP option */}
+            <div
+              className={`${menuItemBase} ${clientIP ? menuItemEnabled : menuItemDisabled}`}
+              onClick={() => handleItemClick(onFilterByClientIP, !clientIP)}
+            >
+              <span>Client IP</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Separator */}

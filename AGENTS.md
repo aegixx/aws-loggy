@@ -91,15 +91,24 @@ No test framework currently configured. Tests welcome as future enhancement.
 
 Right-click on any log row to access the context menu with the following options:
 
-| Action       | Description                                                   |
-| ------------ | ------------------------------------------------------------- |
-| Copy         | Copy selected text, multi-selected rows, or the clicked row   |
-| Find "..."   | Open Find dialog with selected text (requires text selection) |
-| Filter "..." | Filter logs by selected text (requires text selection)        |
-| Refresh      | Reconnect to AWS and re-query logs                            |
-| Clear        | Clear logs and re-fetch                                       |
+| Action         | Description                                                    |
+| -------------- | -------------------------------------------------------------- |
+| Copy/Copy sel. | Copy selection (if text selected), multi-selected rows, or row |
+| Find "..."     | Open Find dialog with selected text (requires text selection)  |
+| Filter by      | Submenu with filtering options (see below)                     |
+| Refresh        | Reconnect to AWS and re-query logs                             |
+| Clear          | Clear logs and re-fetch                                        |
 
-**Note**: "Find" and "Filter" options are only enabled when text is selected in the expanded detail view. Select text in the detail panel, then right-click to use these features.
+### Filter by Submenu
+
+| Option     | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
+| Selection  | Filter by selected text (requires text selection)           |
+| Request ID | Filter by `metadata.requestId:value` (if requestId present) |
+| Trace ID   | Filter by `metadata.traceId:value` (if traceId present)     |
+| Client IP  | Filter by `metadata.clientIp:value` (if clientIP present)   |
+
+**Note**: "Find" requires text selection in the expanded detail view. "Filter by" menu is disabled when no options are available. Each filter option checks both top-level and `metadata` nested fields (e.g., `requestId`, `RequestId`, `metadata.requestId`).
 
 ## Notes
 

@@ -162,7 +162,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Control over default font size, family, & line height
 - JSON expand/collapse
 - Log group typeahead search
-- Ability to filter by request ID (i.e. select a specific message and see full context)
 - On unfilter, scroll to maintain selected row position
 - Debug / application logging for better troubleshooting
 - ! Cloudwatch Filter Syntax support

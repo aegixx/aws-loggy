@@ -377,6 +377,9 @@ export function LogViewer() {
     y: number;
     selectedText: string;
     targetLogIndex: number;
+    requestId: string | null;
+    traceId: string | null;
+    clientIP: string | null;
   } | null>(null);
 
   // Context menu handler
@@ -392,14 +395,43 @@ export function LogViewer() {
         }
       }
 
+      // Extract filter fields from the target log's parsedJson
+      // Check both top-level and nested under metadata
+      const targetLog = filteredLogs[logIndex];
+      const json = targetLog?.parsedJson;
+      const metadata = json?.metadata as Record<string, unknown> | undefined;
+      const requestId =
+        (json?.requestId as string) ||
+        (json?.RequestId as string) ||
+        (metadata?.requestId as string) ||
+        (metadata?.RequestId as string) ||
+        null;
+      const traceId =
+        (json?.traceId as string) ||
+        (json?.TraceId as string) ||
+        (metadata?.traceId as string) ||
+        (metadata?.TraceId as string) ||
+        null;
+      const clientIP =
+        (json?.clientIP as string) ||
+        (json?.ClientIP as string) ||
+        (json?.clientIp as string) ||
+        (metadata?.clientIP as string) ||
+        (metadata?.ClientIP as string) ||
+        (metadata?.clientIp as string) ||
+        null;
+
       setContextMenu({
         x: e.clientX,
         y: e.clientY,
         selectedText,
         targetLogIndex: logIndex,
+        requestId,
+        traceId,
+        clientIP,
       });
     },
-    [],
+    [filteredLogs],
   );
 
   // Context menu action handlers
@@ -431,9 +463,30 @@ export function LogViewer() {
     setContextMenu(null);
   }, [contextMenu, findActions]);
 
-  const handleFilterBy = useCallback(() => {
+  const handleFilterBySelection = useCallback(() => {
     if (contextMenu?.selectedText) {
       setFilterText(contextMenu.selectedText);
+    }
+    setContextMenu(null);
+  }, [contextMenu, setFilterText]);
+
+  const handleFilterByRequestId = useCallback(() => {
+    if (contextMenu?.requestId) {
+      setFilterText(`metadata.requestId:${contextMenu.requestId}`);
+    }
+    setContextMenu(null);
+  }, [contextMenu, setFilterText]);
+
+  const handleFilterByTraceId = useCallback(() => {
+    if (contextMenu?.traceId) {
+      setFilterText(`metadata.traceId:${contextMenu.traceId}`);
+    }
+    setContextMenu(null);
+  }, [contextMenu, setFilterText]);
+
+  const handleFilterByClientIP = useCallback(() => {
+    if (contextMenu?.clientIP) {
+      setFilterText(`metadata.clientIp:${contextMenu.clientIP}`);
     }
     setContextMenu(null);
   }, [contextMenu, setFilterText]);
@@ -858,9 +911,15 @@ export function LogViewer() {
           onRefresh={refreshConnection}
           onClear={clearLogs}
           onFindBy={handleFindBy}
-          onFilterBy={handleFilterBy}
+          onFilterBySelection={handleFilterBySelection}
+          onFilterByRequestId={handleFilterByRequestId}
+          onFilterByTraceId={handleFilterByTraceId}
+          onFilterByClientIP={handleFilterByClientIP}
           hasTextSelection={!!contextMenu.selectedText}
           selectedText={contextMenu.selectedText}
+          requestId={contextMenu.requestId}
+          traceId={contextMenu.traceId}
+          clientIP={contextMenu.clientIP}
         />
       )}
 
