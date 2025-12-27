@@ -16,6 +16,7 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 - **Customizable Colors** - Configure log level colors and detection patterns via Settings (Cmd-,)
 - **JSON Syntax Highlighting** - Collapsible, colorized JSON viewer for structured logs
 - **Find in Logs** - Search within the selected log entry with regex, case-sensitive, and whole-word options
+- **Context Menu** - Right-click for quick access to Copy, Find, Filter, Refresh, and Clear actions
 - **Virtualized Rendering** - Smooth scrolling through 50,000+ log entries
 - **Native Performance** - Built with Tauri for small bundle size and low memory usage
 - **Persistent State** - Remembers your last selected log group across sessions
@@ -163,7 +164,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Log group typeahead search
 - Ability to filter by request ID (i.e. select a specific message and see full context)
 - On unfilter, scroll to maintain selected row position
-- Add right-click menu (copy, show related, etc)
 - Debug / application logging for better troubleshooting
 - ! Cloudwatch Filter Syntax support
 - ! Regex filter support (`/pattern/`)

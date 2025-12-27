@@ -4,6 +4,7 @@ import { useLogStore } from "../stores/logStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
 import { FindBar } from "./FindBar";
+import { ContextMenu } from "./ContextMenu";
 import { useFindInLog } from "../hooks/useFindInLog";
 import {
   highlightText,
@@ -32,6 +33,11 @@ interface LogRowProps {
   selectedIndices: Set<number>;
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
   onRowMouseEnter: (index: number) => void;
+  onContextMenu: (
+    index: number,
+    e: React.MouseEvent,
+    isDetailView: boolean,
+  ) => void;
   onClose: () => void;
   isDark: boolean;
   // Find/search props
@@ -53,6 +59,11 @@ interface RowComponentPropsWithCustom {
   selectedIndices: Set<number>;
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
   onRowMouseEnter: (index: number) => void;
+  onContextMenu: (
+    index: number,
+    e: React.MouseEvent,
+    isDetailView: boolean,
+  ) => void;
   onClose: () => void;
   isDark: boolean;
   // Find/search props
@@ -74,6 +85,7 @@ function LogRow({
   selectedIndices,
   onRowMouseDown,
   onRowMouseEnter,
+  onContextMenu,
   onClose,
   isDark,
   searchTerm,
@@ -175,6 +187,7 @@ function LogRow({
         {/* Log content */}
         <div
           className={`rounded p-2 overflow-auto flex-1 min-h-0 ${isDark ? "bg-gray-950" : "bg-gray-100"}`}
+          onContextMenu={(e) => onContextMenu(expandedIndex, e, true)}
         >
           {log.parsedJson ? (
             <JsonSyntaxHighlight
@@ -246,6 +259,7 @@ function LogRow({
       }}
       onMouseDown={(e) => onRowMouseDown(actualLogIndex, e)}
       onMouseEnter={() => onRowMouseEnter(actualLogIndex)}
+      onContextMenu={(e) => onContextMenu(actualLogIndex, e, false)}
       className={rowClasses}
     >
       <span
@@ -292,6 +306,9 @@ export function LogViewer() {
     selectedLogIndices,
     setSelectedLogIndices,
     clearSelection,
+    refreshConnection,
+    clearLogs,
+    setFilterText,
   } = useLogStore();
   const { theme } = useSettingsStore();
 
@@ -353,6 +370,73 @@ export function LogViewer() {
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragCurrentIndex = useRef<number | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    selectedText: string;
+    targetLogIndex: number;
+  } | null>(null);
+
+  // Context menu handler
+  const handleContextMenu = useCallback(
+    (logIndex: number, e: React.MouseEvent, isDetailView: boolean) => {
+      e.preventDefault();
+
+      let selectedText = "";
+      if (isDetailView) {
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) {
+          selectedText = selection.toString().trim();
+        }
+      }
+
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        selectedText,
+        targetLogIndex: logIndex,
+      });
+    },
+    [],
+  );
+
+  // Context menu action handlers
+  const handleContextCopy = useCallback(() => {
+    if (contextMenu?.selectedText) {
+      navigator.clipboard.writeText(contextMenu.selectedText);
+    } else if (selectedLogIndices.size > 0) {
+      // Copy multi-selected rows
+      const messages = [...selectedLogIndices]
+        .sort((a, b) => a - b)
+        .map((i) => filteredLogs[i]?.message)
+        .filter(Boolean)
+        .join("\n");
+      navigator.clipboard.writeText(messages);
+    } else if (contextMenu?.targetLogIndex != null) {
+      // Copy single targeted row
+      navigator.clipboard.writeText(
+        filteredLogs[contextMenu.targetLogIndex]?.message || "",
+      );
+    }
+    setContextMenu(null);
+  }, [contextMenu, selectedLogIndices, filteredLogs]);
+
+  const handleFindBy = useCallback(() => {
+    if (contextMenu?.selectedText) {
+      findActions.setSearchTerm(contextMenu.selectedText);
+      findActions.open();
+    }
+    setContextMenu(null);
+  }, [contextMenu, findActions]);
+
+  const handleFilterBy = useCallback(() => {
+    if (contextMenu?.selectedText) {
+      setFilterText(contextMenu.selectedText);
+    }
+    setContextMenu(null);
+  }, [contextMenu, setFilterText]);
 
   const handleRowClick = useCallback(
     (index: number) => {
@@ -480,6 +564,13 @@ export function LogViewer() {
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Close context menu with Escape if it's open
+      if (e.key === "Escape" && contextMenu) {
+        e.preventDefault();
+        setContextMenu(null);
+        return;
+      }
+
       // Close find bar with Escape if it's open
       if (e.key === "Escape" && findState.isOpen) {
         e.preventDefault();
@@ -591,6 +682,7 @@ export function LogViewer() {
       clearSelection,
       findState.isOpen,
       findActions,
+      contextMenu,
     ],
   );
 
@@ -755,6 +847,23 @@ export function LogViewer() {
         isDark={isDark}
       />
 
+      {/* Context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          isDark={isDark}
+          onCopy={handleContextCopy}
+          onRefresh={refreshConnection}
+          onClear={clearLogs}
+          onFindBy={handleFindBy}
+          onFilterBy={handleFilterBy}
+          hasTextSelection={!!contextMenu.selectedText}
+          selectedText={contextMenu.selectedText}
+        />
+      )}
+
       <List<LogRowProps>
         listRef={listRef}
         rowCount={rowCount}
@@ -767,6 +876,7 @@ export function LogViewer() {
           selectedIndices: selectedLogIndices,
           onRowMouseDown: handleRowMouseDown,
           onRowMouseEnter: handleRowMouseEnter,
+          onContextMenu: handleContextMenu,
           onClose: handleCloseDetail,
           isDark,
           // Find/search props

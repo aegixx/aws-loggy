@@ -20,6 +20,7 @@ See `DESIGN.md` for full architecture documentation.
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/FilterBar.tsx` - Filter input and level toggles
 - `src/components/FindBar.tsx` - Find-in-log search bar (CMD-F)
+- `src/components/ContextMenu.tsx` - Right-click context menu for log rows
 - `src/components/SettingsDialog.tsx` - Settings dialog (CMD-,)
 - `src/components/StatusBar.tsx` - Status bar with log counts and cache usage
 - `src/hooks/useFindInLog.ts` - Find-in-log state management hook
@@ -85,6 +86,20 @@ No test framework currently configured. Tests welcome as future enhancement.
 | `Home` / `End`     | Jump to first / last log                     |
 | `Space` / `Enter`  | Expand / collapse selected log               |
 | `Escape`           | Close dialogs / collapse expanded log        |
+
+## Context Menu
+
+Right-click on any log row to access the context menu with the following options:
+
+| Action       | Description                                                   |
+| ------------ | ------------------------------------------------------------- |
+| Copy         | Copy selected text, multi-selected rows, or the clicked row   |
+| Find "..."   | Open Find dialog with selected text (requires text selection) |
+| Filter "..." | Filter logs by selected text (requires text selection)        |
+| Refresh      | Reconnect to AWS and re-query logs                            |
+| Clear        | Clear logs and re-fetch                                       |
+
+**Note**: "Find" and "Filter" options are only enabled when text is selected in the expanded detail view. Select text in the detail panel, then right-click to use these features.
 
 ## Notes
 
