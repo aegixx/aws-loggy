@@ -1,8 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { VscExpandAll, VscCollapseAll } from "react-icons/vsc";
 import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
+import { FindBar } from "./FindBar";
 import {
   highlightText,
+  findAllMatches,
+  defaultHighlightOptions,
   type HighlightOptions,
 } from "../utils/highlightMatches";
 import type { ParsedLogEvent } from "../types";
@@ -11,8 +14,6 @@ interface MaximizedLogViewProps {
   log: ParsedLogEvent;
   onClose: () => void;
   isDark: boolean;
-  searchTerm?: string;
-  searchOptions?: HighlightOptions;
 }
 
 function getLogLevelStyle(level: string): {
@@ -29,8 +30,6 @@ export function MaximizedLogView({
   log,
   onClose,
   isDark,
-  searchTerm,
-  searchOptions,
 }: MaximizedLogViewProps) {
   const [copied, setCopied] = useState(false);
   // Track expand/collapse state - increment key to force remount with new defaultExpanded
@@ -38,6 +37,21 @@ export function MaximizedLogView({
     expanded: boolean;
     key: number;
   }>({ expanded: true, key: 0 });
+
+  // Local find state
+  const [findOpen, setFindOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchOptions, setSearchOptions] = useState<HighlightOptions>(
+    defaultHighlightOptions,
+  );
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const findInputRef = useRef<HTMLInputElement>(null);
+
+  // Count matches in the log message
+  const matches = useMemo(() => {
+    if (!findOpen || !searchTerm) return [];
+    return findAllMatches(log.message, searchTerm, searchOptions);
+  }, [findOpen, searchTerm, searchOptions, log.message]);
 
   const handleExpandAll = useCallback(() => {
     setExpandState((prev) => ({ expanded: true, key: prev.key + 1 }));
@@ -47,18 +61,72 @@ export function MaximizedLogView({
     setExpandState((prev) => ({ expanded: false, key: prev.key + 1 }));
   }, []);
 
-  // Handle ESC key to close
+  const handleOpenFind = useCallback(() => {
+    setFindOpen(true);
+    setTimeout(() => {
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    }, 0);
+  }, []);
+
+  const handleCloseFind = useCallback(() => {
+    setFindOpen(false);
+    setSearchTerm("");
+    setCurrentMatchIndex(0);
+  }, []);
+
+  const handleSearchTermChange = useCallback((term: string) => {
+    setSearchTerm(term);
+    setCurrentMatchIndex(0);
+  }, []);
+
+  const handleToggleOption = useCallback((option: keyof HighlightOptions) => {
+    setSearchOptions((prev) => ({
+      ...prev,
+      [option]: !prev[option],
+    }));
+    setCurrentMatchIndex(0);
+  }, []);
+
+  const handleNavigate = useCallback(
+    (direction: "prev" | "next") => {
+      if (matches.length === 0) return;
+      if (direction === "next") {
+        setCurrentMatchIndex((prev) => (prev + 1) % matches.length);
+      } else {
+        setCurrentMatchIndex(
+          (prev) => (prev - 1 + matches.length) % matches.length,
+        );
+      }
+    },
+    [matches.length],
+  );
+
+  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+F to open find
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        e.stopPropagation();
+        handleOpenFind();
+        return;
+      }
+
+      // ESC to close find first, then close overlay
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        onClose();
+        if (findOpen) {
+          handleCloseFind();
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [onClose]);
+  }, [onClose, findOpen, handleOpenFind, handleCloseFind]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -236,6 +304,21 @@ export function MaximizedLogView({
           </div>
         </div>
 
+        {/* FindBar */}
+        <FindBar
+          isOpen={findOpen}
+          onClose={handleCloseFind}
+          searchTerm={searchTerm}
+          onSearchTermChange={handleSearchTermChange}
+          options={searchOptions}
+          onToggleOption={handleToggleOption}
+          currentMatchIndex={currentMatchIndex}
+          totalMatches={matches.length}
+          onNavigate={handleNavigate}
+          inputRef={findInputRef}
+          isDark={isDark}
+        />
+
         {/* Content */}
         <div
           className={`flex-1 overflow-auto p-4 ${
@@ -248,8 +331,8 @@ export function MaximizedLogView({
               data={log.parsedJson}
               defaultExpanded={expandState.expanded}
               isDark={isDark}
-              searchTerm={searchTerm}
-              searchOptions={searchOptions}
+              searchTerm={findOpen ? searchTerm : undefined}
+              searchOptions={findOpen ? searchOptions : undefined}
             />
           ) : (
             <pre
@@ -257,8 +340,13 @@ export function MaximizedLogView({
                 isDark ? "text-gray-300" : "text-gray-700"
               }`}
             >
-              {searchTerm && searchOptions
-                ? highlightText(log.message, searchTerm, searchOptions)
+              {findOpen && searchTerm
+                ? highlightText(
+                    log.message,
+                    searchTerm,
+                    searchOptions,
+                    currentMatchIndex,
+                  )
                 : log.message}
             </pre>
           )}

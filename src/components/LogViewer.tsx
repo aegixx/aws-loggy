@@ -164,10 +164,10 @@ function LogRow({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={handleCopy}
-              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer min-w-[52px] ${
+              className={`p-1 rounded transition-colors cursor-pointer ${
                 copied
                   ? "bg-green-600 text-white"
                   : isDark
@@ -176,11 +176,39 @@ function LogRow({
               }`}
               title="Copy raw message"
             >
-              {copied ? "Copied!" : "Copy"}
+              {copied ? (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+              )}
             </button>
             <button
               onClick={() => onMaximize(log)}
-              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+              className={`p-1 rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
               title="Maximize"
             >
               <svg
@@ -199,10 +227,22 @@ function LogRow({
             </button>
             <button
               onClick={onClose}
-              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+              className={`p-1 rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
               title="Close (Esc)"
             >
-              ×
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
             </button>
           </div>
         </div>
@@ -999,8 +1039,6 @@ export function LogViewer() {
           log={maximizedLog}
           onClose={() => setMaximizedLog(null)}
           isDark={isDark}
-          searchTerm={findState.isOpen ? findState.searchTerm : undefined}
-          searchOptions={findState.isOpen ? findState.options : undefined}
         />
       )}
     </div>
