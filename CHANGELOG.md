@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.0](https://github.com/aegixx/aws-loggy/compare/v1.9.0...v1.10.0) (2025-12-29)
+
+
+### Features
+
+* add Find functionality to maximized log view ([c790e16](https://github.com/aegixx/aws-loggy/commit/c790e16a687c0e128258fddc3557de71e9e425bb))
+* add maximize view for log records ([0789825](https://github.com/aegixx/aws-loggy/commit/0789825a39cda3949f9208bc9bed8aeebfe1cbcd))
+
 ## [1.9.0](https://github.com/aegixx/aws-loggy/compare/v1.8.1...v1.9.0) (2025-12-29)
 
 
