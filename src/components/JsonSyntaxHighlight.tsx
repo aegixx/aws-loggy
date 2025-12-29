@@ -40,25 +40,27 @@ function CollapsibleContainer({
   if (!isExpanded) {
     return (
       <span>
-        <button
+        <span
+          className={`cursor-pointer select-none ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}
           onClick={toggle}
-          className={`transition-colors cursor-pointer ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"}`}
-          title="Click to expand"
+          title={`Click to expand (${preview})`}
         >
-          <span className="mr-1">▶</span>
-          <span className={isDark ? "text-gray-400" : "text-gray-500"}>
-            {openBracket}
-          </span>
-          <span
-            className={`mx-1 ${isDark ? "text-gray-500" : "text-gray-600"}`}
-          >
-            {preview}
-          </span>
-          <span className={isDark ? "text-gray-400" : "text-gray-500"}>
-            {closeBracket}
-          </span>
-        </button>
+          ▶
+        </span>
         <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+          {" "}
+          {openBracket}
+        </span>
+        <span
+          className={`cursor-pointer ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}
+          onClick={toggle}
+          title={`Click to expand (${preview})`}
+        >
+          {" "}
+          {preview}{" "}
+        </span>
+        <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+          {closeBracket}
           {comma}
         </span>
       </span>
@@ -66,21 +68,24 @@ function CollapsibleContainer({
   }
 
   return (
-    <>
-      <button
+    <span>
+      <span
+        className={`cursor-pointer select-none ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}
         onClick={toggle}
-        className={`transition-colors cursor-pointer ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-500 hover:text-gray-700"}`}
-        title="Click to collapse"
+        title={`Click to collapse (${preview})`}
       >
-        <span className="mr-1">▼</span>
+        ▼
+      </span>
+      <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+        {" "}
         {openBracket}
-      </button>
+      </span>
       <div style={{ paddingLeft: "1rem" }}>{children}</div>
       <span className={isDark ? "text-gray-400" : "text-gray-500"}>
         {closeBracket}
         {comma}
       </span>
-    </>
+    </span>
   );
 }
 

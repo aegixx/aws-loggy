@@ -5,6 +5,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
 import { FindBar } from "./FindBar";
 import { ContextMenu } from "./ContextMenu";
+import { MaximizedLogView } from "./MaximizedLogView";
 import { useFindInLog } from "../hooks/useFindInLog";
 import {
   highlightText,
@@ -39,6 +40,7 @@ interface LogRowProps {
     isDetailView: boolean,
   ) => void;
   onClose: () => void;
+  onMaximize: (log: ParsedLogEvent) => void;
   isDark: boolean;
   // Find/search props
   searchTerm?: string;
@@ -65,6 +67,7 @@ interface RowComponentPropsWithCustom {
     isDetailView: boolean,
   ) => void;
   onClose: () => void;
+  onMaximize: (log: ParsedLogEvent) => void;
   isDark: boolean;
   // Find/search props
   searchTerm?: string;
@@ -87,6 +90,7 @@ function LogRow({
   onRowMouseEnter,
   onContextMenu,
   onClose,
+  onMaximize,
   isDark,
   searchTerm,
   searchOptions,
@@ -173,6 +177,25 @@ function LogRow({
               title="Copy raw message"
             >
               {copied ? "Copied!" : "Copy"}
+            </button>
+            <button
+              onClick={() => onMaximize(log)}
+              className={`px-2 py-0.5 text-xs rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+              title="Maximize"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"
+                />
+              </svg>
             </button>
             <button
               onClick={onClose}
@@ -388,6 +411,9 @@ export function LogViewer() {
     traceId: string | null;
     clientIP: string | null;
   } | null>(null);
+
+  // Maximized log state
+  const [maximizedLog, setMaximizedLog] = useState<ParsedLogEvent | null>(null);
 
   // Context menu handler
   const handleContextMenu = useCallback(
@@ -951,6 +977,7 @@ export function LogViewer() {
           onRowMouseEnter: handleRowMouseEnter,
           onContextMenu: handleContextMenu,
           onClose: handleCloseDetail,
+          onMaximize: setMaximizedLog,
           isDark,
           // Find/search props
           searchTerm: findState.isOpen ? findState.searchTerm : undefined,
@@ -965,6 +992,17 @@ export function LogViewer() {
         overscanCount={20}
         className="h-full"
       />
+
+      {/* Maximized log view */}
+      {maximizedLog && (
+        <MaximizedLogView
+          log={maximizedLog}
+          onClose={() => setMaximizedLog(null)}
+          isDark={isDark}
+          searchTerm={findState.isOpen ? findState.searchTerm : undefined}
+          searchOptions={findState.isOpen ? findState.options : undefined}
+        />
+      )}
     </div>
   );
 }
