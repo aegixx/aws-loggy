@@ -711,6 +711,11 @@ export function LogViewer() {
         return;
       }
 
+      // Don't handle other keys when Find dialog is open (allow typing in search input)
+      if (findState.isOpen) {
+        return;
+      }
+
       if (filteredLogs.length === 0) return;
 
       const currentIndex = selectedLogIndex ?? -1;
