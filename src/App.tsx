@@ -10,6 +10,7 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { AboutDialog } from "./components/AboutDialog";
 import { useLogStore } from "./stores/logStore";
 import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
+import { useSystemTheme } from "./hooks/useSystemTheme";
 import "./App.css";
 
 function App() {
@@ -197,22 +198,8 @@ function App() {
     }
   }, []);
 
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  // Compute effective dark mode
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+  // Get effective dark mode from theme setting
+  const isDark = useSystemTheme();
 
   // Get CSS variables for log level colors (theme-adaptive via color-mix)
   const cssVars = getLogLevelCssVars(logLevels, isDark);

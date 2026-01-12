@@ -5,6 +5,7 @@ import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { TimeRangePicker } from "./TimeRangePicker";
 import type { LogLevel } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
+import { useSystemTheme } from "../hooks/useSystemTheme";
 
 export function FilterBar() {
   const {
@@ -18,9 +19,10 @@ export function FilterBar() {
     logs,
     selectedLogGroup,
   } = useLogStore();
-  const { theme, logLevels } = useSettingsStore();
+  const { logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const isDark = useSystemTheme();
 
   // Local state for immediate input feedback
   const [inputValue, setInputValue] = useState(filterText);
@@ -54,22 +56,6 @@ export function FilterBar() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
 
   // Hide filter bar until a log group is selected
   if (!selectedLogGroup) {

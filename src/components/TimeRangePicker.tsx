@@ -3,6 +3,7 @@ import DatePicker from "react-datepicker";
 import { MdDateRange, MdArrowDropDown } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useSystemTheme } from "../hooks/useSystemTheme";
 import "react-datepicker/dist/react-datepicker.css";
 
 interface TimePreset {
@@ -28,7 +29,7 @@ export function TimeRangePicker() {
     selectedLogGroup,
     timeRange,
   } = useLogStore();
-  const { theme, persistedTimePreset, persistedTimeRange } = useSettingsStore();
+  const { persistedTimePreset, persistedTimeRange } = useSettingsStore();
   const [showCustom, setShowCustom] = useState(false);
   // Initialize activePreset from persisted value, default to "15m"
   const [activePreset, setActivePreset] = useState<string | null>(
@@ -53,22 +54,7 @@ export function TimeRangePicker() {
     return new Date();
   });
   const customRef = useRef<HTMLDivElement>(null);
-
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+  const isDark = useSystemTheme();
 
   // Sync activePreset with store's timeRange (e.g., when Clear resets timeRange to null)
   useEffect(() => {

@@ -8,16 +8,17 @@ import {
 } from "react";
 import { List, ListImperativeAPI } from "react-window";
 import { useLogStore } from "../stores/logStore";
-import { useSettingsStore } from "../stores/settingsStore";
 import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
 import { FindBar } from "./FindBar";
 import { ContextMenu } from "./ContextMenu";
 import { MaximizedLogView } from "./MaximizedLogView";
 import { useFindInLog } from "../hooks/useFindInLog";
+import { useSystemTheme } from "../hooks/useSystemTheme";
 import {
   highlightText,
   type HighlightOptions,
 } from "../utils/highlightMatches";
+import { extractFieldVariants } from "../utils/extractFieldVariants";
 import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
@@ -387,23 +388,7 @@ export function LogViewer() {
     clearLogs,
     setFilterText,
   } = useLogStore();
-  const { theme } = useSettingsStore();
-
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+  const isDark = useSystemTheme();
   const listRef = useRef<ListImperativeAPI>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
@@ -479,27 +464,13 @@ export function LogViewer() {
       // Check both top-level and nested under metadata
       const targetLog = filteredLogs[logIndex];
       const json = targetLog?.parsedJson;
-      const metadata = json?.metadata as Record<string, unknown> | undefined;
-      const requestId =
-        (json?.requestId as string) ||
-        (json?.RequestId as string) ||
-        (metadata?.requestId as string) ||
-        (metadata?.RequestId as string) ||
-        null;
-      const traceId =
-        (json?.traceId as string) ||
-        (json?.TraceId as string) ||
-        (metadata?.traceId as string) ||
-        (metadata?.TraceId as string) ||
-        null;
+
+      // Extract common fields using the utility function
+      const requestId = extractFieldVariants(json, "requestId");
+      const traceId = extractFieldVariants(json, "traceId");
       const clientIP =
-        (json?.clientIP as string) ||
-        (json?.ClientIP as string) ||
-        (json?.clientIp as string) ||
-        (metadata?.clientIP as string) ||
-        (metadata?.ClientIP as string) ||
-        (metadata?.clientIp as string) ||
-        null;
+        extractFieldVariants(json, "clientIP") ||
+        extractFieldVariants(json, "clientIp");
 
       setContextMenu({
         x: e.clientX,
