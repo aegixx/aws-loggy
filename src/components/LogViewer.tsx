@@ -15,6 +15,7 @@ import { MaximizedLogView } from "./MaximizedLogView";
 import { useFindInLog } from "../hooks/useFindInLog";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import { useDragSelection } from "../hooks/useDragSelection";
+import { useKeyboardNavigation } from "../hooks/useKeyboardNavigation";
 import {
   highlightText,
   type HighlightOptions,
@@ -586,135 +587,23 @@ export function LogViewer() {
     return () => window.removeEventListener("keydown", handleWindowKeyDown);
   }, [findState.isOpen, findActions]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      // Close context menu with Escape if it's open
-      if (e.key === "Escape" && contextMenu) {
-        e.preventDefault();
-        setContextMenu(null);
-        return;
-      }
-
-      // Close find bar with Escape if it's open
-      if (e.key === "Escape" && findState.isOpen) {
-        e.preventDefault();
-        findActions.close();
-        return;
-      }
-
-      // Don't handle other keys when Find dialog is open (allow typing in search input)
-      if (findState.isOpen) {
-        return;
-      }
-
-      if (filteredLogs.length === 0) return;
-
-      const currentIndex = selectedLogIndex ?? -1;
-      let newIndex: number | null = null;
-
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          newIndex = Math.min(currentIndex + 1, filteredLogs.length - 1);
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          newIndex = Math.max(currentIndex - 1, 0);
-          break;
-        case "PageDown":
-          e.preventDefault();
-          newIndex = Math.min(
-            currentIndex + getVisibleRowCount(),
-            filteredLogs.length - 1,
-          );
-          break;
-        case "PageUp":
-          e.preventDefault();
-          newIndex = Math.max(currentIndex - getVisibleRowCount(), 0);
-          break;
-        case "Home":
-          e.preventDefault();
-          newIndex = 0;
-          break;
-        case "End":
-          e.preventDefault();
-          newIndex = filteredLogs.length - 1;
-          break;
-        case " ":
-        case "Enter":
-          e.preventDefault();
-          if (selectedLogIndex !== null) {
-            setExpandedLogIndex(
-              expandedLogIndex === selectedLogIndex ? null : selectedLogIndex,
-            );
-          }
-          return;
-        case "Escape":
-          e.preventDefault();
-          if (expandedLogIndex !== null) {
-            setExpandedLogIndex(null);
-          }
-          if (selectedLogIndices.size > 0) {
-            clearSelection();
-          }
-          return;
-        case "c":
-          // Handle Cmd+C / Ctrl+C for copying selected messages
-          if ((e.metaKey || e.ctrlKey) && selectedLogIndices.size > 0) {
-            e.preventDefault();
-            const messages = [...selectedLogIndices]
-              .sort((a, b) => a - b)
-              .map((i) => filteredLogs[i]?.message)
-              .filter(Boolean)
-              .join("\n");
-            navigator.clipboard.writeText(messages);
-          }
-          return;
-        case "a":
-          // Handle Cmd+A / Ctrl+A to select all visible logs
-          if (e.metaKey || e.ctrlKey) {
-            e.preventDefault();
-            const allIndices = new Set<number>(
-              Array.from({ length: filteredLogs.length }, (_, i) => i),
-            );
-            setSelectedLogIndices(allIndices);
-            // Collapse any expanded log when selecting all
-            if (expandedLogIndex !== null) {
-              setExpandedLogIndex(null);
-            }
-          }
-          return;
-      }
-
-      if (newIndex !== null && newIndex !== currentIndex) {
-        setSelectedLogIndex(newIndex);
-        // Scroll to keep selected row visible
-        if (listRef.current) {
-          listRef.current.scrollToRow({
-            index:
-              expandedLogIndex !== null && newIndex > expandedLogIndex
-                ? newIndex + 1
-                : newIndex,
-            align: "smart",
-          });
-        }
-      }
-    },
-    [
-      filteredLogs,
-      selectedLogIndex,
-      expandedLogIndex,
-      setSelectedLogIndex,
-      setExpandedLogIndex,
-      getVisibleRowCount,
-      selectedLogIndices,
-      clearSelection,
-      findState.isOpen,
-      findActions,
-      contextMenu,
-    ],
-  );
+  // Keyboard navigation hook
+  const { handleKeyDown } = useKeyboardNavigation({
+    filteredLogs,
+    selectedLogIndex,
+    expandedLogIndex,
+    setSelectedLogIndex,
+    setExpandedLogIndex,
+    getVisibleRowCount,
+    selectedLogIndices,
+    clearSelection,
+    setSelectedLogIndices,
+    findStateIsOpen: findState.isOpen,
+    findActionsClose: findActions.close,
+    contextMenu,
+    setContextMenu,
+    listRef,
+  });
 
   // Calculate row count (add 1 for detail row when expanded)
   const rowCount =
