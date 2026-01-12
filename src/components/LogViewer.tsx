@@ -1,4 +1,11 @@
-import { useRef, useEffect, useCallback, useState, CSSProperties } from "react";
+import {
+  useRef,
+  useEffect,
+  useCallback,
+  useState,
+  CSSProperties,
+  memo,
+} from "react";
 import { List, ListImperativeAPI } from "react-window";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -79,7 +86,7 @@ interface RowComponentPropsWithCustom {
   ) => { index: number; start: number; length: number }[];
 }
 
-function LogRow({
+const LogRow = memo(function LogRow({
   index,
   style,
   logs,
@@ -360,7 +367,7 @@ function LogRow({
       </span>
     </div>
   );
-}
+});
 
 export function LogViewer() {
   const {
@@ -1012,7 +1019,7 @@ export function LogViewer() {
         listRef={listRef}
         rowCount={rowCount}
         rowHeight={getRowHeight}
-        rowComponent={LogRow}
+        rowComponent={LogRow as any}
         rowProps={{
           logs: filteredLogs,
           expandedIndex: expandedLogIndex,

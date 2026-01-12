@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { MdFilterAltOff, MdDeleteOutline } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
@@ -76,13 +76,17 @@ export function FilterBar() {
     return null;
   }
 
-  // Count logs by level
-  const levelCounts = logs.reduce(
-    (acc, log) => {
-      acc[log.level] = (acc[log.level] || 0) + 1;
-      return acc;
-    },
-    {} as Record<LogLevel, number>,
+  // Count logs by level (memoized to avoid O(n) recalculation on every render)
+  const levelCounts = useMemo(
+    () =>
+      logs.reduce(
+        (acc, log) => {
+          acc[log.level] = (acc[log.level] || 0) + 1;
+          return acc;
+        },
+        {} as Record<LogLevel, number>,
+      ),
+    [logs],
   );
 
   return (

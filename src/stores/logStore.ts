@@ -27,6 +27,40 @@ function getKeywordRegex(keyword: string): RegExp {
   return regex;
 }
 
+// Cache for filtered results (memoization to avoid redundant filtering)
+interface FilterCache {
+  logs: ParsedLogEvent[];
+  filterText: string;
+  disabledLevels: Set<LogLevel>;
+  result: ParsedLogEvent[];
+}
+
+let filterCache: FilterCache | null = null;
+
+function getFilteredLogs(
+  logs: ParsedLogEvent[],
+  filterText: string,
+  disabledLevels: Set<LogLevel>,
+): ParsedLogEvent[] {
+  // Check if we can use cached result
+  if (
+    filterCache &&
+    filterCache.logs === logs &&
+    filterCache.filterText === filterText &&
+    filterCache.disabledLevels === disabledLevels
+  ) {
+    return filterCache.result;
+  }
+
+  // Compute new result
+  const result = filterLogs(logs, filterText, disabledLevels);
+
+  // Update cache
+  filterCache = { logs, filterText, disabledLevels, result };
+
+  return result;
+}
+
 interface AwsConnectionInfo {
   profile: string | null;
   region: string | null;
@@ -512,7 +546,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       // Merge fragmented logs before parsing (CloudWatch splits large messages)
       const mergedLogs = mergeFragmentedLogs(rawLogs);
       const parsedLogs = mergedLogs.map(parseLogEvent);
-      const filtered = filterLogs(parsedLogs, filterText, disabledLevels);
+      const filtered = getFilteredLogs(parsedLogs, filterText, disabledLevels);
 
       // Calculate total size of loaded logs (use merged to reflect actual content)
       const totalSize = mergedLogs.reduce(
@@ -537,7 +571,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   setFilterText: (text: string) => {
     console.log("[User Activity] Set filter text:", text || "(empty)");
     const { logs, disabledLevels } = get();
-    const filtered = filterLogs(logs, text, disabledLevels);
+    const filtered = getFilteredLogs(logs, text, disabledLevels);
     set({
       filterText: text,
       filteredLogs: filtered,
@@ -558,7 +592,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       newDisabled.add(level);
       console.log("[User Activity] Disable level:", level);
     }
-    const filtered = filterLogs(logs, filterText, newDisabled);
+    const filtered = getFilteredLogs(logs, filterText, newDisabled);
     set({
       disabledLevels: newDisabled,
       filteredLogs: filtered,
@@ -690,7 +724,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
           // Keep max 50000 logs in memory
           const trimmedLogs = allLogs.slice(-50000);
-          const filtered = filterLogs(trimmedLogs, filterText, disabledLevels);
+          const filtered = getFilteredLogs(
+            trimmedLogs,
+            filterText,
+            disabledLevels,
+          );
 
           set({ logs: trimmedLogs, filteredLogs: filtered });
         }
