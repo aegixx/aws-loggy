@@ -47,6 +47,30 @@ pub struct AppState {
     pub current_profile: Arc<Mutex<Option<String>>>,
 }
 
+/// Validates an AWS profile name for security
+/// Checks: max length, allowed characters, no path traversal
+fn validate_profile_name(profile: &str) -> Result<(), String> {
+    // Max length check
+    if profile.len() > 64 {
+        return Err("Profile name too long".to_string());
+    }
+
+    // Character whitelist: alphanumeric, hyphen, underscore, dot
+    if !profile
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err("Profile name contains invalid characters".to_string());
+    }
+
+    // No path traversal attempts
+    if profile.contains("..") || profile.contains('/') || profile.contains('\\') {
+        return Err("Profile name contains path characters".to_string());
+    }
+
+    Ok(())
+}
+
 impl Default for AppState {
     fn default() -> Self {
         Self {
@@ -227,6 +251,14 @@ async fn open_sso_login_url(
 ) -> Result<(), String> {
     eprintln!("=== Attempting to open SSO URL for profile ===");
 
+    // Validate profile if provided
+    if let Some(p) = &profile {
+        if let Err(e) = validate_profile_name(p) {
+            eprintln!("Invalid profile name: {}", e);
+            return Err(format!("Invalid profile name: {}", e));
+        }
+    }
+
     let profile_clone = profile.cloned();
 
     // Use AWS CLI to handle profile-aware SSO login
@@ -271,6 +303,11 @@ fn emit_debug_log(app: Option<&AppHandle>, message: &str) {
 /// Trigger SSO login for a profile
 #[tauri::command]
 async fn trigger_sso_login(profile: Option<String>) -> Result<(), String> {
+    // Validate profile if provided
+    if let Some(p) = &profile {
+        validate_profile_name(p)?;
+    }
+
     let mut cmd = std::process::Command::new("aws");
     cmd.arg("sso").arg("login");
 
