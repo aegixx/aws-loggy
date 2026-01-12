@@ -4,6 +4,7 @@ import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { TimeRangePicker } from "./TimeRangePicker";
 import type { LogLevel } from "../types";
+import { useDebounce } from "../hooks/useDebounce";
 
 export function FilterBar() {
   const {
@@ -20,6 +21,24 @@ export function FilterBar() {
   const { theme, logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
   const filterInputRef = useRef<HTMLInputElement>(null);
+
+  // Local state for immediate input feedback
+  const [inputValue, setInputValue] = useState(filterText);
+
+  // Debounce the filter operation by 300ms
+  const debouncedFilterText = useDebounce(inputValue, 300);
+
+  // Sync debounced value to store
+  useEffect(() => {
+    if (debouncedFilterText !== filterText) {
+      setFilterText(debouncedFilterText);
+    }
+  }, [debouncedFilterText, filterText, setFilterText]);
+
+  // Sync store value to input (for external changes like Clear button)
+  useEffect(() => {
+    setInputValue(filterText);
+  }, [filterText]);
 
   // Handle CMD-L to focus filter input
   useEffect(() => {
@@ -77,14 +96,14 @@ export function FilterBar() {
           <input
             ref={filterInputRef}
             type="text"
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             placeholder="Filter logs... (use field:value for JSON fields)"
             className={`w-full rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 placeholder-gray-500" : "bg-white border border-gray-300 placeholder-gray-400"}`}
           />
-          {filterText && (
+          {inputValue && (
             <button
-              onClick={() => setFilterText("")}
+              onClick={() => setInputValue("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 cursor-pointer"
             >
               ×

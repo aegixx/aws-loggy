@@ -1,10 +1,11 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   findAllMatches,
   type HighlightOptions,
   type MatchInfo,
   defaultHighlightOptions,
 } from "../utils/highlightMatches";
+import { useDebounce } from "./useDebounce";
 
 // Extended match info that includes which log the match is in
 export interface LogMatch extends MatchInfo {
@@ -43,12 +44,24 @@ export function useFindInLog(
   onNavigateToLog?: (logIndex: number) => void,
 ): [FindState, FindActions] {
   const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
   const [searchTerm, setSearchTermState] = useState("");
   const [options, setOptions] = useState<HighlightOptions>(
     defaultHighlightOptions,
   );
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce search term by 300ms
+  const debouncedSearchTerm = useDebounce(inputValue, 300);
+
+  // Sync debounced value to actual search term
+  useEffect(() => {
+    if (debouncedSearchTerm !== searchTerm) {
+      setSearchTermState(debouncedSearchTerm);
+      setCurrentMatchIndex(0);
+    }
+  }, [debouncedSearchTerm, searchTerm]);
 
   // Compute matches across all logs
   const matches = useMemo(() => {
@@ -116,13 +129,14 @@ export function useFindInLog(
 
   const close = useCallback(() => {
     setIsOpen(false);
+    setInputValue("");
     setSearchTermState("");
     setCurrentMatchIndex(0);
   }, []);
 
   const setSearchTerm = useCallback((term: string) => {
-    setSearchTermState(term);
-    setCurrentMatchIndex(0);
+    setInputValue(term);
+    // Note: actual searchTerm will be updated via debounce effect
   }, []);
 
   const toggleOption = useCallback((option: keyof HighlightOptions) => {
@@ -160,7 +174,7 @@ export function useFindInLog(
 
   const state: FindState = {
     isOpen,
-    searchTerm,
+    searchTerm: inputValue, // Return input value for immediate UI feedback
     options,
     currentMatchIndex: clampedCurrentMatchIndex,
     matches,
