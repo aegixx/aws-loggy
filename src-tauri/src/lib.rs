@@ -136,14 +136,14 @@ fn profile_uses_sso(profile: Option<&String>) -> bool {
 fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
     let config_path = get_aws_config_path()?;
     if !config_path.exists() {
-        eprintln!("AWS config file not found at: {:?}", config_path);
+        log::debug!("AWS config file not found at: {:?}", config_path);
         return None;
     }
 
     let contents = match std::fs::read_to_string(&config_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to read AWS config file: {}", e);
+            log::debug!("Failed to read AWS config file: {}", e);
             return None;
         }
     };
@@ -157,7 +157,7 @@ fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
         env_profile.as_deref().unwrap_or("default")
     };
 
-    eprintln!("Looking for SSO start URL for profile: {}", profile_name);
+    log::debug!("Looking for SSO start URL for profile: {}", profile_name);
 
     let mut in_target_section = false;
 
@@ -180,7 +180,7 @@ fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
                 }
             }
             if in_target_section {
-                eprintln!("Found profile section: {}", line);
+                log::debug!("Found profile section: {}", line);
             }
             continue;
         }
@@ -191,14 +191,14 @@ fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
                 // Handle both "sso_start_url = ..." and "sso_start_url=..." formats
                 let url = url.trim_start_matches(|c: char| c == '=' || c.is_whitespace());
                 if !url.is_empty() {
-                    eprintln!("Found SSO start URL: {}", url);
+                    log::debug!("Found SSO start URL: {}", url);
                     return Some(url.to_string());
                 }
             }
         }
     }
 
-    eprintln!("SSO start URL not found for profile: {}", profile_name);
+    log::debug!("SSO start URL not found for profile: {}", profile_name);
     None
 }
 
@@ -249,12 +249,12 @@ async fn open_sso_login_url(
     app: AppHandle,
     profile: Option<&String>,
 ) -> Result<(), String> {
-    eprintln!("=== Attempting to open SSO URL for profile ===");
+    log::debug!("=== Attempting to open SSO URL for profile ===");
 
     // Validate profile if provided
     if let Some(p) = &profile {
         if let Err(e) = validate_profile_name(p) {
-            eprintln!("Invalid profile name: {}", e);
+            log::error!("Invalid profile name: {}", e);
             return Err(format!("Invalid profile name: {}", e));
         }
     }
@@ -267,15 +267,15 @@ async fn open_sso_login_url(
 
     if let Some(p) = profile {
         cmd.arg("--profile").arg(p);
-        eprintln!("Using profile: {}", p);
+        log::info!("Using profile: {}", p);
     } else {
-        eprintln!("No profile specified, using default");
+        log::info!("No profile specified, using default");
     }
 
     // Spawn the command - it will open the browser automatically
     match cmd.spawn() {
         Ok(_) => {
-            eprintln!("Successfully started AWS SSO login");
+            log::info!("Successfully started AWS SSO login");
 
             // Start polling for credentials to become valid (poll for up to 2 minutes)
             let app_clone = app.clone();
@@ -286,7 +286,7 @@ async fn open_sso_login_url(
             Ok(())
         }
         Err(e) => {
-            eprintln!("ERROR: Failed to start AWS SSO login: {}", e);
+            log::error!("Failed to start AWS SSO login: {}", e);
             Err(format!("Failed to start AWS SSO login: {}", e))
         }
     }
@@ -294,7 +294,7 @@ async fn open_sso_login_url(
 
 /// Emit a debug log message to the frontend
 fn emit_debug_log(app: Option<&AppHandle>, message: &str) {
-    eprintln!("{}", message);
+    log::debug!("{}", message);
     if let Some(app_handle) = app {
         app_handle.emit("debug-log", message).ok();
     }
@@ -335,7 +335,7 @@ fn get_app_version() -> String {
 
 /// Check if an error indicates the SSO session has expired (requires browser re-auth)
 fn is_sso_session_expired(error_msg: &str) -> bool {
-    eprintln!("Checking if error is SSO expiration: {}", error_msg);
+    log::debug!("Checking if error is SSO expiration: {}", error_msg);
     let error_lower = error_msg.to_lowercase();
     let is_expired = error_lower.contains("token has expired")
         || error_lower.contains("sso session")
@@ -352,9 +352,9 @@ fn is_sso_session_expired(error_msg: &str) -> bool {
         || error_lower.contains("failed to load credentials");
 
     if is_expired {
-        eprintln!("✓ SSO expiration detected!");
+        log::debug!("✓ SSO expiration detected!");
     } else {
-        eprintln!("✗ Not detected as SSO expiration");
+        log::debug!("✗ Not detected as SSO expiration");
     }
 
     is_expired
@@ -375,7 +375,7 @@ async fn handle_sso_expiration(
 
     // Try to open the SSO URL
     if let Err(e) = open_sso_login_url(app.clone(), current_profile.as_ref()).await {
-        eprintln!("Failed to open SSO URL: {}", e);
+        log::error!("Failed to open SSO URL: {}", e);
         // Continue anyway - we'll still emit the event
     }
 
@@ -632,7 +632,7 @@ async fn init_aws_client(
             if is_sso_session_expired(&error_msg) {
                 // Try to open SSO URL automatically
                 if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
-                    eprintln!("Failed to open SSO URL: {}", e);
+                    log::error!("Failed to open SSO URL: {}", e);
                 }
                 return Err(
                     "Your AWS session has expired. Please run 'aws sso login' to refresh."
@@ -1037,6 +1037,9 @@ async fn fetch_logs_paginated(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logging
+    env_logger::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
