@@ -6,10 +6,7 @@ import {
   LOG_LEVEL_JSON_FIELDS,
   getSortedLogLevels,
 } from "./settingsStore";
-
-// Module-level variables to track tail state (survives HMR)
-let tailIntervalId: ReturnType<typeof setInterval> | null = null;
-let tailStartTimestamp: number | null = null;
+import { TailPoller } from "./TailPoller";
 
 // Cache for compiled keyword regex patterns (avoids recompiling on every log)
 const keywordRegexCache = new Map<string, RegExp>();
@@ -104,6 +101,7 @@ interface LogStore {
 
   // Live tail
   isTailing: boolean;
+  tailPoller: TailPoller | null;
 
   // Actions
   initializeAws: () => Promise<void>;
@@ -130,7 +128,7 @@ interface LogStore {
   setSessionExpired: () => void;
 }
 
-function parseLogLevel(
+export function parseLogLevel(
   message: string,
   parsedJson: Record<string, unknown> | null,
 ): LogLevel {
@@ -368,6 +366,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectedLogIndices: new Set(),
   timeRange: null,
   isTailing: false,
+  tailPoller: null,
 
   initializeAws: async () => {
     set({ isConnecting: true, connectionError: null });
@@ -645,22 +644,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   startTail: () => {
-    const { isTailing, selectedLogGroup } = get();
+    const { isTailing, selectedLogGroup, tailPoller } = get();
     if (!selectedLogGroup) return;
 
     // If already tailing, don't start another interval
     if (isTailing) return;
 
-    // Defensive: clear any orphaned interval (survives HMR)
-    if (tailIntervalId) {
-      clearInterval(tailIntervalId);
-      tailIntervalId = null;
+    // Stop any existing poller (defensive, survives HMR)
+    if (tailPoller) {
+      tailPoller.stop();
     }
-
-    console.log("[User Activity] Start live tail");
-
-    // Track when tail started - used to filter out older logs
-    tailStartTimestamp = Date.now();
 
     // Clear existing logs - live tail starts fresh from now
     set({
@@ -670,93 +663,58 @@ export const useLogStore = create<LogStore>((set, get) => ({
       selectedLogIndex: null,
     });
 
-    // Set up polling with module-level variable (survives HMR)
-    tailIntervalId = setInterval(async () => {
-      const { logs, filterText, disabledLevels } = get();
-      // If logs exist, fetch from last timestamp
-      // If starting fresh with tailStartTimestamp set, poll from that point (no lookback)
-      // Otherwise look back 30s to account for CloudWatch delivery latency
-      const lastTimestamp =
-        logs.length > 0
-          ? logs[logs.length - 1].timestamp
-          : tailStartTimestamp
-            ? tailStartTimestamp - 1
-            : Date.now() - 30000;
+    // Create new TailPoller instance
+    const newPoller = new TailPoller(
+      selectedLogGroup,
+      (newLogs: LogEvent[]) => {
+        // Handle new logs from poller
+        const { logs, filterText, disabledLevels } = get();
+        // Merge fragmented logs before parsing
+        const mergedNew = mergeFragmentedLogs(newLogs);
+        const parsedNew = mergedNew.map(parseLogEvent);
+        const allLogs = [...logs, ...parsedNew];
 
-      console.log("[Backend Activity] Polling from timestamp:", lastTimestamp);
+        // Keep max 50000 logs in memory
+        const trimmedLogs = allLogs.slice(-50000);
+        const filtered = getFilteredLogs(
+          trimmedLogs,
+          filterText,
+          disabledLevels,
+        );
 
-      try {
-        const newLogs = await invoke<LogEvent[]>("fetch_logs", {
-          logGroupName: get().selectedLogGroup,
-          startTime: lastTimestamp + 1,
-          endTime: null,
-          filterPattern: null,
-          limit: 100,
-        });
-
-        if (newLogs.length > 0) {
-          // Filter out logs older than when the tail started (handles lookback window)
-          const filteredByTime = tailStartTimestamp
-            ? newLogs.filter((log) => log.timestamp >= tailStartTimestamp!)
-            : newLogs;
-
-          if (filteredByTime.length === 0) {
-            return;
-          }
-
-          // Once we've received logs past our start timestamp, we've caught up - disable filter for performance
-          if (tailStartTimestamp) {
-            console.log(
-              "[Backend Activity] Caught up to tail start, disabling time filter",
-            );
-            tailStartTimestamp = null;
-          }
-
-          console.log(
-            "[Backend Activity] Fetched",
-            filteredByTime.length,
-            "new logs",
-          );
-          // Merge fragmented logs before parsing
-          const mergedNew = mergeFragmentedLogs(filteredByTime);
-          const parsedNew = mergedNew.map(parseLogEvent);
-          const allLogs = [...get().logs, ...parsedNew];
-
-          // Keep max 50000 logs in memory
-          const trimmedLogs = allLogs.slice(-50000);
-          const filtered = getFilteredLogs(
-            trimmedLogs,
-            filterText,
-            disabledLevels,
-          );
-
-          set({ logs: trimmedLogs, filteredLogs: filtered });
-        }
-      } catch (error) {
+        set({ logs: trimmedLogs, filteredLogs: filtered });
+      },
+      (error: unknown) => {
         console.error("[Backend Activity] Tail fetch error:", error);
-      }
-    }, 2000);
+      },
+      () => {
+        // Get last log timestamp
+        const { logs } = get();
+        return logs.length > 0 ? logs[logs.length - 1].timestamp : null;
+      },
+    );
 
-    set({ isTailing: true });
+    newPoller.start();
+
+    set({ isTailing: true, tailPoller: newPoller });
   },
 
   stopTail: () => {
-    if (tailIntervalId) {
-      console.log("[User Activity] Stop live tail");
-      clearInterval(tailIntervalId);
-      tailIntervalId = null;
+    const { tailPoller } = get();
+    if (tailPoller) {
+      tailPoller.stop();
     }
-    tailStartTimestamp = null;
-    set({ isTailing: false });
+    set({ isTailing: false, tailPoller: null });
   },
 
   clearLogs: () => {
     console.log("[User Activity] Clear logs");
-    const { selectedLogGroup, fetchLogs, timeRange, isTailing } = get();
+    const { selectedLogGroup, fetchLogs, timeRange, isTailing, tailPoller } =
+      get();
 
     // If tailing, reset the tail start timestamp so we only show logs from now
-    if (isTailing) {
-      tailStartTimestamp = Date.now();
+    if (isTailing && tailPoller) {
+      tailPoller.resetStartTimestamp();
     }
 
     // Clear logs but keep current filters
