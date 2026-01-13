@@ -122,7 +122,8 @@ export class TailPoller {
   private calculatePollTimestamp(): number {
     const lastTimestamp = this.getLastLogTimestamp();
     if (lastTimestamp) {
-      return lastTimestamp;
+      // Add 1ms to exclude logs we already have (CloudWatch uses >= for startTime)
+      return lastTimestamp + 1;
     }
     return this.startTimestamp ? this.startTimestamp - 1 : Date.now() - 30000;
   }

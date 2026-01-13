@@ -669,8 +669,26 @@ export const useLogStore = create<LogStore>((set, get) => ({
       (newLogs: LogEvent[]) => {
         // Handle new logs from poller
         const { logs, filterText, disabledLevels } = get();
+
+        // Deduplicate: filter out logs we already have (by event_id or timestamp+message)
+        const existingIds = new Set(
+          logs.map((l) => l.event_id).filter(Boolean),
+        );
+        const existingKeys = new Set(
+          logs.map((l) => `${l.timestamp}:${l.message.slice(0, 100)}`),
+        );
+        const uniqueNewLogs = newLogs.filter((log) => {
+          if (log.event_id && existingIds.has(log.event_id)) return false;
+          const key = `${log.timestamp}:${log.message.slice(0, 100)}`;
+          return !existingKeys.has(key);
+        });
+
+        if (uniqueNewLogs.length === 0) {
+          return; // No new unique logs
+        }
+
         // Merge fragmented logs before parsing
-        const mergedNew = mergeFragmentedLogs(newLogs);
+        const mergedNew = mergeFragmentedLogs(uniqueNewLogs);
         const parsedNew = mergedNew.map(parseLogEvent);
         const allLogs = [...logs, ...parsedNew];
 
