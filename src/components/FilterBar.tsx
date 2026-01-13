@@ -57,11 +57,6 @@ export function FilterBar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Hide filter bar until a log group is selected
-  if (!selectedLogGroup) {
-    return null;
-  }
-
   // Count logs by level (memoized to avoid O(n) recalculation on every render)
   const levelCounts = useMemo(
     () =>
@@ -74,6 +69,11 @@ export function FilterBar() {
       ),
     [logs],
   );
+
+  // Hide filter bar until a log group is selected
+  if (!selectedLogGroup) {
+    return null;
+  }
 
   return (
     <div
