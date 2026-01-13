@@ -8,6 +8,9 @@ import {
 } from "./settingsStore";
 import { TailPoller } from "./TailPoller";
 
+// Request ID for cancelling stale fetch requests
+let currentFetchId = 0;
+
 // Cache for compiled keyword regex patterns (avoids recompiling on every log)
 const keywordRegexCache = new Map<string, RegExp>();
 
@@ -511,6 +514,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const { selectedLogGroup, filterText, disabledLevels } = get();
     if (!selectedLogGroup) return;
 
+    // Increment fetch ID to cancel any in-flight requests
+    const fetchId = ++currentFetchId;
+
     set({
       isLoading: true,
       loadingProgress: 0,
@@ -542,6 +548,12 @@ export const useLogStore = create<LogStore>((set, get) => ({
         maxSizeMb: cacheLimits.maxSizeMb,
       });
 
+      // Check if this request is still current (user may have started a new fetch)
+      if (fetchId !== currentFetchId) {
+        console.log("[Backend Activity] Discarding stale fetch results");
+        return;
+      }
+
       // Merge fragmented logs before parsing (CloudWatch splits large messages)
       const mergedLogs = mergeFragmentedLogs(rawLogs);
       const parsedLogs = mergedLogs.map(parseLogEvent);
@@ -560,10 +572,13 @@ export const useLogStore = create<LogStore>((set, get) => ({
         totalSizeBytes: totalSize,
       });
     } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : String(error),
-        isLoading: false,
-      });
+      // Only set error if this request is still current
+      if (fetchId === currentFetchId) {
+        set({
+          error: error instanceof Error ? error.message : String(error),
+          isLoading: false,
+        });
+      }
     }
   },
 
@@ -650,6 +665,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // If already tailing, don't start another interval
     if (isTailing) return;
 
+    // Cancel any in-flight fetch requests
+    currentFetchId++;
+
     // Stop any existing poller (defensive, survives HMR)
     if (tailPoller) {
       tailPoller.stop();
@@ -657,6 +675,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     // Clear existing logs - live tail starts fresh from now
     set({
+      isLoading: false, // Cancel loading state from previous fetch
       logs: [],
       filteredLogs: [],
       expandedLogIndex: null,
