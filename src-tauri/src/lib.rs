@@ -964,6 +964,7 @@ async fn list_log_groups(
 /// Progress update sent to frontend during log fetching
 #[derive(Clone, serde::Serialize)]
 struct LogsProgress {
+    fetch_id: u32,
     count: usize,
     size_bytes: usize,
 }
@@ -995,7 +996,9 @@ async fn fetch_logs(
     filter_pattern: Option<String>,
     max_count: Option<i32>,
     max_size_mb: Option<i32>,
+    fetch_id: Option<u32>,
 ) -> Result<Vec<LogEvent>, String> {
+    let fetch_id = fetch_id.unwrap_or(0);
     // Reset cancellation flag at start of new fetch
     state.fetch_cancelled.store(false, Ordering::SeqCst);
 
@@ -1055,6 +1058,7 @@ async fn fetch_logs(
                 app.emit(
                     "logs-progress",
                     LogsProgress {
+                        fetch_id,
                         count: all_events.len(),
                         size_bytes: total_size,
                     },

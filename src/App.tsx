@@ -8,7 +8,7 @@ import { LogViewer } from "./components/LogViewer";
 import { StatusBar } from "./components/StatusBar";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { AboutDialog } from "./components/AboutDialog";
-import { useLogStore } from "./stores/logStore";
+import { useLogStore, getCurrentFetchId } from "./stores/logStore";
 import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import "./App.css";
@@ -107,12 +107,16 @@ function App() {
       // Auto-dismiss after 10 seconds
       setTimeout(() => setTruncationWarning(null), 10000);
     });
-    const unlistenProgress = listen<{ count: number; size_bytes: number }>(
-      "logs-progress",
-      (event) => {
+    const unlistenProgress = listen<{
+      fetch_id: number;
+      count: number;
+      size_bytes: number;
+    }>("logs-progress", (event) => {
+      // Only update progress for the current fetch (ignore stale events)
+      if (event.payload.fetch_id === getCurrentFetchId()) {
         setLoadingProgress(event.payload.count, event.payload.size_bytes);
-      },
-    );
+      }
+    });
     const unlistenDebug = listen<string>("debug-log", (event) => {
       console.log("[Backend]", event.payload);
     });

@@ -11,6 +11,11 @@ import { TailPoller } from "./TailPoller";
 // Request ID for cancelling stale fetch requests
 let currentFetchId = 0;
 
+// Export getter for current fetch ID (used by App.tsx to filter stale progress events)
+export function getCurrentFetchId(): number {
+  return currentFetchId;
+}
+
 // Cache for compiled keyword regex patterns (avoids recompiling on every log)
 const keywordRegexCache = new Map<string, RegExp>();
 
@@ -551,6 +556,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         filterPattern: null,
         maxCount: cacheLimits.maxLogCount,
         maxSizeMb: cacheLimits.maxSizeMb,
+        fetchId,
       });
 
       // Check if this request is still current (user may have started a new fetch)
