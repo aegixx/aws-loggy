@@ -517,6 +517,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Increment fetch ID to cancel any in-flight requests
     const fetchId = ++currentFetchId;
 
+    // Cancel any in-progress backend fetch
+    invoke("cancel_fetch").catch(() => {
+      // Ignore errors - backend may not have an active fetch
+    });
+
     set({
       isLoading: true,
       loadingProgress: 0,
@@ -667,6 +672,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     // Cancel any in-flight fetch requests
     currentFetchId++;
+
+    // Cancel any in-progress backend fetch
+    invoke("cancel_fetch").catch(() => {
+      // Ignore errors - backend may not have an active fetch
+    });
 
     // Stop any existing poller (defensive, survives HMR)
     if (tailPoller) {

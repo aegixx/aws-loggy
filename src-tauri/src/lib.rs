@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{
     menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
@@ -45,6 +46,7 @@ pub struct AppState {
     pub client: Arc<Mutex<Option<CloudWatchClient>>>,
     pub config: Arc<Mutex<Option<aws_config::SdkConfig>>>,
     pub current_profile: Arc<Mutex<Option<String>>>,
+    pub fetch_cancelled: Arc<AtomicBool>,
 }
 
 /// Validates an AWS profile name for security
@@ -77,6 +79,7 @@ impl Default for AppState {
             client: Arc::new(Mutex::new(None)),
             config: Arc::new(Mutex::new(None)),
             current_profile: Arc::new(Mutex::new(None)),
+            fetch_cancelled: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -973,6 +976,13 @@ struct LogsTruncated {
     reason: String, // "count" or "size"
 }
 
+/// Cancel any in-progress log fetch
+#[tauri::command]
+fn cancel_fetch(state: State<'_, AppState>) {
+    log::info!("Cancelling log fetch");
+    state.fetch_cancelled.store(true, Ordering::SeqCst);
+}
+
 /// Fetch logs from a specific log group with automatic pagination
 /// Fetches all available logs up to max_count or max_size_bytes, whichever is hit first
 #[tauri::command]
@@ -986,6 +996,9 @@ async fn fetch_logs(
     max_count: Option<i32>,
     max_size_mb: Option<i32>,
 ) -> Result<Vec<LogEvent>, String> {
+    // Reset cancellation flag at start of new fetch
+    state.fetch_cancelled.store(false, Ordering::SeqCst);
+
     let client_lock = state.client.lock().await;
     let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
@@ -998,6 +1011,12 @@ async fn fetch_logs(
     let mut next_token: Option<String> = None;
 
     loop {
+        // Check if fetch was cancelled
+        if state.fetch_cancelled.load(Ordering::SeqCst) {
+            log::info!("Log fetch cancelled, returning {} logs fetched so far", all_events.len());
+            return Ok(all_events);
+        }
+
         let mut request = client.filter_log_events().log_group_name(&log_group_name);
 
         if let Some(start) = start_time {
@@ -1337,6 +1356,7 @@ pub fn run() {
             list_log_groups,
             fetch_logs,
             fetch_logs_paginated,
+            cancel_fetch,
             sync_theme_menu,
         ])
         .run(tauri::generate_context!())
