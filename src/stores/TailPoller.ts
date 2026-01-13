@@ -73,26 +73,20 @@ export class TailPoller {
 
       console.log("[Backend Activity] Polling from timestamp:", lastTimestamp);
 
-      const result = await invoke<{
-        logs: Array<{
-          timestamp: number;
-          message: string;
-          log_stream_name: string | null;
-          event_id: string | null;
-        }>;
-        truncated: boolean;
-        truncation_reason?: string;
-      }>("fetch_logs", {
+      const logs = await invoke<LogEvent[]>("fetch_logs", {
         logGroupName: this.logGroupName,
         startTime: lastTimestamp,
-        limit: 100,
+        endTime: null,
+        filterPattern: null,
+        maxCount: 100,
+        maxSizeMb: null,
       });
 
-      if (result.logs.length > 0) {
+      if (logs.length > 0) {
         // Filter out logs older than when the tail started (handles lookback window)
         const filteredByTime = this.startTimestamp
-          ? result.logs.filter((log) => log.timestamp >= this.startTimestamp!)
-          : result.logs;
+          ? logs.filter((log) => log.timestamp >= this.startTimestamp!)
+          : logs;
 
         if (filteredByTime.length === 0) {
           return;
