@@ -1,15 +1,22 @@
 /**
+ * Converts camelCase to snake_case
+ * e.g., "requestId" -> "request_id", "clientIP" -> "client_ip"
+ */
+function toSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+/**
  * Extracts a field value from a JSON object, checking multiple casing variants
  * and nested metadata locations.
  *
- * Checks in order:
- * 1. json[fieldName] - original casing
+ * Checks in order (for both top-level and metadata):
+ * 1. json[fieldName] - original casing (camelCase)
  * 2. json[FieldName] - PascalCase variant
- * 3. json.metadata[fieldName] - original casing in metadata
- * 4. json.metadata[FieldName] - PascalCase variant in metadata
+ * 3. json[field_name] - snake_case variant
  *
  * @param json - The parsed JSON object to search
- * @param fieldName - The base field name (e.g., "requestId", "traceId")
+ * @param fieldName - The base field name in camelCase (e.g., "requestId", "traceId")
  * @returns The field value as a string, or null if not found
  */
 export function extractFieldVariants(
@@ -18,27 +25,38 @@ export function extractFieldVariants(
 ): string | null {
   if (!json) return null;
 
-  // Try lowercase/original casing at top level
-  const topLevelValue = json[fieldName];
-  if (typeof topLevelValue === "string") return topLevelValue;
-
-  // Try PascalCase at top level (e.g., RequestId)
+  // Generate casing variants
   const pascalCaseField =
     fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
-  const topLevelPascalValue = json[pascalCaseField];
-  if (typeof topLevelPascalValue === "string") return topLevelPascalValue;
+  const snakeCaseField = toSnakeCase(fieldName);
 
-  // Check metadata object
+  // Helper to check all casing variants in an object
+  const tryExtract = (obj: Record<string, unknown>): string | null => {
+    // Try original casing (camelCase)
+    const camelValue = obj[fieldName];
+    if (typeof camelValue === "string") return camelValue;
+
+    // Try PascalCase (e.g., RequestId)
+    const pascalValue = obj[pascalCaseField];
+    if (typeof pascalValue === "string") return pascalValue;
+
+    // Try snake_case (e.g., request_id)
+    const snakeValue = obj[snakeCaseField];
+    if (typeof snakeValue === "string") return snakeValue;
+
+    return null;
+  };
+
+  // Try top-level
+  const topLevelResult = tryExtract(json);
+  if (topLevelResult !== null) return topLevelResult;
+
+  // Try nested in metadata
   const metadata = json.metadata as Record<string, unknown> | undefined;
-  if (!metadata) return null;
-
-  // Try lowercase/original casing in metadata
-  const metadataValue = metadata[fieldName];
-  if (typeof metadataValue === "string") return metadataValue;
-
-  // Try PascalCase in metadata
-  const metadataPascalValue = metadata[pascalCaseField];
-  if (typeof metadataPascalValue === "string") return metadataPascalValue;
+  if (metadata) {
+    const metadataResult = tryExtract(metadata);
+    if (metadataResult !== null) return metadataResult;
+  }
 
   return null;
 }

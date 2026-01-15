@@ -36,23 +36,30 @@ function getKeywordRegex(keyword: string): RegExp {
 interface FilterCache {
   logs: ParsedLogEvent[];
   filterText: string;
-  disabledLevels: Set<LogLevel>;
+  disabledLevelsKey: string; // Serialized Set for stable comparison
   result: ParsedLogEvent[];
 }
 
 let filterCache: FilterCache | null = null;
+
+// Serialize Set to string for stable cache comparison (Set references change on each toggle)
+function serializeDisabledLevels(disabledLevels: Set<LogLevel>): string {
+  return [...disabledLevels].sort().join(",");
+}
 
 function getFilteredLogs(
   logs: ParsedLogEvent[],
   filterText: string,
   disabledLevels: Set<LogLevel>,
 ): ParsedLogEvent[] {
+  const disabledLevelsKey = serializeDisabledLevels(disabledLevels);
+
   // Check if we can use cached result
   if (
     filterCache &&
     filterCache.logs === logs &&
     filterCache.filterText === filterText &&
-    filterCache.disabledLevels === disabledLevels
+    filterCache.disabledLevelsKey === disabledLevelsKey
   ) {
     return filterCache.result;
   }
@@ -61,7 +68,7 @@ function getFilteredLogs(
   const result = filterLogs(logs, filterText, disabledLevels);
 
   // Update cache
-  filterCache = { logs, filterText, disabledLevels, result };
+  filterCache = { logs, filterText, disabledLevelsKey, result };
 
   return result;
 }
@@ -523,8 +530,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const fetchId = ++currentFetchId;
 
     // Cancel any in-progress backend fetch
-    invoke("cancel_fetch").catch(() => {
-      // Ignore errors - backend may not have an active fetch
+    invoke("cancel_fetch").catch((e) => {
+      console.debug("[Backend Activity] cancel_fetch:", e);
     });
 
     set({
@@ -680,8 +687,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
     currentFetchId++;
 
     // Cancel any in-progress backend fetch
-    invoke("cancel_fetch").catch(() => {
-      // Ignore errors - backend may not have an active fetch
+    invoke("cancel_fetch").catch((e) => {
+      console.debug("[Backend Activity] cancel_fetch:", e);
     });
 
     // Stop any existing poller (defensive, survives HMR)

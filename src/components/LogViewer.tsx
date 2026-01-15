@@ -1,4 +1,4 @@
-import {
+import React, {
   useRef,
   useEffect,
   useCallback,
@@ -629,7 +629,11 @@ export function LogViewer() {
         listRef={listRef}
         rowCount={rowCount}
         rowHeight={getRowHeight}
-        rowComponent={LogRow as any}
+        // Cast needed: react-window v2's RowComponent type expects (index, style) only,
+        // but our LogRow receives additional props via rowProps spread
+        rowComponent={
+          LogRow as React.ComponentType<RowComponentPropsWithCustom>
+        }
         rowProps={{
           logs: filteredLogs,
           expandedIndex: expandedLogIndex,

@@ -7,6 +7,9 @@ import type { LogLevel } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 
+/** Delay in ms before filter text changes trigger log filtering */
+const FILTER_DEBOUNCE_MS = 300;
+
 export function FilterBar() {
   const {
     filterText,
@@ -27,8 +30,8 @@ export function FilterBar() {
   // Local state for immediate input feedback
   const [inputValue, setInputValue] = useState(filterText);
 
-  // Debounce the filter operation by 300ms
-  const debouncedFilterText = useDebounce(inputValue, 300);
+  // Debounce the filter operation to avoid excessive re-filtering on every keystroke
+  const debouncedFilterText = useDebounce(inputValue, FILTER_DEBOUNCE_MS);
 
   // Sync debounced value to store
   useEffect(() => {

@@ -66,6 +66,8 @@ export class TailPoller {
 
   /**
    * Poll for new logs and invoke callback.
+   * Checks if poller is still active after async operations to prevent
+   * callbacks on stopped/unmounted state.
    */
   private async poll(): Promise<void> {
     try {
@@ -81,6 +83,12 @@ export class TailPoller {
         maxCount: 100,
         maxSizeMb: null,
       });
+
+      // Check if we were stopped during the async operation
+      if (!this.isActive()) {
+        console.log("[Backend Activity] Poll cancelled - poller stopped");
+        return;
+      }
 
       if (logs.length > 0) {
         // Filter out logs older than when the tail started (handles lookback window)
@@ -110,8 +118,11 @@ export class TailPoller {
         this.onNewLogs(filteredByTime);
       }
     } catch (error) {
-      console.error("[Backend Activity] Tail fetch error:", error);
-      this.onError(error);
+      // Only report errors if we're still active
+      if (this.isActive()) {
+        console.error("[Backend Activity] Tail fetch error:", error);
+        this.onError(error);
+      }
     }
   }
 
