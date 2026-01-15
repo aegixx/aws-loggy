@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
 import { useLogStore } from "../stores/logStore";
-import { useSettingsStore } from "../stores/settingsStore";
+import { useSystemTheme } from "../hooks/useSystemTheme";
 
 export function LogGroupSelector() {
   const {
@@ -10,23 +9,7 @@ export function LogGroupSelector() {
     isConnected,
     connectionError,
   } = useLogStore();
-  const { theme } = useSettingsStore();
-
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+  const isDark = useSystemTheme();
 
   return (
     <div className="flex items-center gap-2">

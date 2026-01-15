@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{
     menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
@@ -45,6 +46,31 @@ pub struct AppState {
     pub client: Arc<Mutex<Option<CloudWatchClient>>>,
     pub config: Arc<Mutex<Option<aws_config::SdkConfig>>>,
     pub current_profile: Arc<Mutex<Option<String>>>,
+    pub fetch_cancelled: Arc<AtomicBool>,
+}
+
+/// Validates an AWS profile name for security
+/// Checks: max length, allowed characters, no path traversal
+fn validate_profile_name(profile: &str) -> Result<(), String> {
+    // Max length check
+    if profile.len() > 64 {
+        return Err("Profile name too long".to_string());
+    }
+
+    // Character whitelist: alphanumeric, hyphen, underscore, dot
+    if !profile
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err("Profile name contains invalid characters".to_string());
+    }
+
+    // No path traversal attempts
+    if profile.contains("..") || profile.contains('/') || profile.contains('\\') {
+        return Err("Profile name contains path characters".to_string());
+    }
+
+    Ok(())
 }
 
 impl Default for AppState {
@@ -53,6 +79,7 @@ impl Default for AppState {
             client: Arc::new(Mutex::new(None)),
             config: Arc::new(Mutex::new(None)),
             current_profile: Arc::new(Mutex::new(None)),
+            fetch_cancelled: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -112,14 +139,14 @@ fn profile_uses_sso(profile: Option<&String>) -> bool {
 fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
     let config_path = get_aws_config_path()?;
     if !config_path.exists() {
-        eprintln!("AWS config file not found at: {:?}", config_path);
+        log::debug!("AWS config file not found at: {:?}", config_path);
         return None;
     }
 
     let contents = match std::fs::read_to_string(&config_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to read AWS config file: {}", e);
+            log::debug!("Failed to read AWS config file: {}", e);
             return None;
         }
     };
@@ -133,7 +160,7 @@ fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
         env_profile.as_deref().unwrap_or("default")
     };
 
-    eprintln!("Looking for SSO start URL for profile: {}", profile_name);
+    log::debug!("Looking for SSO start URL for profile: {}", profile_name);
 
     let mut in_target_section = false;
 
@@ -156,7 +183,7 @@ fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
                 }
             }
             if in_target_section {
-                eprintln!("Found profile section: {}", line);
+                log::debug!("Found profile section: {}", line);
             }
             continue;
         }
@@ -167,19 +194,20 @@ fn get_sso_start_url(profile: Option<&String>) -> Option<String> {
                 // Handle both "sso_start_url = ..." and "sso_start_url=..." formats
                 let url = url.trim_start_matches(|c: char| c == '=' || c.is_whitespace());
                 if !url.is_empty() {
-                    eprintln!("Found SSO start URL: {}", url);
+                    log::debug!("Found SSO start URL: {}", url);
                     return Some(url.to_string());
                 }
             }
         }
     }
 
-    eprintln!("SSO start URL not found for profile: {}", profile_name);
+    log::debug!("SSO start URL not found for profile: {}", profile_name);
     None
 }
 
 /// Check if credentials are valid for a profile by attempting to load them
-async fn check_credentials_valid(profile: Option<&String>) -> bool {
+/// Returns Ok(()) if valid, Err with diagnostic message if invalid
+async fn check_credentials_valid(profile: Option<&String>) -> Result<(), String> {
     let mut config_loader = aws_config::defaults(BehaviorVersion::latest());
     if let Some(p) = profile {
         config_loader = config_loader.profile_name(p);
@@ -187,9 +215,30 @@ async fn check_credentials_valid(profile: Option<&String>) -> bool {
     let config = config_loader.load().await;
 
     if let Some(credentials_provider) = config.credentials_provider() {
-        credentials_provider.provide_credentials().await.is_ok()
+        match credentials_provider.provide_credentials().await {
+            Ok(_) => {
+                log::debug!("Credentials are valid");
+                Ok(())
+            }
+            Err(e) => {
+                let error_msg = format!("{}", e);
+                log::debug!("Credential validation failed: {}", error_msg);
+
+                // Provide specific error messages based on error type
+                if error_msg.to_lowercase().contains("token has expired")
+                    || error_msg.to_lowercase().contains("sso") {
+                    Err("SSO session expired - please complete login in browser".to_string())
+                } else if error_msg.to_lowercase().contains("not found")
+                    || error_msg.to_lowercase().contains("no credentials") {
+                    Err("No credentials found - check profile configuration".to_string())
+                } else {
+                    Err(format!("Credential error: {}", error_msg))
+                }
+            }
+        }
     } else {
-        false
+        log::debug!("No credentials provider found");
+        Err("No credentials provider configured".to_string())
     }
 }
 
@@ -201,21 +250,86 @@ async fn poll_for_credentials_and_refresh(
 ) {
     let profile_clone = profile.clone();
     let profile_ref = profile_clone.as_ref();
+    let mut last_error: Option<String> = None;
 
     for attempt in 1..=max_attempts {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
+        log::debug!("Checking credentials (attempt {}/{})", attempt, max_attempts);
         emit_debug_log(Some(&app), &format!("Checking credentials (attempt {}/{})...", attempt, max_attempts));
 
-        if check_credentials_valid(profile_ref).await {
-            emit_debug_log(Some(&app), "Credentials are now valid! Emitting refresh event...");
-            // Emit event to trigger frontend refresh
-            app.emit("aws-session-refreshed", ()).ok();
-            return;
+        match check_credentials_valid(profile_ref).await {
+            Ok(()) => {
+                log::info!("Credentials validated successfully after {} attempts", attempt);
+                emit_debug_log(Some(&app), "✓ Credentials are now valid! Refreshing connection...");
+                // Emit event to trigger frontend refresh
+                app.emit("aws-session-refreshed", ()).ok();
+                return;
+            }
+            Err(e) => {
+                log::debug!("Credential check failed (attempt {}): {}", attempt, e);
+                last_error = Some(e);
+                // Continue polling
+            }
         }
     }
 
-    emit_debug_log(Some(&app), "Credentials check timeout - user may need to complete SSO login manually");
+    // Timeout - provide helpful message based on last error
+    let timeout_msg = if let Some(err) = last_error {
+        format!("SSO login timeout after {} seconds. Last error: {}. Please complete the login in your browser.", max_attempts * 2, err)
+    } else {
+        format!("SSO login timeout after {} seconds. Please complete the login in your browser.", max_attempts * 2)
+    };
+
+    log::warn!("{}", timeout_msg);
+    emit_debug_log(Some(&app), &timeout_msg);
+}
+
+/// Spawn an AWS CLI command with a timeout
+/// Returns Ok(()) if command completes within timeout, Err otherwise
+/// Note: Currently unused but available for future non-interactive AWS CLI commands
+#[allow(dead_code)]
+async fn spawn_aws_cli_with_timeout(
+    args: Vec<&str>,
+    timeout_secs: u64,
+) -> Result<(), String> {
+    log::debug!("Spawning AWS CLI command: aws {}", args.join(" "));
+
+    let mut cmd = tokio::process::Command::new("aws");
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    // Spawn the command
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn aws command: {}", e))?;
+
+    // Wait for completion with timeout
+    let wait_future = child.wait();
+    match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), wait_future).await {
+        Ok(Ok(status)) => {
+            if status.success() {
+                log::debug!("AWS CLI command completed successfully");
+                Ok(())
+            } else {
+                let msg = format!("AWS CLI command failed with status: {}", status);
+                log::error!("{}", msg);
+                Err(msg)
+            }
+        }
+        Ok(Err(e)) => {
+            let msg = format!("AWS CLI command error: {}", e);
+            log::error!("{}", msg);
+            Err(msg)
+        }
+        Err(_) => {
+            // Timeout occurred - kill the process
+            log::error!("AWS CLI command timed out after {} seconds, killing process", timeout_secs);
+            let _ = child.kill().await;
+            Err(format!("AWS CLI command timed out after {} seconds", timeout_secs))
+        }
+    }
 }
 
 /// Open SSO login URL for a profile
@@ -225,7 +339,15 @@ async fn open_sso_login_url(
     app: AppHandle,
     profile: Option<&String>,
 ) -> Result<(), String> {
-    eprintln!("=== Attempting to open SSO URL for profile ===");
+    log::debug!("=== Attempting to open SSO URL for profile ===");
+
+    // Validate profile if provided
+    if let Some(p) = &profile {
+        if let Err(e) = validate_profile_name(p) {
+            log::error!("Invalid profile name: {}", e);
+            return Err(format!("Invalid profile name: {}", e));
+        }
+    }
 
     let profile_clone = profile.cloned();
 
@@ -235,15 +357,15 @@ async fn open_sso_login_url(
 
     if let Some(p) = profile {
         cmd.arg("--profile").arg(p);
-        eprintln!("Using profile: {}", p);
+        log::info!("Using profile: {}", p);
     } else {
-        eprintln!("No profile specified, using default");
+        log::info!("No profile specified, using default");
     }
 
     // Spawn the command - it will open the browser automatically
     match cmd.spawn() {
         Ok(_) => {
-            eprintln!("Successfully started AWS SSO login");
+            log::info!("Successfully started AWS SSO login process");
 
             // Start polling for credentials to become valid (poll for up to 2 minutes)
             let app_clone = app.clone();
@@ -254,15 +376,27 @@ async fn open_sso_login_url(
             Ok(())
         }
         Err(e) => {
-            eprintln!("ERROR: Failed to start AWS SSO login: {}", e);
-            Err(format!("Failed to start AWS SSO login: {}", e))
+            let error_msg = format!("{}", e);
+            log::error!("Failed to start AWS SSO login: {}", error_msg);
+
+            // Provide helpful error messages based on error type
+            let user_msg = if error_msg.to_lowercase().contains("not found")
+                || error_msg.to_lowercase().contains("no such file") {
+                "AWS CLI not found. Please install the AWS CLI (https://aws.amazon.com/cli/) to use SSO login.".to_string()
+            } else if error_msg.to_lowercase().contains("permission") {
+                "Permission denied when running AWS CLI. Please check file permissions.".to_string()
+            } else {
+                format!("Failed to start AWS SSO login: {}. Please ensure AWS CLI is installed and accessible.", error_msg)
+            };
+
+            Err(user_msg)
         }
     }
 }
 
 /// Emit a debug log message to the frontend
 fn emit_debug_log(app: Option<&AppHandle>, message: &str) {
-    eprintln!("{}", message);
+    log::debug!("{}", message);
     if let Some(app_handle) = app {
         app_handle.emit("debug-log", message).ok();
     }
@@ -271,6 +405,11 @@ fn emit_debug_log(app: Option<&AppHandle>, message: &str) {
 /// Trigger SSO login for a profile
 #[tauri::command]
 async fn trigger_sso_login(profile: Option<String>) -> Result<(), String> {
+    // Validate profile if provided
+    if let Some(p) = &profile {
+        validate_profile_name(p)?;
+    }
+
     let mut cmd = std::process::Command::new("aws");
     cmd.arg("sso").arg("login");
 
@@ -298,7 +437,7 @@ fn get_app_version() -> String {
 
 /// Check if an error indicates the SSO session has expired (requires browser re-auth)
 fn is_sso_session_expired(error_msg: &str) -> bool {
-    eprintln!("Checking if error is SSO expiration: {}", error_msg);
+    log::debug!("Checking if error is SSO expiration: {}", error_msg);
     let error_lower = error_msg.to_lowercase();
     let is_expired = error_lower.contains("token has expired")
         || error_lower.contains("sso session")
@@ -315,9 +454,9 @@ fn is_sso_session_expired(error_msg: &str) -> bool {
         || error_lower.contains("failed to load credentials");
 
     if is_expired {
-        eprintln!("✓ SSO expiration detected!");
+        log::debug!("✓ SSO expiration detected!");
     } else {
-        eprintln!("✗ Not detected as SSO expiration");
+        log::debug!("✗ Not detected as SSO expiration");
     }
 
     is_expired
@@ -329,20 +468,36 @@ async fn handle_sso_expiration(
     state: &State<'_, AppState>,
     profile: Option<&String>,
 ) {
+    log::info!("Handling SSO session expiration");
+
     // Get the current profile from state if not provided
     let current_profile = if let Some(p) = profile {
+        log::debug!("Using provided profile: {}", p);
         Some(p.clone())
     } else {
-        state.current_profile.lock().await.clone()
+        let profile = state.current_profile.lock().await.clone();
+        if let Some(ref p) = profile {
+            log::debug!("Using profile from state: {}", p);
+        } else {
+            log::debug!("No profile configured, using default");
+        }
+        profile
     };
 
     // Try to open the SSO URL
-    if let Err(e) = open_sso_login_url(app.clone(), current_profile.as_ref()).await {
-        eprintln!("Failed to open SSO URL: {}", e);
-        // Continue anyway - we'll still emit the event
+    match open_sso_login_url(app.clone(), current_profile.as_ref()).await {
+        Ok(()) => {
+            log::info!("SSO login URL opened successfully, waiting for user authentication");
+        }
+        Err(e) => {
+            log::error!("Failed to automatically open SSO login URL: {}", e);
+            log::warn!("User will need to manually run 'aws sso login' to re-authenticate");
+            // Continue anyway - we'll still emit the event
+        }
     }
 
     // Emit the event to notify frontend
+    log::debug!("Emitting aws-session-expired event to frontend");
     app.emit("aws-session-expired", ()).ok();
 }
 
@@ -595,7 +750,7 @@ async fn init_aws_client(
             if is_sso_session_expired(&error_msg) {
                 // Try to open SSO URL automatically
                 if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
-                    eprintln!("Failed to open SSO URL: {}", e);
+                    log::error!("Failed to open SSO URL: {}", e);
                 }
                 return Err(
                     "Your AWS session has expired. Please run 'aws sso login' to refresh."
@@ -809,6 +964,7 @@ async fn list_log_groups(
 /// Progress update sent to frontend during log fetching
 #[derive(Clone, serde::Serialize)]
 struct LogsProgress {
+    fetch_id: u32,
     count: usize,
     size_bytes: usize,
 }
@@ -819,6 +975,13 @@ struct LogsTruncated {
     count: usize,
     size_bytes: usize,
     reason: String, // "count" or "size"
+}
+
+/// Cancel any in-progress log fetch
+#[tauri::command]
+fn cancel_fetch(state: State<'_, AppState>) {
+    log::info!("Cancelling log fetch");
+    state.fetch_cancelled.store(true, Ordering::SeqCst);
 }
 
 /// Fetch logs from a specific log group with automatic pagination
@@ -833,7 +996,12 @@ async fn fetch_logs(
     filter_pattern: Option<String>,
     max_count: Option<i32>,
     max_size_mb: Option<i32>,
+    fetch_id: Option<u32>,
 ) -> Result<Vec<LogEvent>, String> {
+    let fetch_id = fetch_id.unwrap_or(0);
+    // Reset cancellation flag at start of new fetch
+    state.fetch_cancelled.store(false, Ordering::SeqCst);
+
     let client_lock = state.client.lock().await;
     let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
 
@@ -846,6 +1014,12 @@ async fn fetch_logs(
     let mut next_token: Option<String> = None;
 
     loop {
+        // Check if fetch was cancelled
+        if state.fetch_cancelled.load(Ordering::SeqCst) {
+            log::info!("Log fetch cancelled, returning {} logs fetched so far", all_events.len());
+            return Ok(all_events);
+        }
+
         let mut request = client.filter_log_events().log_group_name(&log_group_name);
 
         if let Some(start) = start_time {
@@ -884,6 +1058,7 @@ async fn fetch_logs(
                 app.emit(
                     "logs-progress",
                     LogsProgress {
+                        fetch_id,
                         count: all_events.len(),
                         size_bytes: total_size,
                     },
@@ -1000,6 +1175,9 @@ async fn fetch_logs_paginated(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logging
+    env_logger::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
@@ -1182,6 +1360,7 @@ pub fn run() {
             list_log_groups,
             fetch_logs,
             fetch_logs_paginated,
+            cancel_fetch,
             sync_theme_menu,
         ])
         .run(tauri::generate_context!())

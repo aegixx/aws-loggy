@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
-import { useSettingsStore } from "../stores/settingsStore";
+import { useSystemTheme } from "../hooks/useSystemTheme";
 import LoggyMascot from "../assets/loggy-mascot.png";
 import LoggyName from "../assets/loggy-name.png";
 
@@ -13,14 +13,8 @@ interface AboutDialogProps {
 const GITHUB_URL = "https://github.com/aegixx/aws-loggy";
 
 export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
-  const { theme } = useSettingsStore();
   const [version, setVersion] = useState<string>("");
-
-  // Determine if dark mode
-  const systemPrefersDark =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+  const isDark = useSystemTheme();
 
   // Load app version
   useEffect(() => {

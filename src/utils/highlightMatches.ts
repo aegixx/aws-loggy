@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { createElement } from "react";
+import safeRegex from "safe-regex2";
 
 export interface HighlightOptions {
   caseSensitive: boolean;
@@ -27,6 +28,21 @@ function escapeRegex(str: string): string {
 }
 
 /**
+ * Validates that a regex pattern is safe to execute (ReDoS protection)
+ * Uses static analysis to detect potentially dangerous patterns without executing them
+ */
+function validateRegexSafety(pattern: string): boolean {
+  try {
+    // Use safe-regex2 for static analysis of the pattern
+    // Returns false if pattern could cause catastrophic backtracking
+    return safeRegex(pattern);
+  } catch {
+    // Invalid regex syntax or analysis error
+    return false;
+  }
+}
+
+/**
  * Finds all matches of a search term in text
  */
 export function findAllMatches(
@@ -43,6 +59,12 @@ export function findAllMatches(
 
     if (options.regex) {
       pattern = searchTerm;
+
+      // Validate regex safety before using user-supplied pattern
+      if (!validateRegexSafety(pattern)) {
+        console.warn("Potentially unsafe regex pattern detected");
+        return [];
+      }
     } else {
       pattern = escapeRegex(searchTerm);
     }

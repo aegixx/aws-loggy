@@ -6,18 +6,32 @@ import {
   LOG_LEVEL_JSON_FIELDS,
   getSortedLogLevels,
 } from "./settingsStore";
+import { TailPoller } from "./TailPoller";
 
-// Module-level variables to track tail state (survives HMR)
-let tailIntervalId: ReturnType<typeof setInterval> | null = null;
-let tailStartTimestamp: number | null = null;
+// Request ID for cancelling stale fetch requests
+let currentFetchId = 0;
+
+// Export getter for current fetch ID (used by App.tsx to filter stale progress events)
+export function getCurrentFetchId(): number {
+  return currentFetchId;
+}
 
 // Cache for compiled keyword regex patterns (avoids recompiling on every log)
+// Limited size to prevent unbounded memory growth
+const MAX_KEYWORD_CACHE_SIZE = 100;
 const keywordRegexCache = new Map<string, RegExp>();
 
 function getKeywordRegex(keyword: string): RegExp {
   const key = keyword.toLowerCase();
   let regex = keywordRegexCache.get(key);
   if (!regex) {
+    // Evict oldest entry if cache is full (Map preserves insertion order)
+    if (keywordRegexCache.size >= MAX_KEYWORD_CACHE_SIZE) {
+      const oldestKey = keywordRegexCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        keywordRegexCache.delete(oldestKey);
+      }
+    }
     regex = new RegExp(
       `(?:^|[\\s\\t\\[\\]():])${key}(?:[\\s\\t\\[\\]():]|$)`,
       "i",
@@ -25,6 +39,47 @@ function getKeywordRegex(keyword: string): RegExp {
     keywordRegexCache.set(key, regex);
   }
   return regex;
+}
+
+// Cache for filtered results (memoization to avoid redundant filtering)
+interface FilterCache {
+  logs: ParsedLogEvent[];
+  filterText: string;
+  disabledLevelsKey: string; // Serialized Set for stable comparison
+  result: ParsedLogEvent[];
+}
+
+let filterCache: FilterCache | null = null;
+
+// Serialize Set to string for stable cache comparison (Set references change on each toggle)
+function serializeDisabledLevels(disabledLevels: Set<LogLevel>): string {
+  return [...disabledLevels].sort().join(",");
+}
+
+function getFilteredLogs(
+  logs: ParsedLogEvent[],
+  filterText: string,
+  disabledLevels: Set<LogLevel>,
+): ParsedLogEvent[] {
+  const disabledLevelsKey = serializeDisabledLevels(disabledLevels);
+
+  // Check if we can use cached result
+  if (
+    filterCache &&
+    filterCache.logs === logs &&
+    filterCache.filterText === filterText &&
+    filterCache.disabledLevelsKey === disabledLevelsKey
+  ) {
+    return filterCache.result;
+  }
+
+  // Compute new result
+  const result = filterLogs(logs, filterText, disabledLevels);
+
+  // Update cache
+  filterCache = { logs, filterText, disabledLevelsKey, result };
+
+  return result;
 }
 
 interface AwsConnectionInfo {
@@ -70,6 +125,7 @@ interface LogStore {
 
   // Live tail
   isTailing: boolean;
+  tailPoller: TailPoller | null;
 
   // Actions
   initializeAws: () => Promise<void>;
@@ -96,7 +152,7 @@ interface LogStore {
   setSessionExpired: () => void;
 }
 
-function parseLogLevel(
+export function parseLogLevel(
   message: string,
   parsedJson: Record<string, unknown> | null,
 ): LogLevel {
@@ -334,6 +390,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectedLogIndices: new Set(),
   timeRange: null,
   isTailing: false,
+  tailPoller: null,
 
   initializeAws: async () => {
     set({ isConnecting: true, connectionError: null });
@@ -478,6 +535,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const { selectedLogGroup, filterText, disabledLevels } = get();
     if (!selectedLogGroup) return;
 
+    // Increment fetch ID to cancel any in-flight requests
+    const fetchId = ++currentFetchId;
+
+    // Cancel any in-progress backend fetch
+    invoke("cancel_fetch").catch((e) => {
+      console.debug("[Backend Activity] cancel_fetch:", e);
+    });
+
     set({
       isLoading: true,
       loadingProgress: 0,
@@ -507,12 +572,19 @@ export const useLogStore = create<LogStore>((set, get) => ({
         filterPattern: null,
         maxCount: cacheLimits.maxLogCount,
         maxSizeMb: cacheLimits.maxSizeMb,
+        fetchId,
       });
+
+      // Check if this request is still current (user may have started a new fetch)
+      if (fetchId !== currentFetchId) {
+        console.log("[Backend Activity] Discarding stale fetch results");
+        return;
+      }
 
       // Merge fragmented logs before parsing (CloudWatch splits large messages)
       const mergedLogs = mergeFragmentedLogs(rawLogs);
       const parsedLogs = mergedLogs.map(parseLogEvent);
-      const filtered = filterLogs(parsedLogs, filterText, disabledLevels);
+      const filtered = getFilteredLogs(parsedLogs, filterText, disabledLevels);
 
       // Calculate total size of loaded logs (use merged to reflect actual content)
       const totalSize = mergedLogs.reduce(
@@ -527,17 +599,20 @@ export const useLogStore = create<LogStore>((set, get) => ({
         totalSizeBytes: totalSize,
       });
     } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : String(error),
-        isLoading: false,
-      });
+      // Only set error if this request is still current
+      if (fetchId === currentFetchId) {
+        set({
+          error: error instanceof Error ? error.message : String(error),
+          isLoading: false,
+        });
+      }
     }
   },
 
   setFilterText: (text: string) => {
     console.log("[User Activity] Set filter text:", text || "(empty)");
     const { logs, disabledLevels } = get();
-    const filtered = filterLogs(logs, text, disabledLevels);
+    const filtered = getFilteredLogs(logs, text, disabledLevels);
     set({
       filterText: text,
       filteredLogs: filtered,
@@ -558,7 +633,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       newDisabled.add(level);
       console.log("[User Activity] Disable level:", level);
     }
-    const filtered = filterLogs(logs, filterText, newDisabled);
+    const filtered = getFilteredLogs(logs, filterText, newDisabled);
     set({
       disabledLevels: newDisabled,
       filteredLogs: filtered,
@@ -611,114 +686,104 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   startTail: () => {
-    const { isTailing, selectedLogGroup } = get();
+    const { isTailing, selectedLogGroup, tailPoller } = get();
     if (!selectedLogGroup) return;
 
     // If already tailing, don't start another interval
     if (isTailing) return;
 
-    // Defensive: clear any orphaned interval (survives HMR)
-    if (tailIntervalId) {
-      clearInterval(tailIntervalId);
-      tailIntervalId = null;
+    // Cancel any in-flight fetch requests
+    currentFetchId++;
+
+    // Cancel any in-progress backend fetch
+    invoke("cancel_fetch").catch((e) => {
+      console.debug("[Backend Activity] cancel_fetch:", e);
+    });
+
+    // Stop any existing poller (defensive, survives HMR)
+    if (tailPoller) {
+      tailPoller.stop();
     }
-
-    console.log("[User Activity] Start live tail");
-
-    // Track when tail started - used to filter out older logs
-    tailStartTimestamp = Date.now();
 
     // Clear existing logs - live tail starts fresh from now
     set({
+      isLoading: false, // Cancel loading state from previous fetch
       logs: [],
       filteredLogs: [],
       expandedLogIndex: null,
       selectedLogIndex: null,
     });
 
-    // Set up polling with module-level variable (survives HMR)
-    tailIntervalId = setInterval(async () => {
-      const { logs, filterText, disabledLevels } = get();
-      // If logs exist, fetch from last timestamp
-      // If starting fresh with tailStartTimestamp set, poll from that point (no lookback)
-      // Otherwise look back 30s to account for CloudWatch delivery latency
-      const lastTimestamp =
-        logs.length > 0
-          ? logs[logs.length - 1].timestamp
-          : tailStartTimestamp
-            ? tailStartTimestamp - 1
-            : Date.now() - 30000;
+    // Create new TailPoller instance
+    const newPoller = new TailPoller(
+      selectedLogGroup,
+      (newLogs: LogEvent[]) => {
+        // Handle new logs from poller
+        const { logs, filterText, disabledLevels } = get();
 
-      console.log("[Backend Activity] Polling from timestamp:", lastTimestamp);
-
-      try {
-        const newLogs = await invoke<LogEvent[]>("fetch_logs", {
-          logGroupName: get().selectedLogGroup,
-          startTime: lastTimestamp + 1,
-          endTime: null,
-          filterPattern: null,
-          limit: 100,
+        // Deduplicate: filter out logs we already have (by event_id or timestamp+message)
+        const existingIds = new Set(
+          logs.map((l) => l.event_id).filter(Boolean),
+        );
+        const existingKeys = new Set(
+          logs.map((l) => `${l.timestamp}:${l.message.slice(0, 100)}`),
+        );
+        const uniqueNewLogs = newLogs.filter((log) => {
+          if (log.event_id && existingIds.has(log.event_id)) return false;
+          const key = `${log.timestamp}:${log.message.slice(0, 100)}`;
+          return !existingKeys.has(key);
         });
 
-        if (newLogs.length > 0) {
-          // Filter out logs older than when the tail started (handles lookback window)
-          const filteredByTime = tailStartTimestamp
-            ? newLogs.filter((log) => log.timestamp >= tailStartTimestamp!)
-            : newLogs;
-
-          if (filteredByTime.length === 0) {
-            return;
-          }
-
-          // Once we've received logs past our start timestamp, we've caught up - disable filter for performance
-          if (tailStartTimestamp) {
-            console.log(
-              "[Backend Activity] Caught up to tail start, disabling time filter",
-            );
-            tailStartTimestamp = null;
-          }
-
-          console.log(
-            "[Backend Activity] Fetched",
-            filteredByTime.length,
-            "new logs",
-          );
-          // Merge fragmented logs before parsing
-          const mergedNew = mergeFragmentedLogs(filteredByTime);
-          const parsedNew = mergedNew.map(parseLogEvent);
-          const allLogs = [...get().logs, ...parsedNew];
-
-          // Keep max 50000 logs in memory
-          const trimmedLogs = allLogs.slice(-50000);
-          const filtered = filterLogs(trimmedLogs, filterText, disabledLevels);
-
-          set({ logs: trimmedLogs, filteredLogs: filtered });
+        if (uniqueNewLogs.length === 0) {
+          return; // No new unique logs
         }
-      } catch (error) {
-        console.error("[Backend Activity] Tail fetch error:", error);
-      }
-    }, 2000);
 
-    set({ isTailing: true });
+        // Merge fragmented logs before parsing
+        const mergedNew = mergeFragmentedLogs(uniqueNewLogs);
+        const parsedNew = mergedNew.map(parseLogEvent);
+        const allLogs = [...logs, ...parsedNew];
+
+        // Keep max 50000 logs in memory
+        const trimmedLogs = allLogs.slice(-50000);
+        const filtered = getFilteredLogs(
+          trimmedLogs,
+          filterText,
+          disabledLevels,
+        );
+
+        set({ logs: trimmedLogs, filteredLogs: filtered });
+      },
+      (error: unknown) => {
+        console.error("[Backend Activity] Tail fetch error:", error);
+      },
+      () => {
+        // Get last log timestamp
+        const { logs } = get();
+        return logs.length > 0 ? logs[logs.length - 1].timestamp : null;
+      },
+    );
+
+    newPoller.start();
+
+    set({ isTailing: true, tailPoller: newPoller });
   },
 
   stopTail: () => {
-    if (tailIntervalId) {
-      console.log("[User Activity] Stop live tail");
-      clearInterval(tailIntervalId);
-      tailIntervalId = null;
+    const { tailPoller } = get();
+    if (tailPoller) {
+      tailPoller.stop();
     }
-    tailStartTimestamp = null;
-    set({ isTailing: false });
+    set({ isTailing: false, tailPoller: null });
   },
 
   clearLogs: () => {
     console.log("[User Activity] Clear logs");
-    const { selectedLogGroup, fetchLogs, timeRange, isTailing } = get();
+    const { selectedLogGroup, fetchLogs, timeRange, isTailing, tailPoller } =
+      get();
 
     // If tailing, reset the tail start timestamp so we only show logs from now
-    if (isTailing) {
-      tailStartTimestamp = Date.now();
+    if (isTailing && tailPoller) {
+      tailPoller.resetStartTimestamp();
     }
 
     // Clear logs but keep current filters

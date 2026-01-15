@@ -1,16 +1,26 @@
-import { useRef, useEffect, useCallback, useState, CSSProperties } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useCallback,
+  useState,
+  CSSProperties,
+  memo,
+} from "react";
 import { List, ListImperativeAPI } from "react-window";
 import { useLogStore } from "../stores/logStore";
-import { useSettingsStore } from "../stores/settingsStore";
-import { JsonSyntaxHighlight } from "./JsonSyntaxHighlight";
 import { FindBar } from "./FindBar";
 import { ContextMenu } from "./ContextMenu";
 import { MaximizedLogView } from "./MaximizedLogView";
+import { LogRowDetail } from "./LogRowDetail";
 import { useFindInLog } from "../hooks/useFindInLog";
+import { useSystemTheme } from "../hooks/useSystemTheme";
+import { useDragSelection } from "../hooks/useDragSelection";
+import { useKeyboardNavigation } from "../hooks/useKeyboardNavigation";
 import {
   highlightText,
   type HighlightOptions,
 } from "../utils/highlightMatches";
+import { extractFieldVariants } from "../utils/extractFieldVariants";
 import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
@@ -79,7 +89,7 @@ interface RowComponentPropsWithCustom {
   ) => { index: number; start: number; length: number }[];
 }
 
-function LogRow({
+const LogRow = memo(function LogRow({
   index,
   style,
   logs,
@@ -103,188 +113,24 @@ function LogRow({
   const actualLogIndex =
     expandedIndex !== null && index > expandedIndex ? index - 1 : index;
 
-  const [copied, setCopied] = useState(false);
-
   // Render the detail panel
   if (isDetailRow) {
     const log = logs[expandedIndex];
-    const date = new Date(log.timestamp);
-    const fullTimestamp =
-      date.toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }) +
-      "." +
-      date.getMilliseconds().toString().padStart(3, "0");
-
-    const handleCopy = async () => {
-      try {
-        await navigator.clipboard.writeText(log.message);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 500);
-      } catch (err) {
-        console.error("Failed to copy:", err);
-      }
-    };
-
     return (
-      <div
+      <LogRowDetail
+        log={log}
         style={style}
-        className={`border-l-2 border-l-blue-500 px-3 py-2 flex flex-col ${isDark ? "bg-gray-900" : "bg-white"}`}
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onMouseUp={(e) => e.stopPropagation()}
-      >
-        {/* Header with metadata */}
-        <div className="flex items-start justify-between mb-2 shrink-0">
-          <div className="flex items-center gap-4 text-xs">
-            <span className={isDark ? "text-gray-400" : "text-gray-600"}>
-              <span className={isDark ? "text-gray-600" : "text-gray-500"}>
-                Timestamp:
-              </span>{" "}
-              <span className={isDark ? "text-gray-300" : "text-gray-700"}>
-                {fullTimestamp}
-              </span>
-            </span>
-            {log.log_stream_name && (
-              <span className={isDark ? "text-gray-400" : "text-gray-600"}>
-                <span className={isDark ? "text-gray-600" : "text-gray-500"}>
-                  Stream:
-                </span>{" "}
-                <span
-                  className={`font-mono text-xs ${isDark ? "text-gray-300" : "text-gray-700"}`}
-                >
-                  {log.log_stream_name}
-                </span>
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={handleCopy}
-              className={`p-1 rounded transition-colors cursor-pointer ${
-                copied
-                  ? "bg-green-600 text-white"
-                  : isDark
-                    ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                    : "bg-gray-200 hover:bg-gray-300 text-gray-700"
-              }`}
-              title="Copy raw message"
-            >
-              {copied ? (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              ) : (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={() => onMaximize(log)}
-              className={`p-1 rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
-              title="Maximize"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={onClose}
-              className={`p-1 rounded transition-colors cursor-pointer ${isDark ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
-              title="Close (Esc)"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Log content */}
-        <div
-          className={`rounded p-2 overflow-auto flex-1 min-h-0 ${isDark ? "bg-gray-950" : "bg-gray-100"}`}
-          onContextMenu={(e) => onContextMenu(expandedIndex, e, true)}
-        >
-          {log.parsedJson ? (
-            <JsonSyntaxHighlight
-              data={log.parsedJson}
-              isDark={isDark}
-              searchTerm={searchTerm}
-              searchOptions={searchOptions}
-            />
-          ) : (
-            <pre
-              className={`font-mono text-sm leading-relaxed whitespace-pre-wrap break-all ${isDark ? "text-gray-300" : "text-gray-700"}`}
-            >
-              {searchTerm && searchOptions && getMatchesForLog
-                ? (() => {
-                    const logMatches = getMatchesForLog(expandedIndex);
-                    if (logMatches.length === 0) return log.message;
-                    const currentMatchInLog =
-                      currentMatchLogIndex === expandedIndex
-                        ? logMatches.findIndex(
-                            (m) => m.index === globalCurrentMatchIndex,
-                          )
-                        : undefined;
-                    return highlightText(
-                      log.message,
-                      searchTerm,
-                      searchOptions,
-                      currentMatchInLog,
-                    );
-                  })()
-                : log.message}
-            </pre>
-          )}
-        </div>
-      </div>
+        isDark={isDark}
+        onClose={onClose}
+        onMaximize={onMaximize}
+        onContextMenu={onContextMenu}
+        expandedIndex={expandedIndex}
+        searchTerm={searchTerm}
+        searchOptions={searchOptions}
+        currentMatchLogIndex={currentMatchLogIndex}
+        globalCurrentMatchIndex={globalCurrentMatchIndex}
+        getMatchesForLog={getMatchesForLog}
+      />
     );
   }
 
@@ -360,7 +206,7 @@ function LogRow({
       </span>
     </div>
   );
-}
+});
 
 export function LogViewer() {
   const {
@@ -380,23 +226,7 @@ export function LogViewer() {
     clearLogs,
     setFilterText,
   } = useLogStore();
-  const { theme } = useSettingsStore();
-
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+  const isDark = useSystemTheme();
   const listRef = useRef<ListImperativeAPI>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
@@ -432,15 +262,6 @@ export function LogViewer() {
     }
   ).inputRef;
 
-  // Drag selection state
-  const [dragStart, setDragStart] = useState<{
-    index: number;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragCurrentIndex = useRef<number | null>(null);
-
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -472,27 +293,13 @@ export function LogViewer() {
       // Check both top-level and nested under metadata
       const targetLog = filteredLogs[logIndex];
       const json = targetLog?.parsedJson;
-      const metadata = json?.metadata as Record<string, unknown> | undefined;
-      const requestId =
-        (json?.requestId as string) ||
-        (json?.RequestId as string) ||
-        (metadata?.requestId as string) ||
-        (metadata?.RequestId as string) ||
-        null;
-      const traceId =
-        (json?.traceId as string) ||
-        (json?.TraceId as string) ||
-        (metadata?.traceId as string) ||
-        (metadata?.TraceId as string) ||
-        null;
+
+      // Extract common fields using the utility function
+      const requestId = extractFieldVariants(json, "requestId");
+      const traceId = extractFieldVariants(json, "traceId");
       const clientIP =
-        (json?.clientIP as string) ||
-        (json?.ClientIP as string) ||
-        (json?.clientIp as string) ||
-        (metadata?.clientIP as string) ||
-        (metadata?.ClientIP as string) ||
-        (metadata?.clientIp as string) ||
-        null;
+        extractFieldVariants(json, "clientIP") ||
+        extractFieldVariants(json, "clientIp");
 
       setContextMenu({
         x: e.clientX,
@@ -577,100 +384,22 @@ export function LogViewer() {
     setExpandedLogIndex(null);
   }, [setExpandedLogIndex]);
 
-  // Drag selection handlers
-  const handleRowMouseDown = useCallback(
-    (index: number, e: React.MouseEvent) => {
-      // Only start drag on left mouse button
-      if (e.button !== 0) return;
-      setDragStart({ index, x: e.clientX, y: e.clientY });
-      dragCurrentIndex.current = index;
-    },
-    [],
-  );
-
-  const handleContainerMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!dragStart) return;
-
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      // Start dragging once threshold is exceeded
-      if (!isDragging && distance > 5) {
-        setIsDragging(true);
-        clearSelection();
-      }
-
-      if (isDragging && dragCurrentIndex.current !== null) {
-        // Calculate selection range
-        const startIdx = dragStart.index;
-        const endIdx = dragCurrentIndex.current;
-        const minIdx = Math.min(startIdx, endIdx);
-        const maxIdx = Math.max(startIdx, endIdx);
-
-        const newSelection = new Set<number>();
-        for (let i = minIdx; i <= maxIdx; i++) {
-          newSelection.add(i);
-        }
-        setSelectedLogIndices(newSelection);
-      }
-    },
-    [dragStart, isDragging, clearSelection, setSelectedLogIndices],
-  );
-
-  const handleContainerMouseUp = useCallback(() => {
-    if (!isDragging && dragStart) {
-      // Was a click on a row, not a drag - clear any multi-selection and trigger row expansion
-      clearSelection();
-      handleRowClick(dragStart.index);
-    } else if (!dragStart && !isDragging) {
-      // Clicked on empty space (not on any row) - clear selection
-      clearSelection();
-      if (expandedLogIndex !== null) {
-        setExpandedLogIndex(null);
-      }
-      setSelectedLogIndex(null);
-    }
-    setDragStart(null);
-    setIsDragging(false);
-    dragCurrentIndex.current = null;
-  }, [
+  // Drag selection hook
+  const {
     isDragging,
-    dragStart,
-    handleRowClick,
+    handleRowMouseDown,
+    handleRowMouseEnter,
+    handleContainerMouseMove,
+    handleContainerMouseUp,
+    handleContainerMouseLeave,
+  } = useDragSelection({
+    setSelectedLogIndices,
     clearSelection,
+    onRowClick: handleRowClick,
     expandedLogIndex,
     setExpandedLogIndex,
     setSelectedLogIndex,
-  ]);
-
-  // Handle mouse leaving the container - only clean up drag state, don't collapse expanded row
-  const handleContainerMouseLeave = useCallback(() => {
-    setDragStart(null);
-    setIsDragging(false);
-    dragCurrentIndex.current = null;
-  }, []);
-
-  // Track which row the mouse is over during drag
-  const handleRowMouseEnter = useCallback(
-    (index: number) => {
-      if (dragStart && isDragging) {
-        dragCurrentIndex.current = index;
-        // Update selection range
-        const startIdx = dragStart.index;
-        const minIdx = Math.min(startIdx, index);
-        const maxIdx = Math.max(startIdx, index);
-
-        const newSelection = new Set<number>();
-        for (let i = minIdx; i <= maxIdx; i++) {
-          newSelection.add(i);
-        }
-        setSelectedLogIndices(newSelection);
-      }
-    },
-    [dragStart, isDragging, setSelectedLogIndices],
-  );
+  });
 
   // Get visible row count for page navigation
   const getVisibleRowCount = useCallback(() => {
@@ -694,130 +423,23 @@ export function LogViewer() {
     return () => window.removeEventListener("keydown", handleWindowKeyDown);
   }, [findState.isOpen, findActions]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      // Close context menu with Escape if it's open
-      if (e.key === "Escape" && contextMenu) {
-        e.preventDefault();
-        setContextMenu(null);
-        return;
-      }
-
-      // Close find bar with Escape if it's open
-      if (e.key === "Escape" && findState.isOpen) {
-        e.preventDefault();
-        findActions.close();
-        return;
-      }
-
-      if (filteredLogs.length === 0) return;
-
-      const currentIndex = selectedLogIndex ?? -1;
-      let newIndex: number | null = null;
-
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          newIndex = Math.min(currentIndex + 1, filteredLogs.length - 1);
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          newIndex = Math.max(currentIndex - 1, 0);
-          break;
-        case "PageDown":
-          e.preventDefault();
-          newIndex = Math.min(
-            currentIndex + getVisibleRowCount(),
-            filteredLogs.length - 1,
-          );
-          break;
-        case "PageUp":
-          e.preventDefault();
-          newIndex = Math.max(currentIndex - getVisibleRowCount(), 0);
-          break;
-        case "Home":
-          e.preventDefault();
-          newIndex = 0;
-          break;
-        case "End":
-          e.preventDefault();
-          newIndex = filteredLogs.length - 1;
-          break;
-        case " ":
-        case "Enter":
-          e.preventDefault();
-          if (selectedLogIndex !== null) {
-            setExpandedLogIndex(
-              expandedLogIndex === selectedLogIndex ? null : selectedLogIndex,
-            );
-          }
-          return;
-        case "Escape":
-          e.preventDefault();
-          if (expandedLogIndex !== null) {
-            setExpandedLogIndex(null);
-          }
-          if (selectedLogIndices.size > 0) {
-            clearSelection();
-          }
-          return;
-        case "c":
-          // Handle Cmd+C / Ctrl+C for copying selected messages
-          if ((e.metaKey || e.ctrlKey) && selectedLogIndices.size > 0) {
-            e.preventDefault();
-            const messages = [...selectedLogIndices]
-              .sort((a, b) => a - b)
-              .map((i) => filteredLogs[i]?.message)
-              .filter(Boolean)
-              .join("\n");
-            navigator.clipboard.writeText(messages);
-          }
-          return;
-        case "a":
-          // Handle Cmd+A / Ctrl+A to select all visible logs
-          if (e.metaKey || e.ctrlKey) {
-            e.preventDefault();
-            const allIndices = new Set<number>(
-              Array.from({ length: filteredLogs.length }, (_, i) => i),
-            );
-            setSelectedLogIndices(allIndices);
-            // Collapse any expanded log when selecting all
-            if (expandedLogIndex !== null) {
-              setExpandedLogIndex(null);
-            }
-          }
-          return;
-      }
-
-      if (newIndex !== null && newIndex !== currentIndex) {
-        setSelectedLogIndex(newIndex);
-        // Scroll to keep selected row visible
-        if (listRef.current) {
-          listRef.current.scrollToRow({
-            index:
-              expandedLogIndex !== null && newIndex > expandedLogIndex
-                ? newIndex + 1
-                : newIndex,
-            align: "smart",
-          });
-        }
-      }
-    },
-    [
-      filteredLogs,
-      selectedLogIndex,
-      expandedLogIndex,
-      setSelectedLogIndex,
-      setExpandedLogIndex,
-      getVisibleRowCount,
-      selectedLogIndices,
-      clearSelection,
-      findState.isOpen,
-      findActions,
-      contextMenu,
-    ],
-  );
+  // Keyboard navigation hook
+  const { handleKeyDown } = useKeyboardNavigation({
+    filteredLogs,
+    selectedLogIndex,
+    expandedLogIndex,
+    setSelectedLogIndex,
+    setExpandedLogIndex,
+    getVisibleRowCount,
+    selectedLogIndices,
+    clearSelection,
+    setSelectedLogIndices,
+    findStateIsOpen: findState.isOpen,
+    findActionsClose: findActions.close,
+    contextMenu,
+    setContextMenu,
+    listRef,
+  });
 
   // Calculate row count (add 1 for detail row when expanded)
   const rowCount =
@@ -1007,7 +629,11 @@ export function LogViewer() {
         listRef={listRef}
         rowCount={rowCount}
         rowHeight={getRowHeight}
-        rowComponent={LogRow}
+        // Type assertion: react-window v2's RowComponent type is incompatible with
+        // components receiving custom props via rowProps. This is a known limitation.
+        // Our LogRow receives (index, style) from react-window plus additional props.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rowComponent={LogRow as any}
         rowProps={{
           logs: filteredLogs,
           expandedIndex: expandedLogIndex,

@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useLogStore } from "../stores/logStore";
 import {
   useSettingsStore,
   DEFAULT_CACHE_LIMITS,
 } from "../stores/settingsStore";
-import { useEffect, useState } from "react";
+import { useSystemTheme } from "../hooks/useSystemTheme";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -122,23 +123,8 @@ export function StatusBar() {
     totalSizeBytes,
     selectedLogGroup,
   } = useLogStore();
-  const { theme, cacheLimits } = useSettingsStore();
-
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
+  const { cacheLimits } = useSettingsStore();
+  const isDark = useSystemTheme();
 
   if (!selectedLogGroup) {
     return null;

@@ -1,9 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { MdFilterAltOff, MdDeleteOutline } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { TimeRangePicker } from "./TimeRangePicker";
 import type { LogLevel } from "../types";
+import { useDebounce } from "../hooks/useDebounce";
+import { useSystemTheme } from "../hooks/useSystemTheme";
+
+/** Delay in ms before filter text changes trigger log filtering */
+const FILTER_DEBOUNCE_MS = 300;
 
 export function FilterBar() {
   const {
@@ -17,9 +22,28 @@ export function FilterBar() {
     logs,
     selectedLogGroup,
   } = useLogStore();
-  const { theme, logLevels } = useSettingsStore();
+  const { logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const isDark = useSystemTheme();
+
+  // Local state for immediate input feedback
+  const [inputValue, setInputValue] = useState(filterText);
+
+  // Debounce the filter operation to avoid excessive re-filtering on every keystroke
+  const debouncedFilterText = useDebounce(inputValue, FILTER_DEBOUNCE_MS);
+
+  // Sync debounced value to store
+  useEffect(() => {
+    if (debouncedFilterText !== filterText) {
+      setFilterText(debouncedFilterText);
+    }
+  }, [debouncedFilterText, filterText, setFilterText]);
+
+  // Sync store value to input (for external changes like Clear button)
+  useEffect(() => {
+    setInputValue(filterText);
+  }, [filterText]);
 
   // Handle CMD-L to focus filter input
   useEffect(() => {
@@ -36,35 +60,23 @@ export function FilterBar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Track system preference for theme
-  const [systemPrefersDark, setSystemPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  // Count logs by level (memoized to avoid O(n) recalculation on every render)
+  const levelCounts = useMemo(
+    () =>
+      logs.reduce(
+        (acc, log) => {
+          acc[log.level] = (acc[log.level] || 0) + 1;
+          return acc;
+        },
+        {} as Record<LogLevel, number>,
+      ),
+    [logs],
   );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemPrefersDark(e.matches);
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  const isDark = theme === "system" ? systemPrefersDark : theme === "dark";
 
   // Hide filter bar until a log group is selected
   if (!selectedLogGroup) {
     return null;
   }
-
-  // Count logs by level
-  const levelCounts = logs.reduce(
-    (acc, log) => {
-      acc[log.level] = (acc[log.level] || 0) + 1;
-      return acc;
-    },
-    {} as Record<LogLevel, number>,
-  );
 
   return (
     <div
@@ -77,14 +89,14 @@ export function FilterBar() {
           <input
             ref={filterInputRef}
             type="text"
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             placeholder="Filter logs... (use field:value for JSON fields)"
             className={`w-full rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 placeholder-gray-500" : "bg-white border border-gray-300 placeholder-gray-400"}`}
           />
-          {filterText && (
+          {inputValue && (
             <button
-              onClick={() => setFilterText("")}
+              onClick={() => setInputValue("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 cursor-pointer"
             >
               ×
