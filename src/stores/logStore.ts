@@ -17,12 +17,21 @@ export function getCurrentFetchId(): number {
 }
 
 // Cache for compiled keyword regex patterns (avoids recompiling on every log)
+// Limited size to prevent unbounded memory growth
+const MAX_KEYWORD_CACHE_SIZE = 100;
 const keywordRegexCache = new Map<string, RegExp>();
 
 function getKeywordRegex(keyword: string): RegExp {
   const key = keyword.toLowerCase();
   let regex = keywordRegexCache.get(key);
   if (!regex) {
+    // Evict oldest entry if cache is full (Map preserves insertion order)
+    if (keywordRegexCache.size >= MAX_KEYWORD_CACHE_SIZE) {
+      const oldestKey = keywordRegexCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        keywordRegexCache.delete(oldestKey);
+      }
+    }
     regex = new RegExp(
       `(?:^|[\\s\\t\\[\\]():])${key}(?:[\\s\\t\\[\\]():]|$)`,
       "i",

@@ -57,8 +57,12 @@ export function useDebouncedCallback<T extends (...args: any[]) => any>(
       }
 
       timeoutRef.current = setTimeout(() => {
-        callbackRef.current(...args);
-        timeoutRef.current = null;
+        try {
+          callbackRef.current(...args);
+        } finally {
+          // Always clear ref even if callback throws
+          timeoutRef.current = null;
+        }
       }, delay);
     }) as T,
     [delay],

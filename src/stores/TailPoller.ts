@@ -1,13 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { LogEvent } from "../types";
 
+/** Polling interval in milliseconds */
+const POLL_INTERVAL_MS = 2000;
+
 /**
  * Encapsulates live tail polling logic.
- * Manages interval, start timestamp, and polling state.
+ * Uses recursive setTimeout to prevent poll queueing if requests take longer than interval.
  */
 export class TailPoller {
-  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private timeoutId: ReturnType<typeof setTimeout> | null = null;
   private startTimestamp: number | null = null;
+  private isPolling = false;
 
   constructor(
     private logGroupName: string,
@@ -18,10 +22,10 @@ export class TailPoller {
 
   /**
    * Start polling for new logs.
-   * Sets up 2-second interval and tracks start timestamp.
+   * Uses recursive setTimeout to ensure polls don't queue up if requests are slow.
    */
   start(): void {
-    if (this.intervalId) {
+    if (this.isPolling) {
       console.warn("[TailPoller] Already polling, stopping first");
       this.stop();
     }
@@ -30,23 +34,39 @@ export class TailPoller {
 
     // Track when tail started - used to filter out older logs
     this.startTimestamp = Date.now();
+    this.isPolling = true;
 
-    // Set up polling interval
-    this.intervalId = setInterval(async () => {
-      await this.poll();
-    }, 2000);
+    // Start the polling loop
+    this.scheduleNextPoll();
   }
 
   /**
    * Stop polling and clean up.
    */
   stop(): void {
-    if (this.intervalId) {
-      console.log("[User Activity] Stop live tail");
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
     }
+    if (this.isPolling) {
+      console.log("[User Activity] Stop live tail");
+    }
+    this.isPolling = false;
     this.startTimestamp = null;
+  }
+
+  /**
+   * Schedule the next poll after the interval.
+   * Uses setTimeout instead of setInterval to prevent queueing.
+   */
+  private scheduleNextPoll(): void {
+    if (!this.isPolling) return;
+
+    this.timeoutId = setTimeout(async () => {
+      await this.poll();
+      // Schedule next poll only after current one completes
+      this.scheduleNextPoll();
+    }, POLL_INTERVAL_MS);
   }
 
   /**
@@ -61,7 +81,7 @@ export class TailPoller {
    * Check if currently polling.
    */
   isActive(): boolean {
-    return this.intervalId !== null;
+    return this.isPolling;
   }
 
   /**

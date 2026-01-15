@@ -2,6 +2,13 @@ import { useCallback } from "react";
 import type { ListImperativeAPI } from "react-window";
 import type { ParsedLogEvent } from "../types";
 
+/** Context menu state - only need to check if visible and be able to close it */
+interface ContextMenuState {
+  x: number;
+  y: number;
+  [key: string]: unknown;
+}
+
 interface UseKeyboardNavigationOptions {
   filteredLogs: ParsedLogEvent[];
   selectedLogIndex: number | null;
@@ -14,7 +21,7 @@ interface UseKeyboardNavigationOptions {
   setSelectedLogIndices: (indices: Set<number>) => void;
   findStateIsOpen: boolean;
   findActionsClose: () => void;
-  contextMenu: unknown | null;
+  contextMenu: ContextMenuState | null;
   setContextMenu: (menu: null) => void;
   listRef: React.RefObject<ListImperativeAPI | null>;
 }
