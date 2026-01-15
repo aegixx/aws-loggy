@@ -629,11 +629,11 @@ export function LogViewer() {
         listRef={listRef}
         rowCount={rowCount}
         rowHeight={getRowHeight}
-        // Cast needed: react-window v2's RowComponent type expects (index, style) only,
-        // but our LogRow receives additional props via rowProps spread
-        rowComponent={
-          LogRow as React.ComponentType<RowComponentPropsWithCustom>
-        }
+        // Type assertion: react-window v2's RowComponent type is incompatible with
+        // components receiving custom props via rowProps. This is a known limitation.
+        // Our LogRow receives (index, style) from react-window plus additional props.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rowComponent={LogRow as any}
         rowProps={{
           logs: filteredLogs,
           expandedIndex: expandedLogIndex,
