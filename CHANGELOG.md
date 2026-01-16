@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1](https://github.com/aegixx/aws-loggy/compare/v2.0.0...v2.0.1) (2026-01-16)
+
+
+### Bug Fixes
+
+* clean up corrupted CHANGELOG entries ([6f8ebe4](https://github.com/aegixx/aws-loggy/commit/6f8ebe4d812af2f3b39d800d89647e7aa710dac3))
+* use PAT for release-please to enable workflow triggers ([cbdd5f4](https://github.com/aegixx/aws-loggy/commit/cbdd5f4de27578085725ee833a2607bd8a0409fd))
+
 ## [2.0.0](https://github.com/aegixx/aws-loggy/compare/v1.12.0...v2.0.0) (2026-01-16)
 
 
