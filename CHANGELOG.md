@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/aegixx/aws-loggy/compare/v2.0.1...v2.0.2) (2026-01-16)
+
+
+### Continuous Integration
+
+* only run Claude Code Review on feature PRs ([d16e0bc](https://github.com/aegixx/aws-loggy/commit/d16e0bc674ef0a667998b04aa99b8c16f646a19f))
+
 ## [2.0.1](https://github.com/aegixx/aws-loggy/compare/v2.0.0...v2.0.1) (2026-01-16)
 
 
