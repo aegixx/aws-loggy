@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/aegixx/aws-loggy/compare/v1.10.0...v1.11.0) (2026-01-16)
+
+
+### Features
+
+* add Tauri recommended Cargo release optimizations ([#30](https://github.com/aegixx/aws-loggy/issues/30)) ([243e998](https://github.com/aegixx/aws-loggy/commit/243e998cc114786d27522e1b62613120292fc4ac)), closes [#28](https://github.com/aegixx/aws-loggy/issues/28)
+
 ## [1.10.0](https://github.com/aegixx/aws-loggy/compare/v1.9.0...v1.10.0) (2025-12-29)
 
 
