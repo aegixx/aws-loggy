@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/aegixx/aws-loggy/compare/v1.12.0...v2.0.0) (2026-01-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* release 2.0.0
+
+### Features
+
+* release 2.0.0 ([d7812da](https://github.com/aegixx/aws-loggy/commit/d7812da147dbdfaf01da1e6e794bbde1e7c21203))
+
 ## [1.12.0](https://github.com/aegixx/aws-loggy/compare/v1.11.0...v1.12.0) (2026-01-16)
 
 
