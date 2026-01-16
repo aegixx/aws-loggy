@@ -28,3 +28,14 @@ tokio = { version = "1.48.0", features = ["full"] }
 dirs = "5"
 log = "0.4"
 env_logger = "0.11"
+
+# Build profiles - https://v2.tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1 # Allows LLVM to perform better optimization
+lto = true        # Enables link-time optimizations
+opt-level = "s"   # Prioritizes small binary size (alternative: "3" for speed)
+panic = "abort"   # Higher performance by disabling panic handlers
+strip = true      # Removes debug symbols
+
+[profile.dev]
+incremental = true # Faster incremental compilation
