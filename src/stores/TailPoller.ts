@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { LogEvent } from "../types";
 
 /** Polling interval in milliseconds */
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 1000;
 
 /**
  * Encapsulates live tail polling logic.
@@ -100,7 +100,7 @@ export class TailPoller {
         startTime: lastTimestamp,
         endTime: null,
         filterPattern: null,
-        maxCount: 100,
+        maxCount: null,
         maxSizeMb: null,
       });
 
