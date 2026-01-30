@@ -1298,7 +1298,7 @@ async fn start_live_tail(
                             break;
                         }
                         Err(e) => {
-                            let error_msg = format!("{}", e);
+                            let error_msg = format!("{:?}", e);
                             log::error!("Live tail stream error: {}", error_msg);
                             app.emit("live-tail-error", LiveTailErrorPayload { message: error_msg }).ok();
                             break;
@@ -1307,7 +1307,7 @@ async fn start_live_tail(
                 }
             }
             Err(e) => {
-                let error_msg = format!("{}", e);
+                let error_msg = format!("{:?}", e);
                 log::error!("Failed to start live tail: {}", error_msg);
                 app.emit(
                     "live-tail-error",
