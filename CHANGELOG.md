@@ -1,5 +1,45 @@
 # Changelog
 
+## [2.1.0](https://github.com/aegixx/aws-loggy/compare/v2.0.2...v2.1.0) (2026-01-30)
+
+
+### Features
+
+* add follow mode with Jump to latest button ([35c57db](https://github.com/aegixx/aws-loggy/commit/35c57db3cb07e8155b53ec252698a36a0389e274))
+* add LiveTailEventPayload and LiveTailErrorPayload types ([e93f6b0](https://github.com/aegixx/aws-loggy/commit/e93f6b0c7729eb9d96bee808bb14fa162f740c4a))
+* add LiveTailManager with stream/poll transport orchestration ([df097aa](https://github.com/aegixx/aws-loggy/commit/df097aa177d9ec63ab245aa747cec5a3fbb1629f))
+* add start_live_tail and stop_live_tail Rust commands ([153f1a0](https://github.com/aegixx/aws-loggy/commit/153f1a0b3a74c6c4e2867e96c518a8d2ede0db31))
+* add transport indicator pill and tail toast notifications ([e8b576b](https://github.com/aegixx/aws-loggy/commit/e8b576bb46e60cb08ee9d31f89709b295d9fea8e))
+* integrate LiveTailManager into logStore ([62c2543](https://github.com/aegixx/aws-loggy/commit/62c25436dbbb0d41986c9227d55a2cdc4b221c71))
+* show Follow: ON/OFF indicator in status bar during live tail ([ee7bd1d](https://github.com/aegixx/aws-loggy/commit/ee7bd1d1491b7f830c544da5aee464d19ec64e39))
+
+
+### Bug Fixes
+
+* fix StartLiveTail InvalidParameterException for log group identifiers ([064111f](https://github.com/aegixx/aws-loggy/commit/064111f75b2a83412ff0934cf3eff16fbdee7406))
+* improve connection failure handling and session UX ([b14b990](https://github.com/aegixx/aws-loggy/commit/b14b9905519a3735aa7e2f13b8c4ce37f8b3a07f))
+* pass log group ARN to StartLiveTail API ([8bd4872](https://github.com/aegixx/aws-loggy/commit/8bd4872f2dd153446d0c711d8683c5f027f0e826))
+* prevent infinite retry loop on stream error and improve error messages ([f604fea](https://github.com/aegixx/aws-loggy/commit/f604fea0583412ea081e6809a4305c60f161e0c3))
+* remove hardcoded poll limits in live tail ([6d98d41](https://github.com/aegixx/aws-loggy/commit/6d98d4156261bf69d538b102c2c24fc4da10a3c0))
+
+
+### Code Refactoring
+
+* extract TailTransport interface, implement on TailPoller ([59d88a8](https://github.com/aegixx/aws-loggy/commit/59d88a8e6734bd93aa882e82018e00f44fd32971))
+
+
+### Documentation
+
+* add live tail streaming design document ([f3ea450](https://github.com/aegixx/aws-loggy/commit/f3ea4508e3f724414ad1cce7629bc68e7ad522bd))
+* fix markdownlint MD024 and README project structure ([caffe72](https://github.com/aegixx/aws-loggy/commit/caffe72a388cfd340fa8da195e35c0ef352c7fac))
+* update CLAUDE.md with streaming live tail and follow mode ([70087f8](https://github.com/aegixx/aws-loggy/commit/70087f88fa11813e6a110b6aeda7ac809feb6601))
+
+
+### Miscellaneous
+
+* add release command ([53fc75e](https://github.com/aegixx/aws-loggy/commit/53fc75eda15add145397ff5d2f2fe09cc525a597))
+* remove live-tail streaming plan doc ([a7a2555](https://github.com/aegixx/aws-loggy/commit/a7a25551d22788b418e707516cec569cad283c23))
+
 ## [2.0.2](https://github.com/aegixx/aws-loggy/compare/v2.0.1...v2.0.2) (2026-01-16)
 
 
