@@ -1231,6 +1231,15 @@ async fn fetch_logs_paginated(
     }
 }
 
+/// Normalize log group identifier for StartLiveTail: API pattern is [\w#+=/:,.@-]*
+/// (no brackets, no asterisk). Strip optional surrounding brackets and trailing ":*".
+fn normalize_log_group_identifier(raw: &str) -> String {
+    let s = raw.trim();
+    let s = s.strip_prefix('[').unwrap_or(s).strip_suffix(']').unwrap_or(s).trim();
+    let s = s.strip_suffix(":*").unwrap_or(s).trim();
+    s.to_string()
+}
+
 #[tauri::command]
 async fn start_live_tail(
     log_group_arn: String,
@@ -1238,6 +1247,8 @@ async fn start_live_tail(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
+    let normalized = normalize_log_group_identifier(&log_group_arn);
+
     // Stop any existing live tail first
     let mut handle_lock = state.live_tail_handle.lock().await;
     if let Some(handle) = handle_lock.take() {
@@ -1256,7 +1267,7 @@ async fn start_live_tail(
     let handle = tokio::spawn(async move {
         let mut request = client
             .start_live_tail()
-            .log_group_identifiers(&log_group_arn);
+            .log_group_identifiers(normalized.as_str());
 
         if let Some(ref pattern) = filter_pattern {
             if !pattern.is_empty() {
