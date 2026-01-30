@@ -47,6 +47,7 @@ pub struct AppState {
     pub config: Arc<Mutex<Option<aws_config::SdkConfig>>>,
     pub current_profile: Arc<Mutex<Option<String>>>,
     pub fetch_cancelled: Arc<AtomicBool>,
+    pub live_tail_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 /// Validates an AWS profile name for security
@@ -80,6 +81,7 @@ impl Default for AppState {
             config: Arc::new(Mutex::new(None)),
             current_profile: Arc::new(Mutex::new(None)),
             fetch_cancelled: Arc::new(AtomicBool::new(false)),
+            live_tail_handle: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -226,10 +228,12 @@ async fn check_credentials_valid(profile: Option<&String>) -> Result<(), String>
 
                 // Provide specific error messages based on error type
                 if error_msg.to_lowercase().contains("token has expired")
-                    || error_msg.to_lowercase().contains("sso") {
+                    || error_msg.to_lowercase().contains("sso")
+                {
                     Err("SSO session expired - please complete login in browser".to_string())
                 } else if error_msg.to_lowercase().contains("not found")
-                    || error_msg.to_lowercase().contains("no credentials") {
+                    || error_msg.to_lowercase().contains("no credentials")
+                {
                     Err("No credentials found - check profile configuration".to_string())
                 } else {
                     Err(format!("Credential error: {}", error_msg))
@@ -255,13 +259,29 @@ async fn poll_for_credentials_and_refresh(
     for attempt in 1..=max_attempts {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-        log::debug!("Checking credentials (attempt {}/{})", attempt, max_attempts);
-        emit_debug_log(Some(&app), &format!("Checking credentials (attempt {}/{})...", attempt, max_attempts));
+        log::debug!(
+            "Checking credentials (attempt {}/{})",
+            attempt,
+            max_attempts
+        );
+        emit_debug_log(
+            Some(&app),
+            &format!(
+                "Checking credentials (attempt {}/{})...",
+                attempt, max_attempts
+            ),
+        );
 
         match check_credentials_valid(profile_ref).await {
             Ok(()) => {
-                log::info!("Credentials validated successfully after {} attempts", attempt);
-                emit_debug_log(Some(&app), "✓ Credentials are now valid! Refreshing connection...");
+                log::info!(
+                    "Credentials validated successfully after {} attempts",
+                    attempt
+                );
+                emit_debug_log(
+                    Some(&app),
+                    "✓ Credentials are now valid! Refreshing connection...",
+                );
                 // Emit event to trigger frontend refresh
                 app.emit("aws-session-refreshed", ()).ok();
                 return;
@@ -278,7 +298,10 @@ async fn poll_for_credentials_and_refresh(
     let timeout_msg = if let Some(err) = last_error {
         format!("SSO login timeout after {} seconds. Last error: {}. Please complete the login in your browser.", max_attempts * 2, err)
     } else {
-        format!("SSO login timeout after {} seconds. Please complete the login in your browser.", max_attempts * 2)
+        format!(
+            "SSO login timeout after {} seconds. Please complete the login in your browser.",
+            max_attempts * 2
+        )
     };
 
     log::warn!("{}", timeout_msg);
@@ -289,10 +312,7 @@ async fn poll_for_credentials_and_refresh(
 /// Returns Ok(()) if command completes within timeout, Err otherwise
 /// Note: Currently unused but available for future non-interactive AWS CLI commands
 #[allow(dead_code)]
-async fn spawn_aws_cli_with_timeout(
-    args: Vec<&str>,
-    timeout_secs: u64,
-) -> Result<(), String> {
+async fn spawn_aws_cli_with_timeout(args: Vec<&str>, timeout_secs: u64) -> Result<(), String> {
     log::debug!("Spawning AWS CLI command: aws {}", args.join(" "));
 
     let mut cmd = tokio::process::Command::new("aws");
@@ -325,9 +345,15 @@ async fn spawn_aws_cli_with_timeout(
         }
         Err(_) => {
             // Timeout occurred - kill the process
-            log::error!("AWS CLI command timed out after {} seconds, killing process", timeout_secs);
+            log::error!(
+                "AWS CLI command timed out after {} seconds, killing process",
+                timeout_secs
+            );
             let _ = child.kill().await;
-            Err(format!("AWS CLI command timed out after {} seconds", timeout_secs))
+            Err(format!(
+                "AWS CLI command timed out after {} seconds",
+                timeout_secs
+            ))
         }
     }
 }
@@ -335,10 +361,7 @@ async fn spawn_aws_cli_with_timeout(
 /// Open SSO login URL for a profile
 /// This uses `aws sso login --profile` to handle the profile-aware SSO login
 /// After opening, it polls for successful authentication and triggers a refresh
-async fn open_sso_login_url(
-    app: AppHandle,
-    profile: Option<&String>,
-) -> Result<(), String> {
+async fn open_sso_login_url(app: AppHandle, profile: Option<&String>) -> Result<(), String> {
     log::debug!("=== Attempting to open SSO URL for profile ===");
 
     // Validate profile if provided
@@ -381,7 +404,8 @@ async fn open_sso_login_url(
 
             // Provide helpful error messages based on error type
             let user_msg = if error_msg.to_lowercase().contains("not found")
-                || error_msg.to_lowercase().contains("no such file") {
+                || error_msg.to_lowercase().contains("no such file")
+            {
                 "AWS CLI not found. Please install the AWS CLI (https://aws.amazon.com/cli/) to use SSO login.".to_string()
             } else if error_msg.to_lowercase().contains("permission") {
                 "Permission denied when running AWS CLI. Please check file permissions.".to_string()
@@ -677,11 +701,12 @@ async fn init_aws_client(
                 // Try to get more detailed error information
                 let error_msg = format!("{}", e);
                 let error_debug = format!("{:?}", e);
-                let error_source = e.source()
-                    .map(|s| format!("{}", s))
-                    .unwrap_or_default();
+                let error_source = e.source().map(|s| format!("{}", s)).unwrap_or_default();
 
-                emit_debug_log(Some(&app), "=== Credential provider error in init_aws_client ===");
+                emit_debug_log(
+                    Some(&app),
+                    "=== Credential provider error in init_aws_client ===",
+                );
                 emit_debug_log(Some(&app), &format!("Error: {}", error_msg));
                 emit_debug_log(Some(&app), &format!("Error debug: {}", error_debug));
                 emit_debug_log(Some(&app), &format!("Error source: {}", error_source));
@@ -700,7 +725,9 @@ async fn init_aws_client(
                 if should_try_sso {
                     // Try to open SSO URL automatically
                     emit_debug_log(Some(&app), &format!("SSO session expired detected (or SSO profile with credential error), attempting to open SSO URL for profile: {:?}", effective_profile));
-                    if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
+                    if let Err(e) =
+                        open_sso_login_url(app.clone(), effective_profile.as_ref()).await
+                    {
                         emit_debug_log(Some(&app), &format!("Failed to open SSO URL: {}", e));
                     }
                     return Err(
@@ -708,7 +735,10 @@ async fn init_aws_client(
                             .to_string(),
                     );
                 }
-                emit_debug_log(Some(&app), "Error does not match SSO expiration patterns, returning generic error");
+                emit_debug_log(
+                    Some(&app),
+                    "Error does not match SSO expiration patterns, returning generic error",
+                );
                 return Err(format!(
                     "AWS credentials error: {}. Please run 'aws sso login' or check your AWS configuration.",
                     error_msg
@@ -818,11 +848,12 @@ async fn reconnect_aws(
                 // Try to get more detailed error information
                 let error_msg = format!("{}", e);
                 let error_debug = format!("{:?}", e);
-                let error_source = e.source()
-                    .map(|s| format!("{}", s))
-                    .unwrap_or_default();
+                let error_source = e.source().map(|s| format!("{}", s)).unwrap_or_default();
 
-                emit_debug_log(Some(&app), "=== Credential provider error in reconnect_aws ===");
+                emit_debug_log(
+                    Some(&app),
+                    "=== Credential provider error in reconnect_aws ===",
+                );
                 emit_debug_log(Some(&app), &format!("Error: {}", error_msg));
                 emit_debug_log(Some(&app), &format!("Error debug: {}", error_debug));
                 emit_debug_log(Some(&app), &format!("Error source: {}", error_source));
@@ -841,7 +872,9 @@ async fn reconnect_aws(
                 if should_try_sso {
                     // Try to open SSO URL automatically
                     emit_debug_log(Some(&app), &format!("SSO session expired detected (or SSO profile with credential error), attempting to open SSO URL for profile: {:?}", effective_profile));
-                    if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
+                    if let Err(e) =
+                        open_sso_login_url(app.clone(), effective_profile.as_ref()).await
+                    {
                         emit_debug_log(Some(&app), &format!("Failed to open SSO URL: {}", e));
                     }
                     return Err(
@@ -849,7 +882,10 @@ async fn reconnect_aws(
                             .to_string(),
                     );
                 }
-                emit_debug_log(Some(&app), "Error does not match SSO expiration patterns, returning generic error");
+                emit_debug_log(
+                    Some(&app),
+                    "Error does not match SSO expiration patterns, returning generic error",
+                );
                 return Err(format!(
                     "AWS credentials error: {}. Please run 'aws sso login' or check your AWS configuration.",
                     error_msg
@@ -886,11 +922,17 @@ async fn reconnect_aws(
         }
         Err(e) => {
             let error_msg = format!("{}", e);
-            emit_debug_log(Some(&app), &format!("API error in reconnect_aws: {}", error_msg));
+            emit_debug_log(
+                Some(&app),
+                &format!("API error in reconnect_aws: {}", error_msg),
+            );
             // Check for SSO expiration in API errors too
             if is_sso_session_expired(&error_msg) {
                 // Try to open SSO URL automatically
-                emit_debug_log(Some(&app), "SSO expiration detected in API call, opening URL");
+                emit_debug_log(
+                    Some(&app),
+                    "SSO expiration detected in API call, opening URL",
+                );
                 if let Err(e) = open_sso_login_url(app.clone(), effective_profile.as_ref()).await {
                     emit_debug_log(Some(&app), &format!("Failed to open SSO URL: {}", e));
                 }
@@ -977,6 +1019,19 @@ struct LogsTruncated {
     reason: String, // "count" or "size"
 }
 
+/// Payload for live-tail-event
+#[derive(Debug, Clone, Serialize)]
+struct LiveTailEventPayload {
+    logs: Vec<LogEvent>,
+    count: usize,
+}
+
+/// Payload for live-tail-error
+#[derive(Debug, Clone, Serialize)]
+struct LiveTailErrorPayload {
+    message: String,
+}
+
 /// Cancel any in-progress log fetch
 #[tauri::command]
 fn cancel_fetch(state: State<'_, AppState>) {
@@ -1016,7 +1071,10 @@ async fn fetch_logs(
     loop {
         // Check if fetch was cancelled
         if state.fetch_cancelled.load(Ordering::SeqCst) {
-            log::info!("Log fetch cancelled, returning {} logs fetched so far", all_events.len());
+            log::info!(
+                "Log fetch cancelled, returning {} logs fetched so far",
+                all_events.len()
+            );
             return Ok(all_events);
         }
 
@@ -1171,6 +1229,111 @@ async fn fetch_logs_paginated(
             Err(humanize_aws_error(&error_msg))
         }
     }
+}
+
+#[tauri::command]
+async fn start_live_tail(
+    log_group_name: String,
+    filter_pattern: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    // Stop any existing live tail first
+    let mut handle_lock = state.live_tail_handle.lock().await;
+    if let Some(handle) = handle_lock.take() {
+        handle.abort();
+    }
+
+    let client_lock = state.client.lock().await;
+    let client = client_lock
+        .as_ref()
+        .ok_or("AWS client not initialized")?
+        .clone();
+    drop(client_lock);
+
+    let live_tail_handle = state.live_tail_handle.clone();
+
+    let handle = tokio::spawn(async move {
+        let mut request = client
+            .start_live_tail()
+            .log_group_identifiers(&log_group_name);
+
+        if let Some(ref pattern) = filter_pattern {
+            if !pattern.is_empty() {
+                request = request.log_event_filter_pattern(pattern);
+            }
+        }
+
+        match request.send().await {
+            Ok(output) => {
+                let mut stream = output.response_stream;
+                loop {
+                    match stream.recv().await {
+                        Ok(Some(event)) => {
+                            match event {
+                                aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionUpdate(update) => {
+                                    let results = update.session_results.unwrap_or_default();
+                                    let count = results.len();
+                                    let logs: Vec<LogEvent> = results.into_iter().map(|e| LogEvent {
+                                        timestamp: e.timestamp.unwrap_or(0),
+                                        message: e.message.unwrap_or_default(),
+                                        log_stream_name: e.log_stream_name,
+                                        event_id: None,
+                                    }).collect();
+
+                                    if !logs.is_empty() {
+                                        app.emit("live-tail-event", LiveTailEventPayload { logs, count }).ok();
+                                    }
+                                }
+                                aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionStart(_) => {
+                                    log::info!("Live tail session started for {}", log_group_name);
+                                }
+                                _ => {}
+                            }
+                        }
+                        Ok(None) => {
+                            // Stream ended (3-hour timeout)
+                            log::info!("Live tail stream ended for {}", log_group_name);
+                            app.emit("live-tail-ended", serde_json::json!({})).ok();
+                            break;
+                        }
+                        Err(e) => {
+                            let error_msg = format!("{}", e);
+                            log::error!("Live tail stream error: {}", error_msg);
+                            app.emit("live-tail-error", LiveTailErrorPayload { message: error_msg }).ok();
+                            break;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let error_msg = format!("{}", e);
+                log::error!("Failed to start live tail: {}", error_msg);
+                app.emit(
+                    "live-tail-error",
+                    LiveTailErrorPayload { message: error_msg },
+                )
+                .ok();
+            }
+        }
+
+        // Clear handle when done
+        let mut handle_lock = live_tail_handle.lock().await;
+        *handle_lock = None;
+    });
+
+    *handle_lock = Some(handle);
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_live_tail(state: State<'_, AppState>) -> Result<(), String> {
+    let mut handle_lock = state.live_tail_handle.lock().await;
+    if let Some(handle) = handle_lock.take() {
+        handle.abort();
+        log::info!("Live tail stopped");
+    }
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1362,6 +1525,8 @@ pub fn run() {
             fetch_logs_paginated,
             cancel_fetch,
             sync_theme_menu,
+            start_live_tail,
+            stop_live_tail,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
