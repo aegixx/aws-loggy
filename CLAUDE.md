@@ -25,6 +25,9 @@ See `DESIGN.md` for full architecture documentation.
 - `src/components/StatusBar.tsx` - Status bar with log counts and cache usage
 - `src/hooks/useFindInLog.ts` - Find-in-log state management hook
 - `src/utils/highlightMatches.ts` - Text search and highlight utilities
+- `src/stores/LiveTailManager.ts` - Stream/poll transport orchestrator for live tail
+- `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
+- `src/stores/TailTransport.ts` - Transport interface
 - `src/types/index.ts` - TypeScript type definitions
 
 ## Development
@@ -121,7 +124,11 @@ Right-click on any log row to access the context menu with the following options
 - `reconnect_aws` Tauri command re-initializes the AWS client after credential refresh
 - `refreshConnection` store action calls `reconnect_aws` and re-fetches logs with current filters
 - Log cache limits configurable in Settings (default: 50,000 entries OR 100 MB)
-- Live tail polls every 2 seconds
+- Live tail uses CloudWatch StartLiveTail streaming API (1-second updates from AWS)
+- Falls back to 1-second polling if streaming is unavailable or sampling detected
+- Sampling detection: if 500 events in one update, switches to polling from last clean timestamp
+- Follow mode auto-scrolls to latest during live tail; pauses when scrolled up; "Jump to latest" button to resume
+- Transport indicator shows "Streaming" or "Polling" during live tail
 - Default time range is 15 minutes
 - react-window v2 API differs from v1 (use `List`, not `FixedSizeList`)
 - Settings persisted to localStorage via zustand/persist middleware
