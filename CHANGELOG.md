@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.1.0](https://github.com/aegixx/aws-loggy/compare/v2.0.2...v2.1.0) (2026-01-30)
+
+
+### Features
+
+* add follow mode with Jump to latest button ([7785acb](https://github.com/aegixx/aws-loggy/commit/7785acb75af4d278b96612cc0c1c086630eb4e91))
+* add LiveTailEventPayload and LiveTailErrorPayload types ([ad186a6](https://github.com/aegixx/aws-loggy/commit/ad186a612d99498873bb4efcbf2838433171ba40))
+* add LiveTailManager with stream/poll transport orchestration ([5eccc21](https://github.com/aegixx/aws-loggy/commit/5eccc217231010810538e2b2ec0814e7178ec8ff))
+* add start_live_tail and stop_live_tail Rust commands ([fc1afbb](https://github.com/aegixx/aws-loggy/commit/fc1afbb4b9a1babf8b13d446ef5cc6d7c0e94cea))
+* add transport indicator pill and tail toast notifications ([89d85fb](https://github.com/aegixx/aws-loggy/commit/89d85fb90d5999948136ba979599f55e95bd1cdc))
+* integrate LiveTailManager into logStore ([1048b39](https://github.com/aegixx/aws-loggy/commit/1048b391b811a27bb36a1ab60a50ea1520adbce1))
+* show Follow: ON/OFF indicator in status bar during live tail ([1aa5e8b](https://github.com/aegixx/aws-loggy/commit/1aa5e8b31e622cfe645c460ef043d8adf9b3ee60))
+
+
+### Bug Fixes
+
+* pass log group ARN to StartLiveTail API ([9358704](https://github.com/aegixx/aws-loggy/commit/93587047f74a01fb23b0882515f00e5164926b8d))
+* prevent infinite retry loop on stream error and improve error messages ([9d606ba](https://github.com/aegixx/aws-loggy/commit/9d606ba086341b64d31c06ce098792a4c4c830fd))
+* remove hardcoded poll limits in live tail ([636fd3d](https://github.com/aegixx/aws-loggy/commit/636fd3ddc01e6ab8142563ea588e52fb3b4bb3d1))
+
+
+### Code Refactoring
+
+* extract TailTransport interface, implement on TailPoller ([63d4451](https://github.com/aegixx/aws-loggy/commit/63d44510834c8f2042fae030abc1b0cdb0884860))
+
+
+### Documentation
+
+* add live tail streaming design document ([6c43767](https://github.com/aegixx/aws-loggy/commit/6c4376776fef5e9c240dc18493b19d9acfb43499))
+* update CLAUDE.md with streaming live tail and follow mode ([2df46e5](https://github.com/aegixx/aws-loggy/commit/2df46e575f54be39a98d9044397787831ad74fb9))
+
 ## [2.0.2](https://github.com/aegixx/aws-loggy/compare/v2.0.1...v2.0.2) (2026-01-16)
 
 
