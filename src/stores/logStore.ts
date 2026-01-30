@@ -11,6 +11,24 @@ import { LiveTailManager, type TransportType } from "./LiveTailManager";
 // Request ID for cancelling stale fetch requests
 let currentFetchId = 0;
 
+// One-shot auto-refresh after connection failure (avoid multiple timers)
+let connectionFailedAutoRefreshScheduled = false;
+
+function isConnectionOrCredentialError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("expired") ||
+    lower.includes("sso") ||
+    lower.includes("token") ||
+    lower.includes("credential") ||
+    lower.includes("connection") ||
+    lower.includes("connector") ||
+    lower.includes("network") ||
+    lower.includes("timeout") ||
+    lower.includes("unable to connect")
+  );
+}
+
 // Export getter for current fetch ID (used by App.tsx to filter stale progress events)
 export function getCurrentFetchId(): number {
   return currentFetchId;
@@ -155,6 +173,7 @@ interface LogStore {
   resetState: () => void;
   setLoadingProgress: (count: number, sizeBytes: number) => void;
   setSessionExpired: () => void;
+  setConnectionFailed: (message: string) => void;
 }
 
 export function parseLogLevel(
@@ -478,7 +497,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   refreshConnection: async () => {
-    const { selectedLogGroup, timeRange, fetchLogs } = get();
+    const {
+      selectedLogGroup,
+      timeRange,
+      fetchLogs,
+      isTailing,
+      stopTail,
+      startTail,
+    } = get();
     set({ isConnecting: true, connectionError: null });
     try {
       // Get the saved profile from settings
@@ -494,9 +520,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
         awsInfo,
       });
       await get().loadLogGroups();
-      // Re-fetch logs if a log group was selected
+      // If in Live mode (tailing), restart tail from now instead of pulling history
       if (selectedLogGroup) {
-        await fetchLogs(timeRange?.start, timeRange?.end ?? undefined);
+        if (isTailing) {
+          stopTail();
+          startTail();
+        } else {
+          await fetchLogs(timeRange?.start, timeRange?.end ?? undefined);
+        }
       }
     } catch (error) {
       set({
@@ -609,10 +640,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
     } catch (error) {
       // Only set error if this request is still current
       if (fetchId === currentFetchId) {
+        const message = error instanceof Error ? error.message : String(error);
         set({
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
           isLoading: false,
         });
+        if (isConnectionOrCredentialError(message)) {
+          get().setConnectionFailed(message);
+        }
       }
     }
   },
@@ -759,6 +794,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
       },
       onError: (error: unknown) => {
         console.error("[Backend Activity] Tail error:", error);
+        const message = error instanceof Error ? error.message : String(error);
+        if (isConnectionOrCredentialError(message)) {
+          get().setConnectionFailed(message);
+        }
       },
       onTransportChange: (type: TransportType) => {
         set({ activeTransport: type });
@@ -902,5 +941,19 @@ export const useLogStore = create<LogStore>((set, get) => ({
       connectionError:
         "Your AWS session has expired. Please complete SSO login in your browser.",
     });
+  },
+
+  setConnectionFailed: (message: string) => {
+    set({
+      isConnected: false,
+      connectionError: message,
+    });
+    if (!connectionFailedAutoRefreshScheduled) {
+      connectionFailedAutoRefreshScheduled = true;
+      setTimeout(() => {
+        connectionFailedAutoRefreshScheduled = false;
+        get().refreshConnection();
+      }, 2000);
+    }
   },
 }));

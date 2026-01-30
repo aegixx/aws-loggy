@@ -199,14 +199,19 @@ export class LiveTailManager {
     // Clean up listeners first to prevent re-entrant error handling
     this.cleanupListeners();
 
-    // Check if SSO expired
-    const isSsoError =
-      message.toLowerCase().includes("expired") ||
-      message.toLowerCase().includes("sso") ||
-      message.toLowerCase().includes("token");
+    const lower = message.toLowerCase();
+    const isConnectionOrCredentialError =
+      lower.includes("expired") ||
+      lower.includes("sso") ||
+      lower.includes("token") ||
+      lower.includes("credential") ||
+      lower.includes("connection") ||
+      lower.includes("connector") ||
+      lower.includes("network") ||
+      lower.includes("timeout") ||
+      lower.includes("unable to connect");
 
-    if (isSsoError) {
-      // Let the existing SSO refresh flow handle it
+    if (isConnectionOrCredentialError) {
       this.onError(new Error(message));
       this.stop();
     } else {
