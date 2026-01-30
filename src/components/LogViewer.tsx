@@ -147,13 +147,25 @@ const LogRow = memo(function LogRow({
   let rowClasses =
     "flex items-center px-3 font-mono text-xs border-b cursor-pointer transition-colors border-l-2 select-none ";
   if (isExpanded) {
-    rowClasses += `border-l-blue-500 ${isDark ? "bg-blue-900/30" : "bg-blue-100"}`;
+    rowClasses += `border-l-blue-500 ${
+      isDark ? "bg-blue-900/30" : "bg-blue-100"
+    }`;
   } else if (isMultiSelected) {
-    rowClasses += `border-l-blue-400 ${isDark ? "bg-blue-900/40" : "bg-blue-100/80"}`;
+    rowClasses += `border-l-blue-400 ${
+      isDark ? "bg-blue-900/40" : "bg-blue-100/80"
+    }`;
   } else if (isSelected) {
-    rowClasses += `border-l-blue-400 ${isDark ? "bg-gray-700/50 ring-1 ring-inset ring-blue-500/50" : "bg-blue-50 ring-1 ring-inset ring-blue-300"}`;
+    rowClasses += `border-l-blue-400 ${
+      isDark
+        ? "bg-gray-700/50 ring-1 ring-inset ring-blue-500/50"
+        : "bg-blue-50 ring-1 ring-inset ring-blue-300"
+    }`;
   } else {
-    rowClasses += `border-l-transparent ${isDark ? "border-gray-800/50 hover:bg-gray-800/30" : "border-gray-200 hover:bg-gray-100"}`;
+    rowClasses += `border-l-transparent ${
+      isDark
+        ? "border-gray-800/50 hover:bg-gray-800/30"
+        : "border-gray-200 hover:bg-gray-100"
+    }`;
   }
 
   return (
@@ -172,7 +184,9 @@ const LogRow = memo(function LogRow({
       className={rowClasses}
     >
       <span
-        className={`w-36 shrink-0 ${isDark ? "text-gray-500" : "text-gray-500"}`}
+        className={`w-36 shrink-0 ${
+          isDark ? "text-gray-500" : "text-gray-500"
+        }`}
       >
         {log.formattedTime}
       </span>
@@ -225,13 +239,13 @@ export function LogViewer() {
     refreshConnection,
     clearLogs,
     setFilterText,
+    isFollowing,
+    setIsFollowing,
   } = useLogStore();
   const isDark = useSystemTheme();
   const listRef = useRef<ListImperativeAPI>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScroll = useRef(true);
   const prevLogCount = useRef(0);
-  const userScrolledAway = useRef(false);
 
   // Callback to navigate to a log when find navigates to a match
   const handleNavigateToLog = useCallback(
@@ -456,21 +470,15 @@ export function LogViewer() {
     [expandedLogIndex],
   );
 
-  // Auto-scroll to bottom when tailing and new logs arrive
+  // Auto-scroll to bottom when following and new logs arrive
   useEffect(() => {
     const hasNewLogs = filteredLogs.length > prevLogCount.current;
     prevLogCount.current = filteredLogs.length;
 
-    // Only auto-scroll if:
-    // 1. We're in tailing mode
-    // 2. New logs have arrived (not just filtering)
-    // 3. User hasn't scrolled away from bottom
-    // 4. shouldAutoScroll is true (we're near bottom)
     if (
       isTailing &&
       hasNewLogs &&
-      shouldAutoScroll.current &&
-      !userScrolledAway.current &&
+      isFollowing &&
       listRef.current &&
       filteredLogs.length > 0
     ) {
@@ -479,45 +487,39 @@ export function LogViewer() {
         align: "end",
       });
     }
-  }, [filteredLogs.length, isTailing]);
+  }, [filteredLogs.length, isTailing, isFollowing]);
 
-  // Reset scroll state when starting/stopping tail
+  // Scroll to bottom when starting tail
   useEffect(() => {
-    if (isTailing) {
-      shouldAutoScroll.current = true;
-      userScrolledAway.current = false;
-      // Scroll to bottom when starting tail
-      if (listRef.current && filteredLogs.length > 0) {
-        listRef.current.scrollToRow({
-          index: filteredLogs.length - 1,
-          align: "end",
-        });
-      }
+    if (isTailing && listRef.current && filteredLogs.length > 0) {
+      listRef.current.scrollToRow({
+        index: filteredLogs.length - 1,
+        align: "end",
+      });
     }
   }, [isTailing, filteredLogs.length]);
 
   const handleRowsRendered = useCallback(
     (visibleRows: { startIndex: number; stopIndex: number }) => {
-      // Check if user is at or near the bottom of the list
+      if (!isTailing) return;
+
       const isAtBottom = visibleRows.stopIndex >= rowCount - 3;
 
-      if (isAtBottom) {
-        // User scrolled back to bottom - resume auto-scroll
-        shouldAutoScroll.current = true;
-        userScrolledAway.current = false;
-      } else if (shouldAutoScroll.current && isTailing) {
-        // User scrolled away from bottom while tailing - pause auto-scroll
-        userScrolledAway.current = true;
-        shouldAutoScroll.current = false;
+      if (isAtBottom && !isFollowing) {
+        setIsFollowing(true);
+      } else if (!isAtBottom && isFollowing) {
+        setIsFollowing(false);
       }
     },
-    [rowCount, isTailing],
+    [rowCount, isTailing, isFollowing, setIsFollowing],
   );
 
   if (!selectedLogGroup) {
     return (
       <div
-        className={`flex-1 flex items-center justify-center ${isDark ? "text-gray-500" : "text-gray-600"}`}
+        className={`flex-1 flex items-center justify-center ${
+          isDark ? "text-gray-500" : "text-gray-600"
+        }`}
       >
         Select a log group to view logs
       </div>
@@ -527,7 +529,9 @@ export function LogViewer() {
   if (error) {
     return (
       <div
-        className={`flex-1 flex items-center justify-center ${isDark ? "text-red-400" : "text-red-600"}`}
+        className={`flex-1 flex items-center justify-center ${
+          isDark ? "text-red-400" : "text-red-600"
+        }`}
       >
         <div className="text-center max-w-lg px-4">
           <p className="font-semibold">Error fetching logs</p>
@@ -540,7 +544,9 @@ export function LogViewer() {
   if (isLoading && filteredLogs.length === 0) {
     return (
       <div
-        className={`flex-1 flex items-center justify-center ${isDark ? "text-gray-500" : "text-gray-600"}`}
+        className={`flex-1 flex items-center justify-center ${
+          isDark ? "text-gray-500" : "text-gray-600"
+        }`}
       >
         <div className="flex items-center gap-2">
           <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
@@ -568,7 +574,9 @@ export function LogViewer() {
   if (filteredLogs.length === 0) {
     return (
       <div
-        className={`flex-1 flex items-center justify-center ${isDark ? "text-gray-500" : "text-gray-600"}`}
+        className={`flex-1 flex items-center justify-center ${
+          isDark ? "text-gray-500" : "text-gray-600"
+        }`}
       >
         No logs found. Try adjusting the time range or filter.
       </div>
@@ -578,7 +586,9 @@ export function LogViewer() {
   return (
     <div
       ref={containerRef}
-      className={`flex-1 overflow-hidden focus:outline-none relative ${isDragging ? "select-none" : ""}`}
+      className={`flex-1 overflow-hidden focus:outline-none relative ${
+        isDragging ? "select-none" : ""
+      }`}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onMouseMove={handleContainerMouseMove}
@@ -658,6 +668,37 @@ export function LogViewer() {
         overscanCount={20}
         className="h-full"
       />
+
+      {/* Jump to latest button */}
+      {isTailing && !isFollowing && (
+        <button
+          onClick={() => {
+            setIsFollowing(true);
+            if (listRef.current && filteredLogs.length > 0) {
+              listRef.current.scrollToRow({
+                index: filteredLogs.length - 1,
+                align: "end",
+              });
+            }
+          }}
+          className={`absolute bottom-4 right-4 px-3 py-1.5 rounded-full text-xs font-medium shadow-lg transition-all z-10 flex items-center gap-1.5 ${
+            isDark
+              ? "bg-blue-600 hover:bg-blue-500 text-white"
+              : "bg-blue-500 hover:bg-blue-400 text-white"
+          }`}
+        >
+          <svg
+            className="w-3 h-3"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M6 2v8M2 6l4 4 4-4" />
+          </svg>
+          Jump to latest
+        </button>
+      )}
 
       {/* Maximized log view */}
       {maximizedLog && (
