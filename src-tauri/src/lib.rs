@@ -1233,7 +1233,7 @@ async fn fetch_logs_paginated(
 
 #[tauri::command]
 async fn start_live_tail(
-    log_group_name: String,
+    log_group_arn: String,
     filter_pattern: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
@@ -1256,7 +1256,7 @@ async fn start_live_tail(
     let handle = tokio::spawn(async move {
         let mut request = client
             .start_live_tail()
-            .log_group_identifiers(&log_group_name);
+            .log_group_identifiers(&log_group_arn);
 
         if let Some(ref pattern) = filter_pattern {
             if !pattern.is_empty() {
@@ -1286,14 +1286,14 @@ async fn start_live_tail(
                                     }
                                 }
                                 aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionStart(_) => {
-                                    log::info!("Live tail session started for {}", log_group_name);
+                                    log::info!("Live tail session started for {}", log_group_arn);
                                 }
                                 _ => {}
                             }
                         }
                         Ok(None) => {
                             // Stream ended (3-hour timeout)
-                            log::info!("Live tail stream ended for {}", log_group_name);
+                            log::info!("Live tail stream ended for {}", log_group_arn);
                             app.emit("live-tail-ended", serde_json::json!({})).ok();
                             break;
                         }

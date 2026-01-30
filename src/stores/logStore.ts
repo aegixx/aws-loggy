@@ -719,8 +719,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
       isFollowing: true,
     });
 
+    // Resolve ARN for streaming (StartLiveTail requires ARN, not name)
+    const { logGroups } = get();
+    const logGroupArn =
+      logGroups.find((g) => g.name === selectedLogGroup)?.arn ?? null;
+
     const manager = new LiveTailManager({
       logGroupName: selectedLogGroup,
+      logGroupArn,
       onNewLogs: (newLogs: LogEvent[]) => {
         const { logs, filterText, disabledLevels } = get();
 
