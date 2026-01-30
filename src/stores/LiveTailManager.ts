@@ -18,6 +18,7 @@ export class LiveTailManager {
   private lastCleanTimestamp: number | null = null;
   private unlisteners: UnlistenFn[] = [];
   private logGroupName: string;
+  private logGroupArn: string | null;
   private onNewLogs: (logs: LogEvent[]) => void;
   private onError: (error: unknown) => void;
   private onTransportChange: (type: TransportType) => void;
@@ -26,6 +27,7 @@ export class LiveTailManager {
 
   constructor(options: {
     logGroupName: string;
+    logGroupArn: string | null;
     onNewLogs: (logs: LogEvent[]) => void;
     onError: (error: unknown) => void;
     onTransportChange: (type: TransportType) => void;
@@ -33,6 +35,7 @@ export class LiveTailManager {
     getLastLogTimestamp: () => number | null;
   }) {
     this.logGroupName = options.logGroupName;
+    this.logGroupArn = options.logGroupArn;
     this.onNewLogs = options.onNewLogs;
     this.onError = options.onError;
     this.onTransportChange = options.onTransportChange;
@@ -41,14 +44,19 @@ export class LiveTailManager {
   }
 
   async start(): Promise<void> {
-    // Try streaming first, fall back to polling
-    try {
-      await this.startStream();
-    } catch {
-      console.log(
-        "[LiveTailManager] Streaming unavailable, falling back to polling",
-      );
+    // Streaming requires an ARN — fall back to polling if unavailable
+    if (!this.logGroupArn) {
+      console.log("[LiveTailManager] No ARN available, using polling");
       this.startPolling(null);
+    } else {
+      try {
+        await this.startStream();
+      } catch {
+        console.log(
+          "[LiveTailManager] Streaming unavailable, falling back to polling",
+        );
+        this.startPolling(null);
+      }
     }
   }
 
@@ -123,9 +131,9 @@ export class LiveTailManager {
 
     this.unlisteners = [unlistenEvent, unlistenError, unlistenEnded];
 
-    // Start the stream on the backend
+    // Start the stream on the backend (uses ARN — required by StartLiveTail API)
     await invoke("start_live_tail", {
-      logGroupName: this.logGroupName,
+      logGroupArn: this.logGroupArn,
       filterPattern: null,
     });
 
