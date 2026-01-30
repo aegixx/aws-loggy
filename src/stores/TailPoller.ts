@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { LogEvent } from "../types";
+import type { TailTransport } from "./TailTransport";
 
 /** Polling interval in milliseconds */
 const POLL_INTERVAL_MS = 1000;
@@ -8,7 +9,7 @@ const POLL_INTERVAL_MS = 1000;
  * Encapsulates live tail polling logic.
  * Uses recursive setTimeout to prevent poll queueing if requests take longer than interval.
  */
-export class TailPoller {
+export class TailPoller implements TailTransport {
   private timeoutId: ReturnType<typeof setTimeout> | null = null;
   private startTimestamp: number | null = null;
   private isPolling = false;
