@@ -6,6 +6,8 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use std::sync::Arc;
 use tauri::{
     menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
@@ -358,6 +360,15 @@ async fn spawn_aws_cli_with_timeout(args: Vec<&str>, timeout_secs: u64) -> Resul
     }
 }
 
+/// Cooldown so we don't open the SSO browser twice when init is called twice (e.g. React Strict Mode)
+const SSO_OPEN_COOLDOWN_SECS: u64 = 10;
+static LAST_SSO_OPEN: OnceLock<std::sync::Mutex<Option<(Option<String>, Instant)>>> =
+    OnceLock::new();
+
+fn last_sso_open_guard() -> &'static std::sync::Mutex<Option<(Option<String>, Instant)>> {
+    LAST_SSO_OPEN.get_or_init(|| std::sync::Mutex::new(None))
+}
+
 /// Open SSO login URL for a profile
 /// This uses `aws sso login --profile` to handle the profile-aware SSO login
 /// After opening, it polls for successful authentication and triggers a refresh
@@ -370,6 +381,27 @@ async fn open_sso_login_url(app: AppHandle, profile: Option<&String>) -> Result<
             log::error!("Invalid profile name: {}", e);
             return Err(format!("Invalid profile name: {}", e));
         }
+    }
+
+    let profile_key = profile.cloned();
+    let now = Instant::now();
+    {
+        let mut guard = last_sso_open_guard().lock().unwrap();
+        if let Some((ref last_profile, last_time)) = *guard {
+            let same = match (last_profile.as_ref(), profile_key.as_ref()) {
+                (Some(a), Some(b)) => a == b,
+                (None, None) => true,
+                _ => false,
+            };
+            if same && now.duration_since(last_time) < Duration::from_secs(SSO_OPEN_COOLDOWN_SECS) {
+                log::info!(
+                    "Skipping SSO URL open (already opened for this profile within {}s)",
+                    SSO_OPEN_COOLDOWN_SECS
+                );
+                return Ok(());
+            }
+        }
+        *guard = Some((profile_key.clone(), now));
     }
 
     let profile_clone = profile.cloned();
@@ -475,7 +507,14 @@ fn is_sso_session_expired(error_msg: &str) -> bool {
         || (error_lower.contains("unauthorized") && error_lower.contains("token"))
         || error_lower.contains("unable to locate credentials")
         || error_lower.contains("no credentials")
-        || error_lower.contains("failed to load credentials");
+        || error_lower.contains("failed to load credentials")
+        // SDK generic message when credential provider fails (e.g. cache file missing)
+        || error_lower.contains("loading credentials")
+        // Debug format: FailedToLoadToken when SSO cache file is missing
+        || error_lower.contains("failedtoloadtoken")
+        // SSO cache file missing (e.g. after aws sso logout)
+        || ((error_lower.contains("sso/cache") || error_lower.contains("sso\\cache"))
+            && (error_lower.contains("no such file") || error_lower.contains("not found")));
 
     if is_expired {
         log::debug!("✓ SSO expiration detected!");
@@ -1473,6 +1512,57 @@ pub fn run() {
                 .build()?;
 
             app.set_menu(menu)?;
+
+            // Periodic credential check: reload credentials from disk so we detect
+            // killed session (e.g. aws sso logout) without user refresh
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                const INTERVAL_SECS: u64 = 30;
+                const INITIAL_DELAY_SECS: u64 = 15;
+                tokio::time::sleep(Duration::from_secs(INITIAL_DELAY_SECS)).await;
+                loop {
+                    if let Some(state) = app_handle.try_state::<AppState>() {
+                        // Only check when user has connected (we have a client)
+                        let has_client = state.client.lock().await.is_some();
+                        if has_client {
+                            let profile =
+                                { state.current_profile.lock().await.clone() };
+                            // Reload config from disk so we see cleared cache (e.g. aws sso logout)
+                            let mut config_loader =
+                                aws_config::defaults(BehaviorVersion::latest());
+                            if let Some(ref p) = profile {
+                                config_loader = config_loader.profile_name(p);
+                            }
+                            let config = config_loader.load().await;
+                            if let Some(provider) = config.credentials_provider() {
+                                match provider.provide_credentials().await {
+                                    Err(e) => {
+                                        let msg = format!("{}", e);
+                                        let debug = format!("{:?}", e);
+                                        let source = e
+                                            .source()
+                                            .map(|s| format!("{}", s))
+                                            .unwrap_or_default();
+                                        let is_expired = is_sso_session_expired(&msg)
+                                            || is_sso_session_expired(&debug)
+                                            || is_sso_session_expired(&source);
+                                        if is_expired {
+                                            handle_sso_expiration(
+                                                &app_handle,
+                                                &state,
+                                                profile.as_ref(),
+                                            )
+                                            .await;
+                                        }
+                                    }
+                                    Ok(_) => {}
+                                }
+                            }
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_secs(INTERVAL_SECS)).await;
+                }
+            });
 
             // Handle menu events - clone menu item references for use in closure
             let preferences_id = preferences_item.id().clone();

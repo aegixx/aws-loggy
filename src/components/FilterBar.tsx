@@ -17,6 +17,7 @@ export function FilterBar() {
     disabledLevels,
     toggleLevel,
     isTailing,
+    activeTransport,
     clearLogs,
     resetFilters,
     logs,
@@ -116,13 +117,35 @@ export function FilterBar() {
           <MdFilterAltOff className="w-4 h-4" />
         </button>
 
-        {/* Tail indicator */}
-        {isTailing && (
-          <div className="flex items-center gap-2 text-sm text-green-400">
-            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            Streaming
-          </div>
-        )}
+        {/* Transport / mode indicator: fixed width so layout doesn't shift */}
+        <div
+          className="flex items-center gap-2 text-sm min-w-22 justify-end"
+          title={
+            isTailing
+              ? activeTransport === "stream"
+                ? "Live streaming"
+                : "Live polling"
+              : "Static time range"
+          }
+        >
+          {isTailing ? (
+            activeTransport === "stream" ? (
+              <span className="flex items-center gap-2 text-green-400">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse shrink-0" />
+                Streaming
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 text-yellow-400">
+                <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse shrink-0" />
+                Polling
+              </span>
+            )
+          ) : (
+            <span className={isDark ? "text-gray-500" : "text-gray-600"}>
+              Static
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Bottom row: Level toggles + Clear button */}
