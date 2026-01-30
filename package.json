@@ -20,7 +20,8 @@
     "clean": "rm -rf dist src-tauri/target",
     "fmt": "trunk fmt --all",
     "lint": "trunk check --all",
-    "lint:fix": "trunk check --fix --all"
+    "lint:fix": "trunk check --fix --all",
+    "release": "gh workflow run release-please.yml"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
