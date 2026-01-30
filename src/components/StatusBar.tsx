@@ -122,6 +122,8 @@ export function StatusBar() {
     loadingSizeBytes,
     totalSizeBytes,
     selectedLogGroup,
+    isTailing,
+    isFollowing,
   } = useLogStore();
   const { cacheLimits } = useSettingsStore();
   const isDark = useSystemTheme();
@@ -210,6 +212,24 @@ export function StatusBar() {
                 ({formatBytes(totalSizeBytes)})
               </span>
             )}
+          </span>
+        )}
+        {isTailing && (
+          <span
+            className={`flex items-center gap-1 ${
+              isFollowing
+                ? isDark
+                  ? "text-green-400"
+                  : "text-green-600"
+                : isDark
+                  ? "text-yellow-400"
+                  : "text-yellow-600"
+            }`}
+          >
+            <span className="text-[10px]">
+              {isFollowing ? "\u25CF" : "\u25CB"}
+            </span>
+            Follow: {isFollowing ? "ON" : "OFF"}
           </span>
         )}
       </div>
