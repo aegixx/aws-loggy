@@ -6,7 +6,7 @@ import {
   LOG_LEVEL_JSON_FIELDS,
   getSortedLogLevels,
 } from "./settingsStore";
-import { TailPoller } from "./TailPoller";
+import { LiveTailManager, type TransportType } from "./LiveTailManager";
 
 // Request ID for cancelling stale fetch requests
 let currentFetchId = 0;
@@ -125,7 +125,10 @@ interface LogStore {
 
   // Live tail
   isTailing: boolean;
-  tailPoller: TailPoller | null;
+  tailManager: LiveTailManager | null;
+  activeTransport: TransportType | null;
+  isFollowing: boolean;
+  tailToast: string | null;
 
   // Actions
   initializeAws: () => Promise<void>;
@@ -145,6 +148,8 @@ interface LogStore {
   ) => void;
   startTail: () => void;
   stopTail: () => void;
+  setIsFollowing: (following: boolean) => void;
+  setTailToast: (message: string | null) => void;
   clearLogs: () => void;
   resetFilters: () => void;
   resetState: () => void;
@@ -390,7 +395,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectedLogIndices: new Set(),
   timeRange: null,
   isTailing: false,
-  tailPoller: null,
+  tailManager: null,
+  activeTransport: null,
+  isFollowing: false,
+  tailToast: null,
 
   initializeAws: async () => {
     set({ isConnecting: true, connectionError: null });
@@ -686,42 +694,37 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   startTail: () => {
-    const { isTailing, selectedLogGroup, tailPoller } = get();
+    const { isTailing, selectedLogGroup, tailManager: existingManager } = get();
     if (!selectedLogGroup) return;
-
-    // If already tailing, don't start another interval
     if (isTailing) return;
 
     // Cancel any in-flight fetch requests
     currentFetchId++;
-
-    // Cancel any in-progress backend fetch
     invoke("cancel_fetch").catch((e) => {
       console.debug("[Backend Activity] cancel_fetch:", e);
     });
 
-    // Stop any existing poller (defensive, survives HMR)
-    if (tailPoller) {
-      tailPoller.stop();
+    // Stop any existing manager (defensive, survives HMR)
+    if (existingManager) {
+      existingManager.stop();
     }
 
     // Clear existing logs - live tail starts fresh from now
     set({
-      isLoading: false, // Cancel loading state from previous fetch
+      isLoading: false,
       logs: [],
       filteredLogs: [],
       expandedLogIndex: null,
       selectedLogIndex: null,
+      isFollowing: true,
     });
 
-    // Create new TailPoller instance
-    const newPoller = new TailPoller(
-      selectedLogGroup,
-      (newLogs: LogEvent[]) => {
-        // Handle new logs from poller
+    const manager = new LiveTailManager({
+      logGroupName: selectedLogGroup,
+      onNewLogs: (newLogs: LogEvent[]) => {
         const { logs, filterText, disabledLevels } = get();
 
-        // Deduplicate: filter out logs we already have (by event_id or timestamp+message)
+        // Deduplicate
         const existingIds = new Set(
           logs.map((l) => l.event_id).filter(Boolean),
         );
@@ -734,16 +737,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
           return !existingKeys.has(key);
         });
 
-        if (uniqueNewLogs.length === 0) {
-          return; // No new unique logs
-        }
+        if (uniqueNewLogs.length === 0) return;
 
-        // Merge fragmented logs before parsing
         const mergedNew = mergeFragmentedLogs(uniqueNewLogs);
         const parsedNew = mergedNew.map(parseLogEvent);
         const allLogs = [...logs, ...parsedNew];
-
-        // Keep max 50000 logs in memory
         const trimmedLogs = allLogs.slice(-50000);
         const filtered = getFilteredLogs(
           trimmedLogs,
@@ -753,37 +751,52 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
         set({ logs: trimmedLogs, filteredLogs: filtered });
       },
-      (error: unknown) => {
-        console.error("[Backend Activity] Tail fetch error:", error);
+      onError: (error: unknown) => {
+        console.error("[Backend Activity] Tail error:", error);
       },
-      () => {
-        // Get last log timestamp
+      onTransportChange: (type: TransportType) => {
+        set({ activeTransport: type });
+      },
+      onToast: (message: string) => {
+        set({ tailToast: message });
+        setTimeout(() => {
+          const { tailToast } = get();
+          if (tailToast === message) {
+            set({ tailToast: null });
+          }
+        }, 5000);
+      },
+      getLastLogTimestamp: () => {
         const { logs } = get();
         return logs.length > 0 ? logs[logs.length - 1].timestamp : null;
       },
-    );
+    });
 
-    newPoller.start();
+    manager.start();
 
-    set({ isTailing: true, tailPoller: newPoller });
+    set({ isTailing: true, tailManager: manager });
   },
 
   stopTail: () => {
-    const { tailPoller } = get();
-    if (tailPoller) {
-      tailPoller.stop();
+    const { tailManager } = get();
+    if (tailManager) {
+      tailManager.stop();
     }
-    set({ isTailing: false, tailPoller: null });
+    set({
+      isTailing: false,
+      tailManager: null,
+      activeTransport: null,
+      isFollowing: false,
+    });
   },
 
   clearLogs: () => {
     console.log("[User Activity] Clear logs");
-    const { selectedLogGroup, fetchLogs, timeRange, isTailing, tailPoller } =
+    const { selectedLogGroup, fetchLogs, timeRange, isTailing, tailManager } =
       get();
 
-    // If tailing, reset the tail start timestamp so we only show logs from now
-    if (isTailing && tailPoller) {
-      tailPoller.resetStartTimestamp();
+    if (isTailing && tailManager) {
+      tailManager.resetStartTimestamp();
     }
 
     // Clear logs but keep current filters
@@ -867,6 +880,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   setLoadingProgress: (count: number, sizeBytes: number) => {
     set({ loadingProgress: count, loadingSizeBytes: sizeBytes });
+  },
+
+  setIsFollowing: (following: boolean) => {
+    set({ isFollowing: following });
+  },
+
+  setTailToast: (message: string | null) => {
+    set({ tailToast: message });
   },
 
   setSessionExpired: () => {
