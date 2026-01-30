@@ -19,3 +19,12 @@ export interface ParsedLogEvent extends LogEvent {
   parsedJson: Record<string, unknown> | null;
   formattedTime: string;
 }
+
+export interface LiveTailEventPayload {
+  logs: LogEvent[];
+  count: number;
+}
+
+export interface LiveTailErrorPayload {
+  message: string;
+}
