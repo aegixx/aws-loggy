@@ -128,7 +128,8 @@ loggy/
 │   ├── components/     # UI components
 │   ├── stores/         # Zustand state management
 │   └── types/          # TypeScript definitions
-├── DESIGN.md           # Architecture documentation
+├── docs/
+│   └── DESIGN.md       # Architecture documentation
 └── CLAUDE.md           # AI assistant instructions
 ```
 
