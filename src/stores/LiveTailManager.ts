@@ -187,7 +187,10 @@ export class LiveTailManager {
     );
   }
 
-  private async handleStreamError(message: string): Promise<void> {
+  private handleStreamError(message: string): void {
+    // Clean up listeners first to prevent re-entrant error handling
+    this.cleanupListeners();
+
     // Check if SSO expired
     const isSsoError =
       message.toLowerCase().includes("expired") ||
@@ -198,18 +201,11 @@ export class LiveTailManager {
       // Let the existing SSO refresh flow handle it
       this.onError(new Error(message));
       this.stop();
-      return;
-    }
-
-    // Try to reconnect streaming
-    try {
-      this.cleanupListeners();
-      await this.startStream();
-      this.onToast("Live stream reconnected");
-    } catch {
-      // Fall back to polling
+    } else {
+      // Fall back to polling — don't retry streaming (it just failed)
       console.log(
-        "[LiveTailManager] Reconnect failed, falling back to polling",
+        "[LiveTailManager] Stream error, falling back to polling:",
+        message,
       );
       this.startPolling(null);
       this.onToast("Stream unavailable \u2014 using polling");
@@ -218,8 +214,8 @@ export class LiveTailManager {
 
   private async handleStreamEnded(): Promise<void> {
     // 3-hour timeout — auto-reconnect
+    this.cleanupListeners();
     try {
-      this.cleanupListeners();
       await this.startStream();
       this.onToast("Live stream reconnected");
     } catch {
