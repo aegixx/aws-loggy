@@ -8,3 +8,6 @@ line_length: false
 spaces: false
 url: false
 whitespace: false
+# Allow duplicate heading text in different sections (e.g. plan docs with "Step 1" per task)
+MD024:
+  siblings_only: true
