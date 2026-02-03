@@ -37,6 +37,8 @@ npm start          # Run app in dev mode with hot reload
 npm run app:build  # Build production app
 npm run fmt        # Format code
 npm run lint       # Lint code
+npm test           # Run tests
+npm run test:watch # Run tests in watch mode
 ```
 
 ## Code Style
@@ -133,3 +135,4 @@ Right-click on any log row to access the context menu with the following options
 - react-window v2 API differs from v1 (use `List`, not `FixedSizeList`)
 - Settings persisted to localStorage via zustand/persist middleware
 - Last selected log group is remembered and auto-selected on app launch
+- Auto-update checks for new GitHub Releases on startup (configurable in Settings)
