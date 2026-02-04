@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/aegixx/aws-loggy/compare/v3.0.1...v3.1.0) (2026-02-04)
+
+
+### Features
+
+* add Check for Updates menu item ([#45](https://github.com/aegixx/aws-loggy/issues/45)) ([1c52898](https://github.com/aegixx/aws-loggy/commit/1c528987b7a1f0d3b2e6d53c86f534e8bf608482))
+
 ## [3.0.1](https://github.com/aegixx/aws-loggy/compare/v3.0.0...v3.0.1) (2026-02-04)
 
 
