@@ -369,10 +369,12 @@ function filterLogs(
         return false;
       });
     } else {
-      // Simple text search
-      filtered = filtered.filter((log) =>
-        log.message.toLowerCase().includes(lowerFilter),
-      );
+      // Split on whitespace for AND matching (each term must be present)
+      const terms = lowerFilter.split(/\s+/).filter(Boolean);
+      filtered = filtered.filter((log) => {
+        const lowerMessage = log.message.toLowerCase();
+        return terms.every((term) => lowerMessage.includes(term));
+      });
     }
   }
 
