@@ -4,12 +4,12 @@
 
 Loggy is a desktop application for viewing AWS CloudWatch logs. Built with Tauri (Rust backend) + React/TypeScript frontend.
 
-See `DESIGN.md` for full architecture documentation.
+See `docs/DESIGN.md` for full architecture documentation.
 
 ## Tech Stack
 
 - **Backend**: Tauri 2.x, Rust, AWS SDK for Rust
-- **Frontend**: React 19, TypeScript, Zustand, react-window v2, Tailwind CSS v4
+- **Frontend**: React 19, TypeScript, Zustand, react-window v2, Fuse.js, Tailwind CSS v4
 - **Build**: Vite, trunk (formatting/linting)
 
 ## Key Files
@@ -18,6 +18,7 @@ See `DESIGN.md` for full architecture documentation.
 - `src/stores/logStore.ts` - Zustand store with log/connection state
 - `src/stores/settingsStore.ts` - Zustand store with persisted settings (colors, patterns)
 - `src/components/LogViewer.tsx` - Virtualized log list
+- `src/components/LogGroupSelector.tsx` - Fuzzy search log group selector (Fuse.js + virtualized dropdown)
 - `src/components/FilterBar.tsx` - Filter input and level toggles
 - `src/components/FindBar.tsx` - Find-in-log search bar (CMD-F)
 - `src/components/ContextMenu.tsx` - Right-click context menu for log rows
@@ -148,6 +149,8 @@ Right-click on any log row to access the context menu with the following options
 - Sampling detection: if 500 events in one update, switches to polling from last clean timestamp
 - Follow mode auto-scrolls to latest during live tail; pauses when scrolled up; "Jump to latest" button to resume
 - Transport indicator shows "Streaming" or "Polling" during live tail
+- Log group selector uses Fuse.js fuzzy matching with virtualized dropdown (keyboard nav: ArrowUp/Down, Enter, Escape)
+- Filter bar uses AND matching: space-separated terms must all be present (in any order)
 - Default time range is 15 minutes
 - react-window v2 API differs from v1 (use `List`, not `FixedSizeList`)
 - Settings persisted to localStorage via zustand/persist middleware
