@@ -11,11 +11,44 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve tag and version
+        id: resolve
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.resolve.outputs.tag }}"
+          if gh release view "$TAG" --repo "${{ github.repository }}" &>/dev/null; then
+            echo "Release $TAG already exists, skipping creation"
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "Loggy $TAG" \
+              --notes "See the assets below to download and install Loggy." \
+              --draft
+          fi
+
   build-tauri:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +67,7 @@ jobs:
             asset-name: windows-x86_64
 
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,64 +131,145 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: Loggy ${{ inputs.tag || github.ref_name }}
-          releaseBody: See the assets below to download and install Loggy.
-          releaseDraft: true
-          prerelease: false
-          assetNamePattern: Loggy-[version]-${{ matrix.asset-name }}[ext]
           args: ${{ matrix.args }}
 
+      - name: Collect and rename artifacts
+        shell: bash
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          ASSET="${{ matrix.asset-name }}"
+
+          if [ -n "${{ matrix.rust-targets }}" ]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.rust-targets }}/release/bundle"
+          else
+            BUNDLE_DIR="src-tauri/target/release/bundle"
+          fi
+
+          mkdir -p upload
+
+          for file in "$BUNDLE_DIR"/{dmg,macos,deb,rpm,appimage,msi,nsis}/*; do
+            [ -f "$file" ] || continue
+            filename=$(basename "$file")
+
+            case "$filename" in
+              *.app.tar.gz.sig) ext=".app.tar.gz.sig" ;;
+              *.app.tar.gz)     ext=".app.tar.gz" ;;
+              *.AppImage.sig)   ext=".AppImage.sig" ;;
+              *.AppImage)       ext=".AppImage" ;;
+              *.msi.sig)        ext=".msi.sig" ;;
+              *.msi.zip*)       continue ;;
+              *.msi)            ext=".msi" ;;
+              *.exe.sig)        ext=".exe.sig" ;;
+              *.nsis.zip*)      continue ;;
+              *.exe)            ext=".exe" ;;
+              *.deb.sig)        ext=".deb.sig" ;;
+              *.deb)            ext=".deb" ;;
+              *.rpm.sig)        ext=".rpm.sig" ;;
+              *.rpm)            ext=".rpm" ;;
+              *.dmg)            ext=".dmg" ;;
+              *)                continue ;;
+            esac
+
+            cp "$file" "upload/Loggy-${VERSION}-${ASSET}${ext}"
+          done
+
+          echo "Collected artifacts:"
+          ls -la upload/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.asset-name }}
+          path: upload/
+          retention-days: 1
+
+  upload-release-assets:
+    needs: [create-release, build-tauri]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload assets to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.create-release.outputs.tag }}"
+          echo "Uploading assets to release $TAG:"
+          ls -la artifacts/
+          for file in artifacts/*; do
+            [ -f "$file" ] || continue
+            echo "  Uploading $(basename "$file")..."
+            gh release upload "$TAG" "$file" --repo "${{ github.repository }}" --clobber
+          done
+
   publish-release:
-    needs: build-tauri
+    needs: [create-release, upload-release-assets]
     runs-on: ubuntu-latest
     steps:
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit ${{ inputs.tag || github.ref_name }} --draft=false --repo ${{ github.repository }}
+        run: gh release edit "${{ needs.create-release.outputs.tag }}" --draft=false --repo "${{ github.repository }}"
 
   generate-update-manifest:
-    needs: publish-release
+    needs: [create-release, publish-release]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Generate latest.json manifest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get release info
-          RELEASE=$(gh api repos/${{ github.repository }}/releases/tags/${{ inputs.tag || github.ref_name }})
-          VERSION=$(echo "$RELEASE" | jq -r '.tag_name' | sed 's/^v//')
+          TAG="${{ needs.create-release.outputs.tag }}"
+          VERSION="${{ needs.create-release.outputs.version }}"
+          REPO="${{ github.repository }}"
 
-          # Build manifest
-          cat > latest.json << EOF
-          {
-            "version": "${VERSION}",
-            "notes": "See release notes on GitHub",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "darwin-aarch64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-macos-arm64.app.tar.gz",
-                "signature": ""
-              },
-              "darwin-x86_64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-macos-x86_64.app.tar.gz",
-                "signature": ""
-              },
-              "linux-x86_64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-linux-x86_64.AppImage",
-                "signature": ""
-              },
-              "windows-x86_64": {
-                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-windows-x86_64.msi",
-                "signature": ""
+          # Download signature files
+          mkdir -p sigs
+          gh release download "$TAG" --repo "$REPO" --dir sigs/ --pattern "*.sig"
+
+          # Read signatures
+          MACOS_ARM64_SIG=$(cat "sigs/Loggy-${VERSION}-macos-arm64.app.tar.gz.sig")
+          MACOS_X86_64_SIG=$(cat "sigs/Loggy-${VERSION}-macos-x86_64.app.tar.gz.sig")
+          LINUX_SIG=$(cat "sigs/Loggy-${VERSION}-linux-x86_64.AppImage.sig")
+          WINDOWS_SIG=$(cat "sigs/Loggy-${VERSION}-windows-x86_64.msi.sig")
+
+          # Build manifest with actual signatures using jq for proper JSON
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg repo "$REPO" \
+            --arg tag "$TAG" \
+            --arg macos_arm64_sig "$MACOS_ARM64_SIG" \
+            --arg macos_x86_64_sig "$MACOS_X86_64_SIG" \
+            --arg linux_sig "$LINUX_SIG" \
+            --arg windows_sig "$WINDOWS_SIG" \
+            '{
+              version: $version,
+              notes: "See release notes on GitHub",
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": {
+                  url: "https://github.com/\($repo)/releases/download/\($tag)/Loggy-\($version)-macos-arm64.app.tar.gz",
+                  signature: $macos_arm64_sig
+                },
+                "darwin-x86_64": {
+                  url: "https://github.com/\($repo)/releases/download/\($tag)/Loggy-\($version)-macos-x86_64.app.tar.gz",
+                  signature: $macos_x86_64_sig
+                },
+                "linux-x86_64": {
+                  url: "https://github.com/\($repo)/releases/download/\($tag)/Loggy-\($version)-linux-x86_64.AppImage",
+                  signature: $linux_sig
+                },
+                "windows-x86_64": {
+                  url: "https://github.com/\($repo)/releases/download/\($tag)/Loggy-\($version)-windows-x86_64.msi",
+                  signature: $windows_sig
+                }
               }
-            }
-          }
-          EOF
+            }' > latest.json
 
           # Upload to release
-          gh release upload ${{ inputs.tag || github.ref_name }} latest.json --repo ${{ github.repository }} --clobber
+          gh release upload "$TAG" latest.json --repo "$REPO" --clobber
