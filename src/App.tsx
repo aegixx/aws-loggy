@@ -48,8 +48,14 @@ function App() {
   ]);
   const [isChangingProfile, setIsChangingProfile] = useState(false);
 
-  const { update: availableUpdate } = useUpdateCheck();
+  const {
+    update: availableUpdate,
+    isChecking: isCheckingForUpdates,
+    noUpdateAvailable,
+    checkNow,
+  } = useUpdateCheck();
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [showUpToDate, setShowUpToDate] = useState(false);
 
   // Show update dialog when update is available
   useEffect(() => {
@@ -57,6 +63,15 @@ function App() {
       setShowUpdateDialog(true);
     }
   }, [availableUpdate]);
+
+  // Show "up to date" toast when manual check finds no update
+  useEffect(() => {
+    if (noUpdateAvailable) {
+      setShowUpToDate(true);
+      const timer = setTimeout(() => setShowUpToDate(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [noUpdateAvailable]);
 
   useEffect(() => {
     initializeAws();
@@ -149,6 +164,9 @@ function App() {
       const newTheme = event.payload as "dark" | "light" | "system";
       setTheme(newTheme);
     });
+    const unlistenCheckUpdates = listen("check-for-updates", () => {
+      checkNow();
+    });
     const unlistenFind = listen("open-find", () => {
       // Dispatch synthetic keyboard event to trigger find bar in LogViewer
       window.dispatchEvent(
@@ -171,6 +189,7 @@ function App() {
       unlistenSessionExpired.then((fn) => fn());
       unlistenClear.then((fn) => fn());
       unlistenTheme.then((fn) => fn());
+      unlistenCheckUpdates.then((fn) => fn());
       unlistenFind.then((fn) => fn());
     };
   }, [
@@ -180,6 +199,7 @@ function App() {
     setSessionExpired,
     clearLogs,
     setTheme,
+    checkNow,
   ]);
 
   // Handle keyboard shortcuts (fallback for non-menu shortcuts)
@@ -359,6 +379,29 @@ function App() {
         </div>
       )}
 
+      {/* Up to date toast */}
+      {showUpToDate && (
+        <div
+          className={`absolute top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm flex items-center gap-2 ${
+            isDark
+              ? "bg-gray-700 text-gray-100 border border-gray-600"
+              : "bg-white text-gray-800 border border-gray-300"
+          }`}
+        >
+          <span>Loggy is up to date</span>
+          <button
+            onClick={() => setShowUpToDate(false)}
+            className={`ml-2 ${
+              isDark
+                ? "text-gray-400 hover:text-gray-200"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Tail toast notification */}
       {tailToast && (
         <div
@@ -441,7 +484,7 @@ function App() {
       )}
 
       {/* Status bar */}
-      <StatusBar />
+      <StatusBar isCheckingForUpdates={isCheckingForUpdates} />
 
       {/* Portal for DatePicker popups */}
       <div id="datepicker-portal" className={isDark ? "datepicker-dark" : ""} />

@@ -1400,6 +1400,10 @@ pub fn run() {
             // Create menu items
             let about_item = MenuItemBuilder::new("About Loggy").id("about").build(app)?;
 
+            let check_updates_item = MenuItemBuilder::new("Check for Updates...")
+                .id("check-for-updates")
+                .build(app)?;
+
             let preferences_item = MenuItemBuilder::new("Preferences...")
                 .id("preferences")
                 .accelerator("CmdOrCtrl+,")
@@ -1456,6 +1460,7 @@ pub fn run() {
             // App submenu (macOS application menu)
             let app_submenu = SubmenuBuilder::new(app, "Loggy")
                 .item(&about_item)
+                .item(&check_updates_item)
                 .separator()
                 .item(&preferences_item)
                 .separator()
@@ -1569,6 +1574,7 @@ pub fn run() {
             // Handle menu events - clone menu item references for use in closure
             let preferences_id = preferences_item.id().clone();
             let about_id = about_item.id().clone();
+            let check_updates_id = check_updates_item.id().clone();
             let refresh_id = refresh_item.id().clone();
             let clear_id = clear_item.id().clone();
             let find_id = find_item.id().clone();
@@ -1587,6 +1593,8 @@ pub fn run() {
                     app_handle.emit("open-settings", ()).ok();
                 } else if *event.id() == about_id {
                     app_handle.emit("open-about", ()).ok();
+                } else if *event.id() == check_updates_id {
+                    app_handle.emit("check-for-updates", ()).ok();
                 } else if *event.id() == refresh_id {
                     app_handle.emit("refresh-logs", ()).ok();
                 } else if *event.id() == clear_id {
