@@ -68,6 +68,22 @@ describe("useUpdateCheck", () => {
     expect(result.current.update).toBeNull();
   });
 
+  it("should log check errors to console", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockCheck.mockRejectedValue(new Error("Network error"));
+
+    renderHook(() => useUpdateCheck());
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[Update Check] Failed:",
+        "Network error",
+      );
+    });
+
+    consoleSpy.mockRestore();
+  });
+
   it("should allow manual check via checkNow when autoUpdateEnabled is false", async () => {
     useSettingsStore.setState({ autoUpdateEnabled: false });
     mockCheck.mockResolvedValue(null);

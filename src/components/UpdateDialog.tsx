@@ -67,7 +67,10 @@ export function UpdateDialog({ isOpen, onClose, update }: UpdateDialogProps) {
 
       await relaunch();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Update failed");
+      const message =
+        err instanceof Error ? err.message : String(err || "Update failed");
+      console.error("[Update] Download/install failed:", err);
+      setError(message);
       setIsDownloading(false);
     }
   };

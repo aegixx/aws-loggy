@@ -29,7 +29,10 @@ export function useUpdateCheck(): UseUpdateCheckResult {
         setNoUpdateCount((c) => c + 1);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Update check failed");
+      const message =
+        err instanceof Error ? err.message : "Update check failed";
+      setError(message);
+      console.error("[Update Check] Failed:", message);
     } finally {
       setIsChecking(false);
     }
