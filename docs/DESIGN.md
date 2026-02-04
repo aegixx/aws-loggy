@@ -145,7 +145,7 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 **Filter Types:**
 
-1. **Text Search**: Simple substring match across log message
+1. **Text Search**: Space-separated AND matching (all terms must be present in any order)
 2. **JSON Field Query**: `field:value` or `field.nested:value` syntax
 3. **Log Level**: Quick toggles for ERROR, WARN, INFO, DEBUG, TRACE, SYSTEM
 
@@ -198,9 +198,8 @@ aws-loggy/
 │   │   └── index.ts
 │   └── App.tsx
 ├── package.json
-├── DESIGN.md               # This file
-├── AGENTS.md               # AI agent instructions
-└── CLAUDE.md -> AGENTS.md  # Symlink
+├── docs/DESIGN.md          # This file
+└── CLAUDE.md               # AI agent instructions
 ```
 
 ## Configuration
@@ -232,6 +231,7 @@ aws-loggy/
 - `date-fns` - Date utilities
 - `react-icons` - Material Design icons
 - `react-datepicker` - Date/time picker component
+- `fuse.js` - Fuzzy search for log group selector
 
 ## Scripts
 
@@ -246,7 +246,6 @@ npm run lint       # Lint code (trunk)
 
 - Regex filter support (`/pattern/`)
 - Custom colorization rules
-- AWS profile selector UI
 - Saved/favorite queries
 - Export to JSON/CSV
 - CloudWatch Logs Insights integration
