@@ -30,7 +30,7 @@ See `DESIGN.md` for full architecture documentation.
 - `src/stores/TailTransport.ts` - Transport interface
 - `src/types/index.ts` - TypeScript type definitions
 - `src/components/UpdateDialog.tsx` - Auto-update dialog (shown when update available)
-- `src/hooks/useUpdateCheck.ts` - Hook for checking updates on startup
+- `src/hooks/useUpdateCheck.ts` - Hook for checking updates (startup + manual via menu)
 
 ## Development
 
@@ -98,6 +98,16 @@ npm run test:watch # Run in watch mode
 | `Home` / `End`     | Jump to first / last log                     |
 | `Space` / `Enter`  | Expand / collapse selected log               |
 | `Escape`           | Close dialogs / collapse expanded log        |
+
+## Menu Bar
+
+The Loggy application menu includes:
+
+| Item                 | Description                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| About Loggy          | Show about dialog                                                  |
+| Check for Updates... | Manually check for updates (shows result in status bar and dialog) |
+| Preferences... (⌘,)  | Open settings                                                      |
 
 ## Context Menu
 

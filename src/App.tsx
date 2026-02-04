@@ -15,6 +15,36 @@ import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import "./App.css";
 
+interface ToastProps {
+  message: string;
+  isDark: boolean;
+  onDismiss: () => void;
+}
+
+function Toast({ message, isDark, onDismiss }: ToastProps) {
+  return (
+    <div
+      className={`absolute top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm flex items-center gap-2 ${
+        isDark
+          ? "bg-gray-700 text-gray-100 border border-gray-600"
+          : "bg-white text-gray-800 border border-gray-300"
+      }`}
+    >
+      <span>{message}</span>
+      <button
+        onClick={onDismiss}
+        className={`ml-2 ${
+          isDark
+            ? "text-gray-400 hover:text-gray-200"
+            : "text-gray-500 hover:text-gray-700"
+        }`}
+      >
+        &#x2715;
+      </button>
+    </div>
+  );
+}
+
 function App() {
   const {
     initializeAws,
@@ -48,8 +78,14 @@ function App() {
   ]);
   const [isChangingProfile, setIsChangingProfile] = useState(false);
 
-  const { update: availableUpdate } = useUpdateCheck();
+  const {
+    update: availableUpdate,
+    isChecking: isCheckingForUpdates,
+    noUpdateCount,
+    checkNow,
+  } = useUpdateCheck();
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [showUpToDate, setShowUpToDate] = useState(false);
 
   // Show update dialog when update is available
   useEffect(() => {
@@ -57,6 +93,15 @@ function App() {
       setShowUpdateDialog(true);
     }
   }, [availableUpdate]);
+
+  // Show "up to date" toast when manual check finds no update
+  useEffect(() => {
+    if (noUpdateCount > 0) {
+      setShowUpToDate(true);
+      const timer = setTimeout(() => setShowUpToDate(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [noUpdateCount]);
 
   useEffect(() => {
     initializeAws();
@@ -149,6 +194,9 @@ function App() {
       const newTheme = event.payload as "dark" | "light" | "system";
       setTheme(newTheme);
     });
+    const unlistenCheckUpdates = listen("check-for-updates", () => {
+      checkNow();
+    });
     const unlistenFind = listen("open-find", () => {
       // Dispatch synthetic keyboard event to trigger find bar in LogViewer
       window.dispatchEvent(
@@ -171,6 +219,7 @@ function App() {
       unlistenSessionExpired.then((fn) => fn());
       unlistenClear.then((fn) => fn());
       unlistenTheme.then((fn) => fn());
+      unlistenCheckUpdates.then((fn) => fn());
       unlistenFind.then((fn) => fn());
     };
   }, [
@@ -180,6 +229,7 @@ function App() {
     setSessionExpired,
     clearLogs,
     setTheme,
+    checkNow,
   ]);
 
   // Handle keyboard shortcuts (fallback for non-menu shortcuts)
@@ -359,27 +409,22 @@ function App() {
         </div>
       )}
 
+      {/* Up to date toast */}
+      {showUpToDate && (
+        <Toast
+          message="Loggy is up to date"
+          isDark={isDark}
+          onDismiss={() => setShowUpToDate(false)}
+        />
+      )}
+
       {/* Tail toast notification */}
       {tailToast && (
-        <div
-          className={`absolute top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm flex items-center gap-2 ${
-            isDark
-              ? "bg-gray-700 text-gray-100 border border-gray-600"
-              : "bg-white text-gray-800 border border-gray-300"
-          }`}
-        >
-          <span>{tailToast}</span>
-          <button
-            onClick={() => useLogStore.getState().setTailToast(null)}
-            className={`ml-2 ${
-              isDark
-                ? "text-gray-400 hover:text-gray-200"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            ✕
-          </button>
-        </div>
+        <Toast
+          message={tailToast}
+          isDark={isDark}
+          onDismiss={() => useLogStore.getState().setTailToast(null)}
+        />
       )}
 
       {/* Log viewer or connection error */}
@@ -441,7 +486,7 @@ function App() {
       )}
 
       {/* Status bar */}
-      <StatusBar />
+      <StatusBar isCheckingForUpdates={isCheckingForUpdates} />
 
       {/* Portal for DatePicker popups */}
       <div id="datepicker-portal" className={isDark ? "datepicker-dark" : ""} />
