@@ -222,15 +222,8 @@ function App() {
       unlistenCheckUpdates.then((fn) => fn());
       unlistenFind.then((fn) => fn());
     };
-  }, [
-    openSettings,
-    refreshConnection,
-    setLoadingProgress,
-    setSessionExpired,
-    clearLogs,
-    setTheme,
-    checkNow,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand store actions are stable refs; register listeners once to prevent race conditions on re-render
+  }, []);
 
   // Handle keyboard shortcuts (fallback for non-menu shortcuts)
   useEffect(() => {
