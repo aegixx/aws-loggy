@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.2](https://github.com/aegixx/aws-loggy/compare/v3.2.1...v3.2.2) (2026-02-04)
+
+
+### Bug Fixes
+
+* resolve release workflow race condition in concurrent asset uploads ([#55](https://github.com/aegixx/aws-loggy/issues/55)) ([4ffb083](https://github.com/aegixx/aws-loggy/commit/4ffb08347d16e06192d32b7ee9d824ef03f35271))
+
 ## [3.2.1](https://github.com/aegixx/aws-loggy/compare/v3.2.0...v3.2.1) (2026-02-04)
 
 
