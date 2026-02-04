@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/aegixx/aws-loggy/compare/v3.1.0...v3.1.1) (2026-02-04)
+
+
+### Bug Fixes
+
+* prevent Tauri event listener race condition on refresh ([#47](https://github.com/aegixx/aws-loggy/issues/47)) ([b61f3cc](https://github.com/aegixx/aws-loggy/commit/b61f3cc31d78dcb303a0bb356029e74fdb1ca0b3))
+
 ## [3.1.0](https://github.com/aegixx/aws-loggy/compare/v3.0.1...v3.1.0) (2026-02-04)
 
 
