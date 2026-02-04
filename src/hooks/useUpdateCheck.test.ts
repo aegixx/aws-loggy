@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useUpdateCheck } from "./useUpdateCheck";
-import { check } from "@tauri-apps/plugin-updater";
+import { check, Update } from "@tauri-apps/plugin-updater";
 import { useSettingsStore } from "../stores/settingsStore";
 
 vi.mock("@tauri-apps/plugin-updater");
@@ -44,7 +44,7 @@ describe("useUpdateCheck", () => {
       currentVersion: "2.0.2",
       body: "Release notes",
       downloadAndInstall: vi.fn(),
-    };
+    } as unknown as Update;
     mockCheck.mockResolvedValue(mockUpdate);
 
     const { result } = renderHook(() => useUpdateCheck());

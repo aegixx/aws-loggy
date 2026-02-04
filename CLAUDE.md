@@ -29,6 +29,8 @@ See `DESIGN.md` for full architecture documentation.
 - `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
 - `src/stores/TailTransport.ts` - Transport interface
 - `src/types/index.ts` - TypeScript type definitions
+- `src/components/UpdateDialog.tsx` - Auto-update dialog (shown when update available)
+- `src/hooks/useUpdateCheck.ts` - Hook for checking updates on startup
 
 ## Development
 
@@ -51,7 +53,12 @@ npm run test:watch # Run tests in watch mode
 
 ## Testing
 
-No test framework currently configured. Tests welcome as future enhancement.
+Uses Vitest with React Testing Library. Tests are in `*.test.ts` / `*.test.tsx` files alongside source.
+
+```bash
+npm test           # Run all tests
+npm run test:watch # Run in watch mode
+```
 
 ## Common Tasks
 
