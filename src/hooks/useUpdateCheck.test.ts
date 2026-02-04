@@ -67,4 +67,56 @@ describe("useUpdateCheck", () => {
 
     expect(result.current.update).toBeNull();
   });
+
+  it("should allow manual check via checkNow when autoUpdateEnabled is false", async () => {
+    useSettingsStore.setState({ autoUpdateEnabled: false });
+    mockCheck.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useUpdateCheck());
+
+    // Auto-check should not have fired
+    await new Promise((r) => setTimeout(r, 100));
+    expect(mockCheck).not.toHaveBeenCalled();
+
+    // Manual check should work regardless
+    await result.current.checkNow();
+
+    expect(mockCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("should increment noUpdateCount when manual check finds no update", async () => {
+    mockCheck.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useUpdateCheck());
+
+    // Wait for auto-check to finish (does not increment noUpdateCount)
+    await waitFor(() => {
+      expect(mockCheck).toHaveBeenCalled();
+    });
+    expect(result.current.noUpdateCount).toBe(0);
+
+    // Manual check with no update should increment
+    await result.current.checkNow();
+
+    await waitFor(() => {
+      expect(result.current.noUpdateCount).toBe(1);
+    });
+  });
+
+  it("should increment noUpdateCount on each consecutive manual check", async () => {
+    useSettingsStore.setState({ autoUpdateEnabled: false });
+    mockCheck.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useUpdateCheck());
+
+    await result.current.checkNow();
+    await waitFor(() => {
+      expect(result.current.noUpdateCount).toBe(1);
+    });
+
+    await result.current.checkNow();
+    await waitFor(() => {
+      expect(result.current.noUpdateCount).toBe(2);
+    });
+  });
 });
