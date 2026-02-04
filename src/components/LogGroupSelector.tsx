@@ -260,12 +260,10 @@ export function LogGroupSelector() {
             rowCount={filteredGroups.length}
             rowHeight={ITEM_HEIGHT}
             style={{ height: dropdownHeight }}
-            rowComponent={
-              LogGroupRow as React.ComponentType<{
-                index: number;
-                style: CSSProperties;
-              }>
-            }
+            // Type assertion: react-window v2's RowComponent type is incompatible with
+            // components receiving custom props via rowProps. This is a known limitation.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            rowComponent={LogGroupRow as any}
             rowProps={{
               groups: filteredGroups,
               highlightedIndex,
