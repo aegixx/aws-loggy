@@ -51,7 +51,7 @@ function App() {
   const {
     update: availableUpdate,
     isChecking: isCheckingForUpdates,
-    noUpdateAvailable,
+    noUpdateCount,
     checkNow,
   } = useUpdateCheck();
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
@@ -66,12 +66,12 @@ function App() {
 
   // Show "up to date" toast when manual check finds no update
   useEffect(() => {
-    if (noUpdateAvailable) {
+    if (noUpdateCount > 0) {
       setShowUpToDate(true);
       const timer = setTimeout(() => setShowUpToDate(false), 3000);
       return () => clearTimeout(timer);
     }
-  }, [noUpdateAvailable]);
+  }, [noUpdateCount]);
 
   useEffect(() => {
     initializeAws();
