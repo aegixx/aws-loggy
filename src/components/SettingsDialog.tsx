@@ -236,6 +236,8 @@ export function SettingsDialog() {
   const {
     theme,
     setTheme,
+    autoUpdateEnabled,
+    setAutoUpdateEnabled,
     logLevels,
     cacheLimits,
     setCacheLimits,
@@ -336,6 +338,35 @@ export function SettingsDialog() {
                   }`}
                 >
                   Light
+                </button>
+              </div>
+            </div>
+
+            {/* Updates */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider">
+                Updates
+              </h3>
+              <div className="flex items-center justify-between rounded-lg p-4 bg-gray-800">
+                <div>
+                  <label className="text-sm text-gray-200">
+                    Check for updates automatically
+                  </label>
+                  <p className="text-xs mt-1 text-gray-500">
+                    Check for new versions when the app starts
+                  </p>
+                </div>
+                <button
+                  onClick={() => setAutoUpdateEnabled(!autoUpdateEnabled)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+                    autoUpdateEnabled ? "bg-blue-600" : "bg-gray-600"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      autoUpdateEnabled ? "translate-x-4.5" : "translate-x-1"
+                    }`}
+                  />
                 </button>
               </div>
             </div>

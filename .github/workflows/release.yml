@@ -94,6 +94,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: Loggy ${{ inputs.tag || github.ref_name }}
@@ -111,3 +113,48 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit ${{ inputs.tag || github.ref_name }} --draft=false --repo ${{ github.repository }}
+
+  generate-update-manifest:
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate latest.json manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get release info
+          RELEASE=$(gh api repos/${{ github.repository }}/releases/tags/${{ inputs.tag || github.ref_name }})
+          VERSION=$(echo "$RELEASE" | jq -r '.tag_name' | sed 's/^v//')
+
+          # Build manifest
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See release notes on GitHub",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-macos-arm64.app.tar.gz",
+                "signature": ""
+              },
+              "darwin-x86_64": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-macos-x86_64.app.tar.gz",
+                "signature": ""
+              },
+              "linux-x86_64": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-linux-x86_64.AppImage",
+                "signature": ""
+              },
+              "windows-x86_64": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/Loggy-${VERSION}-windows-x86_64.msi",
+                "signature": ""
+              }
+            }
+          }
+          EOF
+
+          # Upload to release
+          gh release upload ${{ inputs.tag || github.ref_name }} latest.json --repo ${{ github.repository }} --clobber
