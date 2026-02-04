@@ -30,6 +30,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -54,6 +55,14 @@
           "height": 400
         }
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1MTZCMDE0MTg2OUI2QkIKUldTN3Rta1lGTEFXZGJ4NWtVdml4VGFON0pCUHI4eDVYcVJjRWRpK04vN1Z6SmhBN0tiRTdua0MK",
+      "endpoints": [
+        "https://github.com/aegixx/aws-loggy/releases/latest/download/latest.json"
+      ]
     }
   }
 }

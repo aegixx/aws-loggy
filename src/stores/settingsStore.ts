@@ -63,6 +63,9 @@ interface SettingsStore {
   // Settings dialog visibility
   isSettingsOpen: boolean;
 
+  // Auto-update setting
+  autoUpdateEnabled: boolean;
+
   // Actions
   setTheme: (theme: Theme) => void;
   setLastSelectedLogGroup: (logGroup: string | null) => void;
@@ -78,6 +81,7 @@ interface SettingsStore {
   resetLogLevelDefaults: () => void;
   openSettings: () => void;
   closeSettings: () => void;
+  setAutoUpdateEnabled: (enabled: boolean) => void;
   getDefaultDisabledLevels: () => Set<string>;
   setPersistedDisabledLevels: (levels: Set<string>) => void;
   setPersistedTimeRange: (
@@ -229,6 +233,7 @@ export const useSettingsStore = create<SettingsStore>()(
       persistedTimeRange: null,
       persistedTimePreset: null,
       isSettingsOpen: false,
+      autoUpdateEnabled: true,
 
       setTheme: (theme) => set({ theme }),
       setLastSelectedLogGroup: (logGroup) =>
@@ -314,6 +319,7 @@ export const useSettingsStore = create<SettingsStore>()(
 
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
+      setAutoUpdateEnabled: (enabled) => set({ autoUpdateEnabled: enabled }),
 
       getDefaultDisabledLevels: () => {
         const { logLevels } = get();
@@ -335,7 +341,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 10,
+      version: 11,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -345,6 +351,7 @@ export const useSettingsStore = create<SettingsStore>()(
         persistedDisabledLevels: state.persistedDisabledLevels,
         persistedTimeRange: state.persistedTimeRange,
         persistedTimePreset: state.persistedTimePreset,
+        autoUpdateEnabled: state.autoUpdateEnabled,
       }),
       migrate: (persisted, version) => {
         // Use chaining pattern: each migration runs if version <= N, then chains to next
@@ -514,6 +521,15 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 10;
         }
 
+        // v10 -> v11: Add autoUpdateEnabled
+        if (currentVersion <= 10) {
+          data = {
+            ...data,
+            autoUpdateEnabled: data.autoUpdateEnabled ?? true,
+          };
+          currentVersion = 11;
+        }
+
         return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
@@ -523,6 +539,7 @@ export const useSettingsStore = create<SettingsStore>()(
           persistedDisabledLevels: string[];
           persistedTimeRange: { start: number; end: number | null } | null;
           persistedTimePreset: string | null;
+          autoUpdateEnabled: boolean;
         };
       },
     },

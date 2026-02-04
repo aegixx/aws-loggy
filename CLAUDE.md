@@ -29,6 +29,8 @@ See `DESIGN.md` for full architecture documentation.
 - `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
 - `src/stores/TailTransport.ts` - Transport interface
 - `src/types/index.ts` - TypeScript type definitions
+- `src/components/UpdateDialog.tsx` - Auto-update dialog (shown when update available)
+- `src/hooks/useUpdateCheck.ts` - Hook for checking updates on startup
 
 ## Development
 
@@ -37,6 +39,8 @@ npm start          # Run app in dev mode with hot reload
 npm run app:build  # Build production app
 npm run fmt        # Format code
 npm run lint       # Lint code
+npm test           # Run tests
+npm run test:watch # Run tests in watch mode
 ```
 
 ## Code Style
@@ -49,7 +53,12 @@ npm run lint       # Lint code
 
 ## Testing
 
-No test framework currently configured. Tests welcome as future enhancement.
+Uses Vitest with React Testing Library. Tests are in `*.test.ts` / `*.test.tsx` files alongside source.
+
+```bash
+npm test           # Run all tests
+npm run test:watch # Run in watch mode
+```
 
 ## Common Tasks
 
@@ -133,3 +142,4 @@ Right-click on any log row to access the context menu with the following options
 - react-window v2 API differs from v1 (use `List`, not `FixedSizeList`)
 - Settings persisted to localStorage via zustand/persist middleware
 - Last selected log group is remembered and auto-selected on app launch
+- Auto-update checks for new GitHub Releases on startup (configurable in Settings)

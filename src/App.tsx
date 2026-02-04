@@ -8,7 +8,9 @@ import { LogViewer } from "./components/LogViewer";
 import { StatusBar } from "./components/StatusBar";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { AboutDialog } from "./components/AboutDialog";
+import { UpdateDialog, UpdateInfo } from "./components/UpdateDialog";
 import { useLogStore, getCurrentFetchId } from "./stores/logStore";
+import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import "./App.css";
@@ -45,6 +47,16 @@ function App() {
     "default",
   ]);
   const [isChangingProfile, setIsChangingProfile] = useState(false);
+
+  const { update: availableUpdate } = useUpdateCheck();
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+
+  // Show update dialog when update is available
+  useEffect(() => {
+    if (availableUpdate) {
+      setShowUpdateDialog(true);
+    }
+  }, [availableUpdate]);
 
   useEffect(() => {
     initializeAws();
@@ -220,6 +232,11 @@ function App() {
       {/* Dialogs */}
       <SettingsDialog />
       <AboutDialog isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+      <UpdateDialog
+        isOpen={showUpdateDialog}
+        onClose={() => setShowUpdateDialog(false)}
+        update={availableUpdate as UpdateInfo | null}
+      />
 
       {/* Header - with padding for macOS traffic lights */}
       <header
