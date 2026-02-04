@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.1](https://github.com/aegixx/aws-loggy/compare/v3.2.0...v3.2.1) (2026-02-04)
+
+
+### Bug Fixes
+
+* add missing updater permission to enable auto-update notifications ([#53](https://github.com/aegixx/aws-loggy/issues/53)) ([f100c53](https://github.com/aegixx/aws-loggy/commit/f100c535e1822a364ebed4428b2856240c8c37d2))
+
 ## [3.2.0](https://github.com/aegixx/aws-loggy/compare/v3.1.1...v3.2.0) (2026-02-04)
 
 
