@@ -44,6 +44,9 @@ const LogGroupRow = memo(function LogGroupRow({
 
   return (
     <div
+      role="option"
+      id={`log-group-option-${index}`}
+      aria-selected={isSelected}
       style={style}
       className={`px-3 py-1.5 text-sm cursor-pointer truncate flex items-center ${
         isHighlighted
@@ -89,7 +92,6 @@ export function LogGroupSelector() {
     return new Fuse(logGroups, {
       keys: ["name"],
       threshold: 0.4,
-      distance: 1000,
       ignoreLocation: true,
       useExtendedSearch: true,
     });
@@ -222,6 +224,15 @@ export function LogGroupSelector() {
           ref={inputRef}
           id="log-group-search"
           type="text"
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls="log-group-listbox"
+          aria-autocomplete="list"
+          aria-activedescendant={
+            isOpen && filteredGroups[highlightedIndex]
+              ? `log-group-option-${highlightedIndex}`
+              : undefined
+          }
           value={isOpen ? searchValue : selectedLogGroup || ""}
           onChange={(e) => {
             if (!isOpen) setIsOpen(true);
@@ -230,6 +241,7 @@ export function LogGroupSelector() {
           onFocus={() => {
             setIsOpen(true);
             setSearchValue("");
+            // Defer select() to next tick so React flushes the setSearchValue("") update first
             setTimeout(() => inputRef.current?.select(), 0);
           }}
           onKeyDown={handleKeyDown}
@@ -246,48 +258,50 @@ export function LogGroupSelector() {
             isDark ? "text-gray-500" : "text-gray-400"
           } ${isOpen ? "rotate-180" : ""} transition-transform`}
         />
+
+        {isOpen && filteredGroups.length > 0 && (
+          <div
+            id="log-group-listbox"
+            role="listbox"
+            className={`absolute top-full left-0 right-0 mt-1 z-50 rounded border shadow-lg overflow-hidden ${
+              isDark
+                ? "bg-gray-800 border-gray-700"
+                : "bg-white border-gray-300"
+            }`}
+          >
+            <List
+              listRef={listRef}
+              rowCount={filteredGroups.length}
+              rowHeight={ITEM_HEIGHT}
+              style={{ height: dropdownHeight }}
+              // Type assertion: react-window v2's RowComponent type is incompatible with
+              // components receiving custom props via rowProps. This is a known limitation.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              rowComponent={LogGroupRow as any}
+              rowProps={{
+                groups: filteredGroups,
+                highlightedIndex,
+                selectedLogGroup,
+                onSelect: handleSelect,
+                onHighlight: handleHighlight,
+                isDark,
+              }}
+            />
+          </div>
+        )}
+
+        {isOpen && filteredGroups.length === 0 && searchValue && (
+          <div
+            className={`absolute top-full left-0 right-0 mt-1 z-50 rounded border shadow-lg px-3 py-2 text-sm ${
+              isDark
+                ? "bg-gray-800 border-gray-700 text-gray-400"
+                : "bg-white border-gray-300 text-gray-500"
+            }`}
+          >
+            No matching log groups
+          </div>
+        )}
       </div>
-
-      {isOpen && filteredGroups.length > 0 && (
-        <div
-          className={`absolute top-full left-0 right-0 mt-1 z-50 rounded border shadow-lg overflow-hidden ${
-            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-          }`}
-          style={{ marginLeft: "76px" }}
-        >
-          <List
-            listRef={listRef}
-            rowCount={filteredGroups.length}
-            rowHeight={ITEM_HEIGHT}
-            style={{ height: dropdownHeight }}
-            // Type assertion: react-window v2's RowComponent type is incompatible with
-            // components receiving custom props via rowProps. This is a known limitation.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            rowComponent={LogGroupRow as any}
-            rowProps={{
-              groups: filteredGroups,
-              highlightedIndex,
-              selectedLogGroup,
-              onSelect: handleSelect,
-              onHighlight: handleHighlight,
-              isDark,
-            }}
-          />
-        </div>
-      )}
-
-      {isOpen && filteredGroups.length === 0 && searchValue && (
-        <div
-          className={`absolute top-full left-0 right-0 mt-1 z-50 rounded border shadow-lg px-3 py-2 text-sm ${
-            isDark
-              ? "bg-gray-800 border-gray-700 text-gray-400"
-              : "bg-white border-gray-300 text-gray-500"
-          }`}
-          style={{ marginLeft: "76px" }}
-        >
-          No matching log groups
-        </div>
-      )}
     </div>
   );
 }

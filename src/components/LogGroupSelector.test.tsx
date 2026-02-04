@@ -64,13 +64,13 @@ describe("LogGroupSelector", () => {
   it("should be disabled when not connected", () => {
     setStoreState({ isConnected: false });
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
     expect(input).toBeDisabled();
   });
 
   it("should open dropdown on focus and show all groups", async () => {
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
 
     await userEvent.click(input);
 
@@ -81,7 +81,7 @@ describe("LogGroupSelector", () => {
 
   it("should filter groups with fuzzy search", async () => {
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
 
     await userEvent.click(input);
     await userEvent.type(input, "user");
@@ -94,7 +94,7 @@ describe("LogGroupSelector", () => {
 
   it("should support space-separated AND search terms", async () => {
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
 
     await userEvent.click(input);
     await userEvent.type(input, "lambda pay");
@@ -105,7 +105,7 @@ describe("LogGroupSelector", () => {
 
   it("should show no results message for unmatched search", async () => {
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
 
     await userEvent.click(input);
     await userEvent.type(input, "zzzznonexistent");
@@ -118,7 +118,7 @@ describe("LogGroupSelector", () => {
     useLogStore.setState({ selectLogGroup });
 
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
 
     await userEvent.click(input);
     await userEvent.click(screen.getByText("/aws/lambda/payment-handler"));
@@ -131,7 +131,7 @@ describe("LogGroupSelector", () => {
     useLogStore.setState({ selectLogGroup });
 
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
 
     await userEvent.click(input);
     // Arrow down to second item, then Enter
@@ -142,12 +142,43 @@ describe("LogGroupSelector", () => {
 
   it("should close dropdown on Escape", async () => {
     render(<LogGroupSelector />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
 
     await userEvent.click(input);
     expect(screen.getByText(MOCK_LOG_GROUPS[0].name)).toBeInTheDocument();
 
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByText(MOCK_LOG_GROUPS[0].name)).not.toBeInTheDocument();
+  });
+
+  it("should close dropdown on Tab and restore selected value", async () => {
+    setStoreState({ selectedLogGroup: "/aws/lambda/user-service" });
+    render(<LogGroupSelector />);
+    const input = screen.getByRole("combobox");
+
+    await userEvent.click(input);
+    expect(screen.getByText(MOCK_LOG_GROUPS[0].name)).toBeInTheDocument();
+
+    await userEvent.tab();
+    expect(screen.queryByText(MOCK_LOG_GROUPS[0].name)).not.toBeInTheDocument();
+    expect(input).toHaveValue("/aws/lambda/user-service");
+  });
+
+  it("should have correct ARIA attributes", async () => {
+    render(<LogGroupSelector />);
+    const input = screen.getByRole("combobox");
+
+    expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(input).toHaveAttribute("aria-controls", "log-group-listbox");
+    expect(input).toHaveAttribute("aria-autocomplete", "list");
+
+    await userEvent.click(input);
+
+    expect(input).toHaveAttribute("aria-expanded", "true");
+    const listbox = screen.getByRole("listbox");
+    expect(listbox).toBeInTheDocument();
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(MOCK_LOG_GROUPS.length);
   });
 });
