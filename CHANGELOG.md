@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.0](https://github.com/aegixx/aws-loggy/compare/v3.1.1...v3.2.0) (2026-02-04)
+
+
+### Features
+
+* add fuzzy search to log group selector and filter bar ([#51](https://github.com/aegixx/aws-loggy/issues/51)) ([618eec4](https://github.com/aegixx/aws-loggy/commit/618eec4094e3cfa703dbe55b3a06b97117c13a1a))
+
 ## [3.1.1](https://github.com/aegixx/aws-loggy/compare/v3.1.0...v3.1.1) (2026-02-04)
 
 
