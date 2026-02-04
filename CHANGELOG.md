@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.3](https://github.com/aegixx/aws-loggy/compare/v3.2.2...v3.2.3) (2026-02-04)
+
+
+### Bug Fixes
+
+* Add missing permission for auto-restart ([7e73567](https://github.com/aegixx/aws-loggy/commit/7e73567d92f28eec61ac84cd011f99cb3433bdfc))
+
 ## [3.2.2](https://github.com/aegixx/aws-loggy/compare/v3.2.1...v3.2.2) (2026-02-04)
 
 
