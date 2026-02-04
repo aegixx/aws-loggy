@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/aegixx/aws-loggy/compare/v3.0.0...v3.0.1) (2026-02-04)
+
+
+### Bug Fixes
+
+* pin Tauri dependency versions and update Node.js to 20 ([de00dd3](https://github.com/aegixx/aws-loggy/commit/de00dd36b05609ebbc38291732fe76e97c187017))
+
 ## [3.0.0](https://github.com/aegixx/aws-loggy/compare/v2.1.0...v3.0.0) (2026-02-04)
 
 
