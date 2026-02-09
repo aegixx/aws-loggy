@@ -1,7 +1,7 @@
 # Loggy
 
 [![CI](https://github.com/aegixx/aws-loggy/actions/workflows/ci.yml/badge.svg)](https://github.com/aegixx/aws-loggy/actions/workflows/ci.yml)
-[![Release](https://github.com/aegixx/aws-loggy/actions/workflows/release.yml/badge.svg)](https://github.com/aegixx/aws-loggy/actions/workflows/release.yml)
+[![Release](https://github.com/aegixx/aws-loggy/actions/workflows/release-please.yml/badge.svg)](https://github.com/aegixx/aws-loggy/actions/workflows/release-please.yml)
 
 A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 
