@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.4](https://github.com/aegixx/aws-loggy/compare/v3.2.3...v3.2.4) (2026-02-09)
+
+
+### Bug Fixes
+
+* Updated release process & screenshot ([874fbe9](https://github.com/aegixx/aws-loggy/commit/874fbe93a35c612cb003a3aa93f50e8a53240beb))
+
+
+### Miscellaneous
+
+* update lint config & gitignore ([34976f4](https://github.com/aegixx/aws-loggy/commit/34976f4183f7d7e7aaadf3754591211befe08313))
+
 ## [3.2.3](https://github.com/aegixx/aws-loggy/compare/v3.2.2...v3.2.3) (2026-02-04)
 
 
