@@ -184,16 +184,36 @@ aws-loggy/
 │   └── Cargo.toml
 ├── src/                    # React frontend
 │   ├── components/
+│   │   ├── AboutDialog.tsx
+│   │   ├── ContextMenu.tsx
 │   │   ├── FilterBar.tsx
-│   │   ├── LogViewer.tsx
-│   │   ├── LogDetailInline.tsx
+│   │   ├── FindBar.tsx
 │   │   ├── JsonSyntaxHighlight.tsx
-│   │   ├── TimeRangePicker.tsx
+│   │   ├── LogDetailInline.tsx
 │   │   ├── LogGroupSelector.tsx
-│   │   └── StatusBar.tsx
+│   │   ├── LogRowDetail.tsx
+│   │   ├── LogViewer.tsx
+│   │   ├── MaximizedLogView.tsx
+│   │   ├── SettingsDialog.tsx
+│   │   ├── StatusBar.tsx
+│   │   ├── TimeRangePicker.tsx
+│   │   └── UpdateDialog.tsx
 │   ├── stores/
-│   │   ├── logStore.ts     # Zustand log/connection state
-│   │   └── settingsStore.ts # Zustand persisted settings
+│   │   ├── logStore.ts        # Zustand log/connection state
+│   │   ├── settingsStore.ts   # Zustand persisted settings
+│   │   ├── LiveTailManager.ts # Stream/poll transport orchestrator
+│   │   ├── TailPoller.ts      # Polling transport (fallback)
+│   │   └── TailTransport.ts   # Transport interface
+│   ├── hooks/
+│   │   ├── useDebounce.ts
+│   │   ├── useDragSelection.ts
+│   │   ├── useFindInLog.ts
+│   │   ├── useKeyboardNavigation.ts
+│   │   ├── useSystemTheme.ts
+│   │   └── useUpdateCheck.ts
+│   ├── utils/
+│   │   ├── extractFieldVariants.ts
+│   │   └── highlightMatches.ts
 │   ├── types/
 │   │   └── index.ts
 │   └── App.tsx

@@ -204,7 +204,7 @@ export function TimeRangePicker() {
               <div className="w-full">
                 <DatePicker
                   selected={customStart}
-                  onChange={(date) => {
+                  onChange={(date: Date | null) => {
                     if (date) {
                       setCustomStart(date);
                       if (date > customEnd) {
@@ -226,7 +226,7 @@ export function TimeRangePicker() {
               <div className="w-full">
                 <DatePicker
                   selected={customEnd}
-                  onChange={(date) => {
+                  onChange={(date: Date | null) => {
                     if (date) {
                       setCustomEnd(date);
                       if (date < customStart) {

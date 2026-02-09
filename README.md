@@ -161,8 +161,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Future (potential) features
 
 - Control over default font size, family, & line height
-- JSON expand/collapse
-- Log group typeahead search
 - On unfilter, scroll to maintain selected row position
 - Debug / application logging for better troubleshooting
 - ! Cloudwatch Filter Syntax support

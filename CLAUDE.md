@@ -50,7 +50,7 @@ npm run test:watch # Run tests in watch mode
 - Prefer functional components with hooks
 - Use Zustand for state management
 - Follow existing patterns in codebase
-- Run `npm run fmt` before committing
+- Pre-commit hook runs `fmt`, `lint`, and `build` automatically
 
 ## Testing
 
