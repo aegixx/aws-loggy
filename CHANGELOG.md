@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://github.com/aegixx/aws-loggy/compare/v3.2.6...v3.3.0) (2026-02-10)
+
+
+### Features
+
+* Display changelog and release notes link in update dialog ([#63](https://github.com/aegixx/aws-loggy/issues/63)) ([6b3de52](https://github.com/aegixx/aws-loggy/commit/6b3de52571a35050a8787a9e0a520dcf2c2b94cc))
+
 ## [3.2.6](https://github.com/aegixx/aws-loggy/compare/v3.2.5...v3.2.6) (2026-02-10)
 
 
