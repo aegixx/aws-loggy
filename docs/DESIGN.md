@@ -252,6 +252,7 @@ aws-loggy/
 - `react-icons` - Material Design icons
 - `react-datepicker` - Date/time picker component
 - `fuse.js` - Fuzzy search for log group selector
+- `react-markdown` - Markdown rendering for update changelog
 
 ## Scripts
 

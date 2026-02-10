@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { UpdateDialog } from "./UpdateDialog";
 import { useSettingsStore } from "../stores/settingsStore";
 
@@ -68,5 +69,75 @@ describe("UpdateDialog", () => {
 
     expect(screen.getByText("Update Now")).toBeInTheDocument();
     expect(screen.getByText("Skip")).toBeInTheDocument();
+  });
+
+  it("should render changelog body as markdown", () => {
+    const updateWithBody = {
+      ...mockUpdate,
+      body: "### Bug Fixes\n\n* Fixed a crash on startup",
+    };
+    render(
+      <UpdateDialog isOpen={true} onClose={vi.fn()} update={updateWithBody} />,
+    );
+
+    expect(screen.getByText("Bug Fixes")).toBeInTheDocument();
+    expect(screen.getByText(/Fixed a crash on startup/)).toBeInTheDocument();
+  });
+
+  it("should not render changelog section when body is empty", () => {
+    const updateNoBody = {
+      ...mockUpdate,
+      body: "",
+    };
+    render(
+      <UpdateDialog isOpen={true} onClose={vi.fn()} update={updateNoBody} />,
+    );
+
+    expect(screen.queryByText("Bug Fixes")).not.toBeInTheDocument();
+  });
+
+  it("should not render changelog section when body is undefined", () => {
+    const updateUndefinedBody = {
+      version: "2.1.0",
+      currentVersion: "2.0.2",
+      body: undefined,
+      downloadAndInstall: vi.fn(() => Promise.resolve()),
+    };
+    render(
+      <UpdateDialog
+        isOpen={true}
+        onClose={vi.fn()}
+        update={updateUndefinedBody}
+      />,
+    );
+
+    // Changelog section should not be rendered
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    // But the release notes link should still be present
+    expect(
+      screen.getByText("View Release Notes on GitHub"),
+    ).toBeInTheDocument();
+  });
+
+  it("should always show View Release Notes link", () => {
+    render(
+      <UpdateDialog isOpen={true} onClose={vi.fn()} update={mockUpdate} />,
+    );
+
+    expect(
+      screen.getByText("View Release Notes on GitHub"),
+    ).toBeInTheDocument();
+  });
+
+  it("should open release URL when View Release Notes is clicked", () => {
+    render(
+      <UpdateDialog isOpen={true} onClose={vi.fn()} update={mockUpdate} />,
+    );
+
+    fireEvent.click(screen.getByText("View Release Notes on GitHub"));
+
+    expect(openUrl).toHaveBeenCalledWith(
+      "https://github.com/aegixx/aws-loggy/releases/tag/v2.1.0",
+    );
   });
 });

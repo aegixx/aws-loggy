@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
+import Markdown from "react-markdown";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import { useSettingsStore } from "../stores/settingsStore";
+
+const RELEASE_URL_BASE = "https://github.com/aegixx/aws-loggy/releases/tag/v";
 
 export interface UpdateInfo {
   version: string;
@@ -123,6 +127,77 @@ export function UpdateDialog({ isOpen, onClose, update }: UpdateDialogProps) {
               {update.currentVersion} →{" "}
               <span className="text-emerald-500">{update.version}</span>
             </p>
+          </div>
+
+          {/* Changelog */}
+          {update.body ? (
+            <div
+              className={`mt-4 max-h-48 overflow-y-auto rounded-lg p-3 text-sm ${
+                isDark
+                  ? "bg-gray-800 border border-gray-700 text-gray-300"
+                  : "bg-gray-50 border border-gray-200 text-gray-700"
+              }`}
+            >
+              <Markdown
+                components={{
+                  a: ({ href, children }) => (
+                    <a
+                      href={href}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (href && /^https?:\/\//.test(href)) {
+                          openUrl(href);
+                        }
+                      }}
+                      className="text-emerald-500 hover:underline"
+                    >
+                      {children}
+                    </a>
+                  ),
+                  h2: ({ children }) => (
+                    <h2
+                      className={`text-sm font-semibold mt-2 first:mt-0 mb-1 ${
+                        isDark ? "text-gray-200" : "text-gray-800"
+                      }`}
+                    >
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3
+                      className={`text-xs font-semibold mt-2 first:mt-0 mb-1 ${
+                        isDark ? "text-gray-300" : "text-gray-700"
+                      }`}
+                    >
+                      {children}
+                    </h3>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="list-disc list-inside ml-1 space-y-0.5">
+                      {children}
+                    </ul>
+                  ),
+                  li: ({ children }) => <li className="text-sm">{children}</li>,
+                  p: ({ children }) => (
+                    <p className="mb-1 last:mb-0">{children}</p>
+                  ),
+                }}
+              >
+                {update.body}
+              </Markdown>
+            </div>
+          ) : null}
+
+          {/* View Release Notes link */}
+          <div className="mt-3 text-center">
+            <button
+              onClick={() => openUrl(`${RELEASE_URL_BASE}${update.version}`)}
+              className={`text-xs cursor-pointer hover:underline ${
+                isDark ? "text-emerald-400" : "text-emerald-600"
+              }`}
+            >
+              View Release Notes on GitHub
+            </button>
           </div>
 
           {/* Download progress */}

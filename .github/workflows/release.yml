@@ -224,6 +224,9 @@ jobs:
           VERSION="${{ needs.create-release.outputs.version }}"
           REPO="${{ github.repository }}"
 
+          # Fetch release body (changelog) from GitHub Release
+          RELEASE_BODY=$(gh release view "$TAG" --repo "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
+
           # Download signature files
           mkdir -p sigs
           gh release download "$TAG" --repo "$REPO" --dir sigs/ --pattern "*.sig"
@@ -240,13 +243,14 @@ jobs:
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg repo "$REPO" \
             --arg tag "$TAG" \
+            --arg notes "$RELEASE_BODY" \
             --arg macos_arm64_sig "$MACOS_ARM64_SIG" \
             --arg macos_x86_64_sig "$MACOS_X86_64_SIG" \
             --arg linux_sig "$LINUX_SIG" \
             --arg windows_sig "$WINDOWS_SIG" \
             '{
               version: $version,
-              notes: "See release notes on GitHub",
+              notes: $notes,
               pub_date: $pub_date,
               platforms: {
                 "darwin-aarch64": {

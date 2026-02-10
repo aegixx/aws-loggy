@@ -9,7 +9,7 @@ See `docs/DESIGN.md` for full architecture documentation.
 ## Tech Stack
 
 - **Backend**: Tauri 2.x, Rust, AWS SDK for Rust
-- **Frontend**: React 19, TypeScript, Zustand, react-window v2, Fuse.js, Tailwind CSS v4
+- **Frontend**: React 19, TypeScript, Zustand, react-window v2, Fuse.js, react-markdown, Tailwind CSS v4
 - **Build**: Vite, trunk (formatting/linting)
 
 ## Key Files
@@ -30,7 +30,7 @@ See `docs/DESIGN.md` for full architecture documentation.
 - `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
 - `src/stores/TailTransport.ts` - Transport interface
 - `src/types/index.ts` - TypeScript type definitions
-- `src/components/UpdateDialog.tsx` - Auto-update dialog (shown when update available)
+- `src/components/UpdateDialog.tsx` - Auto-update dialog with changelog display and release notes link
 - `src/hooks/useUpdateCheck.ts` - Hook for checking updates (startup + manual via menu)
 
 ## Development
