@@ -48,8 +48,16 @@ lint:
     - trufflehog@3.92.2
     - yamllint@1.37.1
 actions:
+  definitions:
+    - id: npm-build-pre-commit
+      display_name: Build
+      description: Run tsc + vite build before commit
+      run: npm run build
+      triggers:
+        - git_hooks: [pre-commit]
   enabled:
     - trunk-announce
-    - trunk-check-pre-push
+    - trunk-check-pre-commit
     - trunk-fmt-pre-commit
     - trunk-upgrade-available
+    - npm-build-pre-commit

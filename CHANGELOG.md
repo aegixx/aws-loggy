@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.2.5](https://github.com/aegixx/aws-loggy/compare/v3.2.4...v3.2.5) (2026-02-09)
+
+
+### Bug Fixes
+
+* Fix typescript errors, add pre-commit hooks ([00e08d3](https://github.com/aegixx/aws-loggy/commit/00e08d3d3c5a244bfb90d222b279ace6785ddc4e))
+* Point release badge to release-please workflow ([cb2cc64](https://github.com/aegixx/aws-loggy/commit/cb2cc640d5fd211c33e8b51a37f8f2d2270a0ede))
+
+
+### Miscellaneous
+
+* npm package update ([ffc4f84](https://github.com/aegixx/aws-loggy/commit/ffc4f842a9a7976e188b75420ad9b949b2a90cff))
+
 ## [3.2.4](https://github.com/aegixx/aws-loggy/compare/v3.2.3...v3.2.4) (2026-02-09)
 
 
