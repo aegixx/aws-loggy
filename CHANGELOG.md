@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.6](https://github.com/aegixx/aws-loggy/compare/v3.2.5...v3.2.6) (2026-02-10)
+
+
+### Miscellaneous
+
+* **deps:** bump time ([#60](https://github.com/aegixx/aws-loggy/issues/60)) ([6d4164c](https://github.com/aegixx/aws-loggy/commit/6d4164c2a40d5d43d3edf89a3aca59e846eafe8c))
+
 ## [3.2.5](https://github.com/aegixx/aws-loggy/compare/v3.2.4...v3.2.5) (2026-02-09)
 
 
