@@ -160,17 +160,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Future (potential) features
 
-- Control over default font size, family, & line height
+- (!) Control over default font size, family, & line height
 - On unfilter, scroll to maintain selected row position
 - Debug / application logging for better troubleshooting
-- ! Cloudwatch Filter Syntax support
-- ! Regex filter support (`/pattern/`)
+- Cloudwatch Filter Syntax support
+- Regex filter support (`/pattern/`)
 - Configurable datetime format
-- AWS profile selector UI
 - Saved/favorite queries
-- Export to JSON/CSV
+- (!) Export to JSON/CSV
 - CloudWatch Logs Insights integration
-- Multiple log group tabs
+- (!) Multiple tabs / panes support - for viewing multiple streams simultaneously
 - Alternate file support (e.g. local files, Azure Log Analytics, etc.)
 - Multi-source aggregation (e.g. combine logs from multiple sources into a single view)
 - Multi-region support
@@ -179,3 +178,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Stacked timeline view based on log level
 - Configurable time filters - specific absolute (2-3am) or relative times (12h)
 - Configurable Group By filters (i.e. by JSON path)
+- Load more button for loading logs outside of filtered time range
+- (?) Pagination support
