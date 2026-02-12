@@ -524,12 +524,17 @@ export const useLogStore = create<LogStore>((set, get) => ({
       });
 
       // Auto-select last used log group if available
-      const { logGroups, selectLogGroup } = get();
+      const { logGroups, selectLogGroup, startTail } = get();
       if (
         lastSelectedLogGroup &&
         logGroups.some((g) => g.name === lastSelectedLogGroup)
       ) {
         selectLogGroup(lastSelectedLogGroup);
+
+        // If the user was in live tail mode, restart it
+        if (persistedTimePreset === "live") {
+          startTail();
+        }
       }
     } catch (error) {
       set({
@@ -870,6 +875,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     manager.start();
 
     set({ isTailing: true, tailManager: manager });
+
+    // Persist "live" so it restores on next launch
+    const { setPersistedTimeRange } = useSettingsStore.getState();
+    setPersistedTimeRange(null, "live");
   },
 
   stopTail: () => {
