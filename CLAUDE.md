@@ -26,6 +26,9 @@ See `docs/DESIGN.md` for full architecture documentation.
 - `src/components/StatusBar.tsx` - Status bar with log counts and cache usage
 - `src/hooks/useFindInLog.ts` - Find-in-log state management hook
 - `src/utils/highlightMatches.ts` - Text search and highlight utilities
+- `src/utils/groupLogs.ts` - Log grouping logic (by stream and Lambda invocation)
+- `src/hooks/useLogGroups.ts` - Hook for computing grouped display items
+- `src/components/GroupHeader.tsx` - Group header component for stream/invocation headers
 - `src/stores/LiveTailManager.ts` - Stream/poll transport orchestrator for live tail
 - `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
 - `src/stores/TailTransport.ts` - Transport interface
@@ -132,6 +135,21 @@ Right-click on any log row to access the context menu with the following options
 | Client IP  | Filter by `metadata.clientIp:value` (if clientIP present)   |
 
 **Note**: "Find" requires text selection in the expanded detail view. "Filter by" menu is disabled when no options are available. Each filter option checks both top-level and `metadata` nested fields (e.g., `requestId`, `RequestId`, `metadata.requestId`).
+
+## Group By
+
+The filter bar includes a "Group by" dropdown that organizes logs into collapsible sections:
+
+| Mode        | Description                                                       |
+| ----------- | ----------------------------------------------------------------- |
+| No grouping | Default flat timeline view                                        |
+| Stream      | Groups logs by log stream name                                    |
+| Invocation  | Groups by Lambda invocation (START/END markers). Lambda only.     |
+| Auto        | Invocation for `/aws/lambda/*` groups, Stream for everything else |
+
+Group headers show metadata (log count, error indicator, relative time). Invocation headers additionally show request ID, duration, and memory usage parsed from Lambda REPORT lines. In-progress invocations (during live tail) show an "In progress" badge until the REPORT line arrives.
+
+Grouping is purely visual — filtering, find-in-log, and selection operate on individual log rows unchanged.
 
 ## Notes
 

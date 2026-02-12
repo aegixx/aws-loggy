@@ -3,7 +3,7 @@ import { MdFilterAltOff, MdDeleteOutline } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { TimeRangePicker } from "./TimeRangePicker";
-import type { LogLevel } from "../types";
+import type { LogLevel, GroupByMode } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 
@@ -22,6 +22,8 @@ export function FilterBar() {
     resetFilters,
     logs,
     selectedLogGroup,
+    groupByMode,
+    setGroupByMode,
   } = useLogStore();
   const { logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
@@ -199,6 +201,31 @@ export function FilterBar() {
             </button>
           );
         })}
+
+        {/* Group by dropdown */}
+        <span
+          className={`text-xs mr-1 ml-2 ${isDark ? "text-gray-500" : "text-gray-600"}`}
+        >
+          Group by:
+        </span>
+        <select
+          value={groupByMode}
+          onChange={(e) =>
+            setGroupByMode(e.target.value as GroupByMode | "auto")
+          }
+          title="Group by"
+          className={`px-2 py-1 rounded text-sm border cursor-pointer ${
+            isDark
+              ? "bg-gray-700 border-gray-600 text-gray-300"
+              : "bg-gray-200 border-gray-300 text-gray-700"
+          }`}
+        >
+          <option value="none">None</option>
+          <option value="stream">Stream</option>
+          {selectedLogGroup?.startsWith("/aws/lambda/") && (
+            <option value="invocation">Invocation</option>
+          )}
+        </select>
 
         {/* Spacer to push clear button to right */}
         <div className="flex-1" />

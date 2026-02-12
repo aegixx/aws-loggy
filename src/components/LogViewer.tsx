@@ -2,6 +2,7 @@ import React, {
   useRef,
   useEffect,
   useCallback,
+  useMemo,
   useState,
   CSSProperties,
   memo,
@@ -12,7 +13,9 @@ import { FindBar } from "./FindBar";
 import { ContextMenu } from "./ContextMenu";
 import { MaximizedLogView } from "./MaximizedLogView";
 import { LogRowDetail } from "./LogRowDetail";
+import { GroupHeader } from "./GroupHeader";
 import { useFindInLog } from "../hooks/useFindInLog";
+import { useLogGroups, type DisplayItem } from "../hooks/useLogGroups";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import { useDragSelection } from "../hooks/useDragSelection";
 import { useKeyboardNavigation } from "../hooks/useKeyboardNavigation";
@@ -25,6 +28,7 @@ import type { ParsedLogEvent } from "../types";
 
 const ROW_HEIGHT = 24;
 const DETAIL_HEIGHT = 200;
+const GROUP_HEADER_HEIGHT = 32;
 
 function getLogLevelStyle(level: string): {
   color: string;
@@ -40,6 +44,7 @@ function getLogLevelStyle(level: string): {
 interface LogRowProps {
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
+  expandedLogFilteredIndex?: number | null;
   selectedIndex: number | null;
   selectedIndices: Set<number>;
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
@@ -60,6 +65,17 @@ interface LogRowProps {
   getMatchesForLog?: (
     logIndex: number,
   ) => { index: number; start: number; length: number }[];
+  // Grouping props
+  displayItems?: DisplayItem[];
+  isGrouped?: boolean;
+  onToggleGroup?: (groupId: string) => void;
+  collapsedGroups?: Set<string>;
+  getVisibleMessages?: (
+    group: import("../utils/groupLogs").LogGroupSection,
+  ) => string;
+  getVisibleCount?: (
+    group: import("../utils/groupLogs").LogGroupSection,
+  ) => number;
 }
 
 interface RowComponentPropsWithCustom {
@@ -67,6 +83,7 @@ interface RowComponentPropsWithCustom {
   style: CSSProperties;
   logs: ParsedLogEvent[];
   expandedIndex: number | null;
+  expandedLogFilteredIndex?: number | null;
   selectedIndex: number | null;
   selectedIndices: Set<number>;
   onRowMouseDown: (index: number, e: React.MouseEvent) => void;
@@ -87,6 +104,17 @@ interface RowComponentPropsWithCustom {
   getMatchesForLog?: (
     logIndex: number,
   ) => { index: number; start: number; length: number }[];
+  // Grouping props
+  displayItems?: DisplayItem[];
+  isGrouped?: boolean;
+  onToggleGroup?: (groupId: string) => void;
+  collapsedGroups?: Set<string>;
+  getVisibleMessages?: (
+    group: import("../utils/groupLogs").LogGroupSection,
+  ) => string;
+  getVisibleCount?: (
+    group: import("../utils/groupLogs").LogGroupSection,
+  ) => number;
 }
 
 const LogRow = memo(function LogRow({
@@ -94,6 +122,7 @@ const LogRow = memo(function LogRow({
   style,
   logs,
   expandedIndex,
+  expandedLogFilteredIndex,
   selectedIndex,
   selectedIndices,
   onRowMouseDown,
@@ -107,15 +136,57 @@ const LogRow = memo(function LogRow({
   currentMatchLogIndex,
   globalCurrentMatchIndex,
   getMatchesForLog,
+  displayItems,
+  isGrouped,
+  onToggleGroup,
+  collapsedGroups,
+  getVisibleMessages,
+  getVisibleCount,
 }: RowComponentPropsWithCustom) {
   // If there's an expanded row, indices after it are shifted by 1
   const isDetailRow = expandedIndex !== null && index === expandedIndex + 1;
-  const actualLogIndex =
-    expandedIndex !== null && index > expandedIndex ? index - 1 : index;
+
+  // In grouped mode, check if this index maps to a group header
+  if (isGrouped && displayItems && !isDetailRow) {
+    const itemIndex =
+      expandedIndex !== null && index > expandedIndex ? index - 1 : index;
+    const item = displayItems[itemIndex];
+    if (item?.type === "header") {
+      return (
+        <GroupHeader
+          group={item.group}
+          collapsed={collapsedGroups?.has(item.group.id) ?? false}
+          onToggle={() => onToggleGroup?.(item.group.id)}
+          getVisibleMessages={getVisibleMessages}
+          getVisibleCount={getVisibleCount}
+          isDark={isDark}
+          style={style}
+        />
+      );
+    }
+  }
+
+  // Compute the actual log index, accounting for grouped mode and expanded detail row
+  let actualLogIndex: number;
+  if (isGrouped && displayItems) {
+    const itemIndex =
+      expandedIndex !== null && index > expandedIndex ? index - 1 : index;
+    const item = displayItems[itemIndex];
+    if (item?.type === "log") {
+      actualLogIndex = item.logIndex;
+    } else {
+      actualLogIndex =
+        expandedIndex !== null && index > expandedIndex ? index - 1 : index;
+    }
+  } else {
+    actualLogIndex =
+      expandedIndex !== null && index > expandedIndex ? index - 1 : index;
+  }
 
   // Render the detail panel
   if (isDetailRow) {
-    const log = logs[expandedIndex];
+    const logIdx = expandedLogFilteredIndex ?? expandedIndex;
+    const log = logs[logIdx];
     return (
       <LogRowDetail
         log={log}
@@ -124,7 +195,7 @@ const LogRow = memo(function LogRow({
         onClose={onClose}
         onMaximize={onMaximize}
         onContextMenu={onContextMenu}
-        expandedIndex={expandedIndex}
+        expandedIndex={logIdx}
         searchTerm={searchTerm}
         searchOptions={searchOptions}
         currentMatchLogIndex={currentMatchLogIndex}
@@ -138,7 +209,8 @@ const LogRow = memo(function LogRow({
   const log = logs[actualLogIndex];
   if (!log) return <div style={style} />;
 
-  const isExpanded = expandedIndex === actualLogIndex;
+  const isExpanded =
+    (expandedLogFilteredIndex ?? expandedIndex) === actualLogIndex;
   const isSelected = selectedIndex === actualLogIndex;
   const isMultiSelected = selectedIndices.has(actualLogIndex);
   const levelStyle = getLogLevelStyle(log.level);
@@ -242,6 +314,41 @@ export function LogViewer() {
     isFollowing,
     setIsFollowing,
   } = useLogStore();
+  const { displayItems, effectiveMode } = useLogGroups();
+  const toggleGroupCollapsed = useLogStore((s) => s.toggleGroupCollapsed);
+  const collapsedGroups = useLogStore((s) => s.collapsedGroups);
+  const isGrouped = effectiveMode !== "none";
+
+  // Reverse index: logIndex → displayItems index (for O(1) lookup)
+  const logIndexToDisplayIndex = useMemo(() => {
+    if (!isGrouped) {
+      return null;
+    }
+    const map = new Map<number, number>();
+    for (let i = 0; i < displayItems.length; i++) {
+      const item = displayItems[i];
+      if (item.type === "log") {
+        map.set(item.logIndex, i);
+      }
+    }
+    return map;
+  }, [isGrouped, displayItems]);
+
+  // In grouped mode, find the virtual list index of the expanded log
+  const expandedDisplayIndex = useMemo(() => {
+    if (expandedLogIndex === null) {
+      return null;
+    } else if (!isGrouped) {
+      return expandedLogIndex;
+    } else {
+      return logIndexToDisplayIndex?.get(expandedLogIndex) ?? null;
+    }
+  }, [expandedLogIndex, isGrouped, logIndexToDisplayIndex]);
+
+  const effectiveExpandedIndex = isGrouped
+    ? expandedDisplayIndex
+    : expandedLogIndex;
+
   const isDark = useSystemTheme();
   const listRef = useRef<ListImperativeAPI>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -253,16 +360,28 @@ export function LogViewer() {
       setSelectedLogIndex(logIndex);
       // Scroll to the log
       if (listRef.current) {
+        let scrollIndex = logIndex;
+        if (isGrouped) {
+          const idx = displayItems.findIndex(
+            (item) => item.type === "log" && item.logIndex === logIndex,
+          );
+          if (idx !== -1) {
+            scrollIndex = idx;
+          }
+        }
+        if (
+          effectiveExpandedIndex !== null &&
+          scrollIndex > effectiveExpandedIndex
+        ) {
+          scrollIndex = scrollIndex + 1;
+        }
         listRef.current.scrollToRow({
-          index:
-            expandedLogIndex !== null && logIndex > expandedLogIndex
-              ? logIndex + 1
-              : logIndex,
+          index: scrollIndex,
           align: "smart",
         });
       }
     },
-    [setSelectedLogIndex, expandedLogIndex],
+    [setSelectedLogIndex, effectiveExpandedIndex, isGrouped, displayItems],
   );
 
   // Find-in-log state and actions - searches across all visible logs
@@ -398,6 +517,26 @@ export function LogViewer() {
     setExpandedLogIndex(null);
   }, [setExpandedLogIndex]);
 
+  // Build a Set of visible logs for fast lookup (used by group copy)
+  const filteredLogSet = useMemo(() => new Set(filteredLogs), [filteredLogs]);
+
+  const getVisibleMessages = useCallback(
+    (group: import("../utils/groupLogs").LogGroupSection) => {
+      return group.logs
+        .filter((log) => filteredLogSet.has(log))
+        .map((log) => log.message)
+        .join("\n");
+    },
+    [filteredLogSet],
+  );
+
+  const getVisibleCount = useCallback(
+    (group: import("../utils/groupLogs").LogGroupSection) => {
+      return group.logs.filter((log) => filteredLogSet.has(log)).length;
+    },
+    [filteredLogSet],
+  );
+
   // Drag selection hook
   const {
     isDragging,
@@ -456,18 +595,35 @@ export function LogViewer() {
   });
 
   // Calculate row count (add 1 for detail row when expanded)
+  const baseRowCount = isGrouped ? displayItems.length : filteredLogs.length;
   const rowCount =
-    expandedLogIndex !== null ? filteredLogs.length + 1 : filteredLogs.length;
+    effectiveExpandedIndex !== null ? baseRowCount + 1 : baseRowCount;
 
   // Dynamic row height
   const getRowHeight = useCallback(
     (index: number) => {
-      if (expandedLogIndex !== null && index === expandedLogIndex + 1) {
+      if (
+        effectiveExpandedIndex !== null &&
+        index === effectiveExpandedIndex + 1
+      ) {
         return DETAIL_HEIGHT;
+      } else if (isGrouped) {
+        // In grouped mode, determine if this index maps to a header
+        const itemIndex =
+          effectiveExpandedIndex !== null && index > effectiveExpandedIndex
+            ? index - 1
+            : index;
+        const item = displayItems[itemIndex];
+        if (item?.type === "header") {
+          return GROUP_HEADER_HEIGHT;
+        } else {
+          return ROW_HEIGHT;
+        }
+      } else {
+        return ROW_HEIGHT;
       }
-      return ROW_HEIGHT;
     },
-    [expandedLogIndex],
+    [effectiveExpandedIndex, isGrouped, displayItems],
   );
 
   // Auto-scroll to bottom when following and new logs arrive
@@ -646,7 +802,8 @@ export function LogViewer() {
         rowComponent={LogRow as any}
         rowProps={{
           logs: filteredLogs,
-          expandedIndex: expandedLogIndex,
+          expandedIndex: isGrouped ? expandedDisplayIndex : expandedLogIndex,
+          expandedLogFilteredIndex: expandedLogIndex,
           selectedIndex: selectedLogIndex,
           selectedIndices: selectedLogIndices,
           onRowMouseDown: handleRowMouseDown,
@@ -663,6 +820,13 @@ export function LogViewer() {
           getMatchesForLog: findState.isOpen
             ? findState.getMatchesForLog
             : undefined,
+          // Grouping props
+          displayItems: isGrouped ? displayItems : undefined,
+          isGrouped,
+          onToggleGroup: toggleGroupCollapsed,
+          collapsedGroups,
+          getVisibleMessages,
+          getVisibleCount,
         }}
         onRowsRendered={handleRowsRendered}
         overscanCount={20}

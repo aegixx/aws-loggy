@@ -59,6 +59,7 @@ interface SettingsStore {
   persistedDisabledLevels: string[];
   persistedTimeRange: { start: number; end: number | null } | null;
   persistedTimePreset: string | null; // "15m", "1h", "6h", "24h", "7d", "custom", or null
+  persistedGroupByMode: string; // "none" | "stream" | "invocation"
 
   // Settings dialog visibility
   isSettingsOpen: boolean;
@@ -89,6 +90,7 @@ interface SettingsStore {
     preset?: string | null,
   ) => void;
   getPersistedDisabledLevelsAsSet: () => Set<string>;
+  setPersistedGroupByMode: (mode: string) => void;
 }
 
 const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
@@ -232,6 +234,7 @@ export const useSettingsStore = create<SettingsStore>()(
       persistedDisabledLevels: [],
       persistedTimeRange: null,
       persistedTimePreset: null,
+      persistedGroupByMode: "none",
       isSettingsOpen: false,
       autoUpdateEnabled: true,
 
@@ -338,10 +341,11 @@ export const useSettingsStore = create<SettingsStore>()(
 
       getPersistedDisabledLevelsAsSet: () =>
         new Set(get().persistedDisabledLevels),
+      setPersistedGroupByMode: (mode) => set({ persistedGroupByMode: mode }),
     }),
     {
       name: "loggy-settings",
-      version: 11,
+      version: 12,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -352,6 +356,7 @@ export const useSettingsStore = create<SettingsStore>()(
         persistedTimeRange: state.persistedTimeRange,
         persistedTimePreset: state.persistedTimePreset,
         autoUpdateEnabled: state.autoUpdateEnabled,
+        persistedGroupByMode: state.persistedGroupByMode,
       }),
       migrate: (persisted, version) => {
         // Use chaining pattern: each migration runs if version <= N, then chains to next
@@ -530,6 +535,16 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 11;
         }
 
+        // v11 -> v12: Add persistedGroupByMode
+        if (currentVersion <= 11) {
+          data = {
+            ...data,
+            persistedGroupByMode:
+              (data.persistedGroupByMode as string) ?? "none",
+          };
+          currentVersion = 12;
+        }
+
         return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
@@ -540,6 +555,7 @@ export const useSettingsStore = create<SettingsStore>()(
           persistedTimeRange: { start: number; end: number | null } | null;
           persistedTimePreset: string | null;
           autoUpdateEnabled: boolean;
+          persistedGroupByMode: string;
         };
       },
     },

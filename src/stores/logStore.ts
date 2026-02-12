@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { LogEvent, LogGroup, ParsedLogEvent, LogLevel } from "../types";
+import type {
+  LogEvent,
+  LogGroup,
+  ParsedLogEvent,
+  LogLevel,
+  GroupByMode,
+} from "../types";
 import {
   useSettingsStore,
   LOG_LEVEL_JSON_FIELDS,
@@ -141,6 +147,13 @@ interface LogStore {
   // Time range
   timeRange: { start: number; end: number | null } | null;
 
+  // Grouping
+  groupByMode: GroupByMode | "auto";
+  collapsedGroups: Set<string>;
+
+  // Derived (computed from groupByMode + selectedLogGroup)
+  effectiveGroupByMode: GroupByMode;
+
   // Live tail
   isTailing: boolean;
   tailManager: LiveTailManager | null;
@@ -149,6 +162,8 @@ interface LogStore {
   tailToast: string | null;
 
   // Actions
+  setGroupByMode: (mode: GroupByMode | "auto") => void;
+  toggleGroupCollapsed: (groupId: string) => void;
   initializeAws: () => Promise<void>;
   refreshConnection: () => Promise<void>;
   loadLogGroups: () => Promise<void>;
@@ -337,7 +352,7 @@ function parseLogEvent(event: LogEvent): ParsedLogEvent {
   };
 }
 
-function filterLogs(
+export function filterLogs(
   logs: ParsedLogEvent[],
   filterText: string,
   disabledLevels: Set<LogLevel>,
@@ -394,6 +409,21 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   }, obj);
 }
 
+function resolveGroupByMode(
+  mode: GroupByMode | "auto",
+  selectedLogGroup: string | null,
+): GroupByMode {
+  if (mode === "auto") {
+    if (selectedLogGroup && selectedLogGroup.startsWith("/aws/lambda/")) {
+      return "invocation";
+    } else {
+      return "stream";
+    }
+  } else {
+    return mode;
+  }
+}
+
 export const useLogStore = create<LogStore>((set, get) => ({
   // Initial state
   isConnected: false,
@@ -415,6 +445,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectedLogIndex: null,
   selectedLogIndices: new Set(),
   timeRange: null,
+  groupByMode: "none" as GroupByMode | "auto",
+  collapsedGroups: new Set<string>(),
+  effectiveGroupByMode: "none" as GroupByMode,
   isTailing: false,
   tailManager: null,
   activeTransport: null,
@@ -443,6 +476,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         getPersistedDisabledLevelsAsSet,
         persistedTimeRange,
         persistedTimePreset,
+        persistedGroupByMode,
         getDefaultDisabledLevels,
       } = useSettingsStore.getState();
 
@@ -472,21 +506,35 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }
       // If no preset or unknown, leave timeRange as null (will use default 15m)
 
+      // Restore groupByMode from persisted settings
+      const restoredGroupByMode = (
+        ["none", "stream", "invocation"].includes(persistedGroupByMode)
+          ? persistedGroupByMode
+          : "none"
+      ) as GroupByMode;
+
       set({
         disabledLevels:
           persistedLevels.size > 0
             ? persistedLevels
             : getDefaultDisabledLevels(),
         timeRange: restoredTimeRange,
+        groupByMode: restoredGroupByMode,
+        effectiveGroupByMode: restoredGroupByMode,
       });
 
       // Auto-select last used log group if available
-      const { logGroups, selectLogGroup } = get();
+      const { logGroups, selectLogGroup, startTail } = get();
       if (
         lastSelectedLogGroup &&
         logGroups.some((g) => g.name === lastSelectedLogGroup)
       ) {
         selectLogGroup(lastSelectedLogGroup);
+
+        // If the user was in live tail mode, restart it
+        if (persistedTimePreset === "live") {
+          startTail();
+        }
       }
     } catch (error) {
       set({
@@ -565,6 +613,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     // Persist selection to settings
     setLastSelectedLogGroup(name);
+
+    // Update effective group mode when log group changes
+    const { groupByMode } = get();
+    set({ effectiveGroupByMode: resolveGroupByMode(groupByMode, name) });
 
     // Automatically fetch logs with existing time range/filters
     if (name) {
@@ -785,7 +837,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         const mergedNew = mergeFragmentedLogs(uniqueNewLogs);
         const parsedNew = mergedNew.map(parseLogEvent);
         const allLogs = [...logs, ...parsedNew];
-        const trimmedLogs = allLogs.slice(-50000);
+        const { cacheLimits } = useSettingsStore.getState();
+        const trimmedLogs = allLogs.slice(-cacheLimits.maxLogCount);
         const filtered = getFilteredLogs(
           trimmedLogs,
           filterText,
@@ -822,6 +875,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     manager.start();
 
     set({ isTailing: true, tailManager: manager });
+
+    // Persist "live" so it restores on next launch
+    const { setPersistedTimeRange } = useSettingsStore.getState();
+    setPersistedTimeRange(null, "live");
   },
 
   stopTail: () => {
@@ -935,6 +992,28 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   setTailToast: (message: string | null) => {
     set({ tailToast: message });
+  },
+
+  setGroupByMode: (mode) => {
+    const { selectedLogGroup } = get();
+    const { setPersistedGroupByMode } = useSettingsStore.getState();
+    set({
+      groupByMode: mode,
+      collapsedGroups: new Set(),
+      effectiveGroupByMode: resolveGroupByMode(mode, selectedLogGroup),
+    });
+    setPersistedGroupByMode(mode);
+  },
+
+  toggleGroupCollapsed: (groupId: string) => {
+    const { collapsedGroups } = get();
+    const next = new Set(collapsedGroups);
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    set({ collapsedGroups: next });
   },
 
   setSessionExpired: () => {
