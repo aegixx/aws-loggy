@@ -154,6 +154,24 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 - All filtering happens client-side on cached logs
 - Debounce input to avoid excessive re-renders
 
+### Log Grouping
+
+Logs can be organized into collapsible sections via a "Group by" dropdown in the filter bar. Two grouping modes are available:
+
+- **Stream**: Groups logs by `log_stream_name`. Available for all log groups. Sorted by most recent activity.
+- **Invocation**: Groups logs by Lambda invocation, detected via `START`/`END`/`REPORT` system log markers. Only available for `/aws/lambda/*` log groups. Headers show request ID, duration, billed duration, and memory usage parsed from REPORT lines.
+
+An **Auto** mode selects Invocation for Lambda log groups and Stream for everything else.
+
+**Architecture:**
+
+- `groupLogsByStream()` and `groupLogsByInvocation()` in `src/utils/groupLogs.ts` are pure functions that transform a `ParsedLogEvent[]` into `LogGroupSection[]`
+- `useLogGroups` hook computes a flat `DisplayItem[]` array (interleaving headers and log rows) consumed by the virtualized list
+- `GroupHeader` component renders inline in the `react-window` list at 32px height
+- Grouping is a view-layer transformation — filtering, find, and selection operate on individual log rows unchanged
+- `collapsedGroups` Set in the store tracks which groups are collapsed
+- During live tail, in-progress invocations (START received, no REPORT yet) show an "In progress" badge; metadata fills in when REPORT arrives
+
 ### Log Level Detection
 
 Priority order for determining log level:
@@ -210,9 +228,11 @@ aws-loggy/
 │   │   ├── useFindInLog.ts
 │   │   ├── useKeyboardNavigation.ts
 │   │   ├── useSystemTheme.ts
+│   │   ├── useLogGroups.ts
 │   │   └── useUpdateCheck.ts
 │   ├── utils/
 │   │   ├── extractFieldVariants.ts
+│   │   ├── groupLogs.ts
 │   │   └── highlightMatches.ts
 │   ├── types/
 │   │   └── index.ts
@@ -270,4 +290,4 @@ npm run lint       # Lint code (trunk)
 - Saved/favorite queries
 - Export to JSON/CSV
 - CloudWatch Logs Insights integration
-- Multiple log group tabs
+- Multiple log group tabs/panes
