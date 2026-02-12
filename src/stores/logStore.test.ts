@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useLogStore } from "./logStore";
-import type { ParsedLogEvent } from "../types";
+import type { ParsedLogEvent, GroupByMode } from "../types";
 
 function createMockLog(
   message: string,
@@ -78,5 +78,85 @@ describe("logStore - filterText", () => {
     useLogStore.getState().setFilterText("Database Application");
     const { filteredLogs } = useLogStore.getState();
     expect(filteredLogs).toHaveLength(0);
+  });
+});
+
+describe("logStore - groupByMode", () => {
+  beforeEach(() => {
+    useLogStore.setState({
+      groupByMode: "none" as GroupByMode | "auto",
+      collapsedGroups: new Set<string>(),
+      effectiveGroupByMode: "none" as GroupByMode,
+      selectedLogGroup: null,
+    });
+  });
+
+  it("should default to 'none'", () => {
+    const { groupByMode } = useLogStore.getState();
+    expect(groupByMode).toBe("none");
+  });
+
+  it("should update groupByMode via setGroupByMode", () => {
+    useLogStore.getState().setGroupByMode("stream");
+    expect(useLogStore.getState().groupByMode).toBe("stream");
+  });
+
+  it("should set effectiveGroupByMode to the explicit mode when not auto", () => {
+    useLogStore.getState().setGroupByMode("stream");
+    expect(useLogStore.getState().effectiveGroupByMode).toBe("stream");
+
+    useLogStore.getState().setGroupByMode("invocation");
+    expect(useLogStore.getState().effectiveGroupByMode).toBe("invocation");
+
+    useLogStore.getState().setGroupByMode("none");
+    expect(useLogStore.getState().effectiveGroupByMode).toBe("none");
+  });
+
+  it("should auto-detect invocation mode for Lambda log groups", () => {
+    // Set selectedLogGroup first via setState, then trigger auto resolution
+    useLogStore.setState({ selectedLogGroup: "/aws/lambda/my-function" });
+    useLogStore.getState().setGroupByMode("auto");
+    expect(useLogStore.getState().effectiveGroupByMode).toBe("invocation");
+  });
+
+  it("should auto-detect stream mode for non-Lambda log groups", () => {
+    useLogStore.setState({ selectedLogGroup: "/ecs/my-service" });
+    useLogStore.getState().setGroupByMode("auto");
+    expect(useLogStore.getState().effectiveGroupByMode).toBe("stream");
+  });
+
+  it("should auto-detect stream mode when no log group is selected", () => {
+    useLogStore.getState().setGroupByMode("auto");
+    expect(useLogStore.getState().effectiveGroupByMode).toBe("stream");
+  });
+
+  it("should reset collapsed state when mode changes", () => {
+    // Add some collapsed groups first
+    useLogStore.getState().toggleGroupCollapsed("group-1");
+    useLogStore.getState().toggleGroupCollapsed("group-2");
+    expect(useLogStore.getState().collapsedGroups.size).toBe(2);
+
+    // Changing mode should reset collapsed groups
+    useLogStore.getState().setGroupByMode("stream");
+    expect(useLogStore.getState().collapsedGroups.size).toBe(0);
+  });
+
+  it("should toggle group collapsed state", () => {
+    useLogStore.getState().toggleGroupCollapsed("group-1");
+    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(true);
+
+    useLogStore.getState().toggleGroupCollapsed("group-1");
+    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(false);
+  });
+
+  it("should toggle multiple groups independently", () => {
+    useLogStore.getState().toggleGroupCollapsed("group-1");
+    useLogStore.getState().toggleGroupCollapsed("group-2");
+    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(true);
+    expect(useLogStore.getState().collapsedGroups.has("group-2")).toBe(true);
+
+    useLogStore.getState().toggleGroupCollapsed("group-1");
+    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(false);
+    expect(useLogStore.getState().collapsedGroups.has("group-2")).toBe(true);
   });
 });

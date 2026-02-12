@@ -28,3 +28,5 @@ export interface LiveTailEventPayload {
 export interface LiveTailErrorPayload {
   message: string;
 }
+
+export type GroupByMode = "none" | "stream" | "invocation";

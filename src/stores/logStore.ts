@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { LogEvent, LogGroup, ParsedLogEvent, LogLevel } from "../types";
+import type {
+  LogEvent,
+  LogGroup,
+  ParsedLogEvent,
+  LogLevel,
+  GroupByMode,
+} from "../types";
 import {
   useSettingsStore,
   LOG_LEVEL_JSON_FIELDS,
@@ -141,6 +147,13 @@ interface LogStore {
   // Time range
   timeRange: { start: number; end: number | null } | null;
 
+  // Grouping
+  groupByMode: GroupByMode | "auto";
+  collapsedGroups: Set<string>;
+
+  // Derived (computed from groupByMode + selectedLogGroup)
+  effectiveGroupByMode: GroupByMode;
+
   // Live tail
   isTailing: boolean;
   tailManager: LiveTailManager | null;
@@ -149,6 +162,8 @@ interface LogStore {
   tailToast: string | null;
 
   // Actions
+  setGroupByMode: (mode: GroupByMode | "auto") => void;
+  toggleGroupCollapsed: (groupId: string) => void;
   initializeAws: () => Promise<void>;
   refreshConnection: () => Promise<void>;
   loadLogGroups: () => Promise<void>;
@@ -337,7 +352,7 @@ function parseLogEvent(event: LogEvent): ParsedLogEvent {
   };
 }
 
-function filterLogs(
+export function filterLogs(
   logs: ParsedLogEvent[],
   filterText: string,
   disabledLevels: Set<LogLevel>,
@@ -394,6 +409,21 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   }, obj);
 }
 
+function resolveGroupByMode(
+  mode: GroupByMode | "auto",
+  selectedLogGroup: string | null,
+): GroupByMode {
+  if (mode === "auto") {
+    if (selectedLogGroup && selectedLogGroup.startsWith("/aws/lambda/")) {
+      return "invocation";
+    } else {
+      return "stream";
+    }
+  } else {
+    return mode;
+  }
+}
+
 export const useLogStore = create<LogStore>((set, get) => ({
   // Initial state
   isConnected: false,
@@ -415,6 +445,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
   selectedLogIndex: null,
   selectedLogIndices: new Set(),
   timeRange: null,
+  groupByMode: "none" as GroupByMode | "auto",
+  collapsedGroups: new Set<string>(),
+  effectiveGroupByMode: "none" as GroupByMode,
   isTailing: false,
   tailManager: null,
   activeTransport: null,
@@ -565,6 +598,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     // Persist selection to settings
     setLastSelectedLogGroup(name);
+
+    // Update effective group mode when log group changes
+    const { groupByMode } = get();
+    set({ effectiveGroupByMode: resolveGroupByMode(groupByMode, name) });
 
     // Automatically fetch logs with existing time range/filters
     if (name) {
@@ -935,6 +972,26 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   setTailToast: (message: string | null) => {
     set({ tailToast: message });
+  },
+
+  setGroupByMode: (mode) => {
+    const { selectedLogGroup } = get();
+    set({
+      groupByMode: mode,
+      collapsedGroups: new Set(),
+      effectiveGroupByMode: resolveGroupByMode(mode, selectedLogGroup),
+    });
+  },
+
+  toggleGroupCollapsed: (groupId: string) => {
+    const { collapsedGroups } = get();
+    const next = new Set(collapsedGroups);
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    set({ collapsedGroups: next });
   },
 
   setSessionExpired: () => {
