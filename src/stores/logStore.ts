@@ -476,6 +476,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         getPersistedDisabledLevelsAsSet,
         persistedTimeRange,
         persistedTimePreset,
+        persistedGroupByMode,
         getDefaultDisabledLevels,
       } = useSettingsStore.getState();
 
@@ -505,12 +506,21 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }
       // If no preset or unknown, leave timeRange as null (will use default 15m)
 
+      // Restore groupByMode from persisted settings
+      const restoredGroupByMode = (
+        ["none", "stream", "invocation"].includes(persistedGroupByMode)
+          ? persistedGroupByMode
+          : "none"
+      ) as GroupByMode;
+
       set({
         disabledLevels:
           persistedLevels.size > 0
             ? persistedLevels
             : getDefaultDisabledLevels(),
         timeRange: restoredTimeRange,
+        groupByMode: restoredGroupByMode,
+        effectiveGroupByMode: restoredGroupByMode,
       });
 
       // Auto-select last used log group if available
@@ -976,11 +986,13 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
   setGroupByMode: (mode) => {
     const { selectedLogGroup } = get();
+    const { setPersistedGroupByMode } = useSettingsStore.getState();
     set({
       groupByMode: mode,
       collapsedGroups: new Set(),
       effectiveGroupByMode: resolveGroupByMode(mode, selectedLogGroup),
     });
+    setPersistedGroupByMode(mode);
   },
 
   toggleGroupCollapsed: (groupId: string) => {
