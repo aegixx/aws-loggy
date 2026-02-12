@@ -832,7 +832,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         const mergedNew = mergeFragmentedLogs(uniqueNewLogs);
         const parsedNew = mergedNew.map(parseLogEvent);
         const allLogs = [...logs, ...parsedNew];
-        const trimmedLogs = allLogs.slice(-50000);
+        const { cacheLimits } = useSettingsStore.getState();
+        const trimmedLogs = allLogs.slice(-cacheLimits.maxLogCount);
         const filtered = getFilteredLogs(
           trimmedLogs,
           filterText,

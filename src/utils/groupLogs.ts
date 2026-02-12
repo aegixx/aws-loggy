@@ -1,5 +1,26 @@
 import type { ParsedLogEvent } from "../types";
 
+function getTimestampRange(logs: ParsedLogEvent[]): {
+  firstTimestamp: number;
+  lastTimestamp: number;
+} {
+  if (logs.length === 0) {
+    return { firstTimestamp: 0, lastTimestamp: 0 };
+  }
+  let first = logs[0].timestamp;
+  let last = logs[0].timestamp;
+  for (let i = 1; i < logs.length; i++) {
+    const ts = logs[i].timestamp;
+    if (ts < first) {
+      first = ts;
+    }
+    if (ts > last) {
+      last = ts;
+    }
+  }
+  return { firstTimestamp: first, lastTimestamp: last };
+}
+
 export interface LogGroupSectionMetadata {
   logCount: number;
   hasError: boolean;
@@ -40,7 +61,7 @@ export function groupLogsByStream(logs: ParsedLogEvent[]): LogGroupSection[] {
   const groups: LogGroupSection[] = [];
   for (const [streamName, streamLogs] of streamMap) {
     const hasError = streamLogs.some((l) => l.level === "error");
-    const timestamps = streamLogs.map((l) => l.timestamp);
+    const { firstTimestamp, lastTimestamp } = getTimestampRange(streamLogs);
     groups.push({
       id: streamName,
       label: streamName,
@@ -49,8 +70,8 @@ export function groupLogsByStream(logs: ParsedLogEvent[]): LogGroupSection[] {
       metadata: {
         logCount: streamLogs.length,
         hasError,
-        firstTimestamp: Math.min(...timestamps),
-        lastTimestamp: Math.max(...timestamps),
+        firstTimestamp,
+        lastTimestamp,
       },
     });
   }
@@ -201,7 +222,7 @@ export function groupLogsByInvocation(
   for (const [requestId, invocationLogs] of invocations) {
     const report = reportData.get(requestId);
     const hasError = invocationLogs.some((l) => l.level === "error");
-    const timestamps = invocationLogs.map((l) => l.timestamp);
+    const { firstTimestamp, lastTimestamp } = getTimestampRange(invocationLogs);
     const isComplete = completedIds.has(requestId);
 
     groups.push({
@@ -212,8 +233,8 @@ export function groupLogsByInvocation(
       metadata: {
         logCount: invocationLogs.length,
         hasError,
-        firstTimestamp: Math.min(...timestamps),
-        lastTimestamp: Math.max(...timestamps),
+        firstTimestamp,
+        lastTimestamp,
         requestId,
         duration: report?.duration,
         billedDuration: report?.billedDuration,
@@ -225,19 +246,18 @@ export function groupLogsByInvocation(
   }
 
   // Add init groups (cold starts)
-  for (let i = 0; i < initGroups.length; i++) {
-    const initGroup = initGroups[i];
-    const timestamps = initGroup.logs.map((l) => l.timestamp);
+  for (const initGroup of initGroups) {
+    const { firstTimestamp, lastTimestamp } = getTimestampRange(initGroup.logs);
     groups.push({
-      id: `init-${i}`,
+      id: `init-${firstTimestamp}`,
       label: "Init",
       logs: initGroup.logs,
       collapsed: false,
       metadata: {
         logCount: initGroup.logs.length,
         hasError: initGroup.logs.some((l) => l.level === "error"),
-        firstTimestamp: Math.min(...timestamps),
-        lastTimestamp: Math.max(...timestamps),
+        firstTimestamp,
+        lastTimestamp,
         initDuration: initGroup.initDuration,
       },
     });
@@ -245,7 +265,7 @@ export function groupLogsByInvocation(
 
   // Add remaining orphan logs as a separate group
   if (orphanLogs.length > 0) {
-    const timestamps = orphanLogs.map((l) => l.timestamp);
+    const { firstTimestamp, lastTimestamp } = getTimestampRange(orphanLogs);
     groups.push({
       id: "ungrouped",
       label: "Ungrouped logs",
@@ -254,8 +274,8 @@ export function groupLogsByInvocation(
       metadata: {
         logCount: orphanLogs.length,
         hasError: orphanLogs.some((l) => l.level === "error"),
-        firstTimestamp: Math.min(...timestamps),
-        lastTimestamp: Math.max(...timestamps),
+        firstTimestamp,
+        lastTimestamp,
       },
     });
   }

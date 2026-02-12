@@ -319,6 +319,21 @@ export function LogViewer() {
   const collapsedGroups = useLogStore((s) => s.collapsedGroups);
   const isGrouped = effectiveMode !== "none";
 
+  // Reverse index: logIndex → displayItems index (for O(1) lookup)
+  const logIndexToDisplayIndex = useMemo(() => {
+    if (!isGrouped) {
+      return null;
+    }
+    const map = new Map<number, number>();
+    for (let i = 0; i < displayItems.length; i++) {
+      const item = displayItems[i];
+      if (item.type === "log") {
+        map.set(item.logIndex, i);
+      }
+    }
+    return map;
+  }, [isGrouped, displayItems]);
+
   // In grouped mode, find the virtual list index of the expanded log
   const expandedDisplayIndex = useMemo(() => {
     if (expandedLogIndex === null) {
@@ -326,16 +341,9 @@ export function LogViewer() {
     } else if (!isGrouped) {
       return expandedLogIndex;
     } else {
-      const idx = displayItems.findIndex(
-        (item) => item.type === "log" && item.logIndex === expandedLogIndex,
-      );
-      if (idx === -1) {
-        return null;
-      } else {
-        return idx;
-      }
+      return logIndexToDisplayIndex?.get(expandedLogIndex) ?? null;
     }
-  }, [expandedLogIndex, isGrouped, displayItems]);
+  }, [expandedLogIndex, isGrouped, logIndexToDisplayIndex]);
 
   const effectiveExpandedIndex = isGrouped
     ? expandedDisplayIndex

@@ -139,7 +139,8 @@ export function GroupHeader({
                 </span>
               )}
               {metadata.memoryUsed !== undefined &&
-                metadata.memoryAllocated !== undefined && (
+                metadata.memoryAllocated !== undefined &&
+                metadata.memoryAllocated > 0 && (
                   <span
                     className={`flex items-center gap-0.5 text-[10px] ${isDark ? "text-gray-400" : "text-gray-500"}`}
                     title={`${metadata.memoryUsed} / ${metadata.memoryAllocated} MB`}

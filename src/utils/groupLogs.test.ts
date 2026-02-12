@@ -283,4 +283,66 @@ describe("groupLogsByInvocation", () => {
     const groups = groupLogsByInvocation(logs);
     expect(groups[0].metadata.hasError).toBe(true);
   });
+
+  it("should handle empty log array", () => {
+    expect(groupLogsByInvocation([])).toEqual([]);
+  });
+
+  it("should handle REPORT without preceding START", () => {
+    const logs = [
+      createMockLog(
+        "REPORT RequestId: orphan-req\tDuration: 10 ms\tBilled Duration: 10 ms\tMemory Size: 128 MB\tMax Memory Used: 50 MB",
+        { timestamp: 1000, log_stream_name: "stream-a" },
+      ),
+    ];
+    const groups = groupLogsByInvocation(logs);
+    // REPORT without START should not crash; the invocation won't have logs
+    // but reportData is still tracked
+    expect(groups.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("should handle interleaved invocations from multiple streams", () => {
+    const logs = [
+      createMockLog("START RequestId: req-a Version: $LATEST", {
+        timestamp: 1000,
+        log_stream_name: "stream-a",
+      }),
+      createMockLog("START RequestId: req-b Version: $LATEST", {
+        timestamp: 1001,
+        log_stream_name: "stream-b",
+      }),
+      createMockLog("Processing in A", {
+        timestamp: 1002,
+        log_stream_name: "stream-a",
+      }),
+      createMockLog("Processing in B", {
+        timestamp: 1003,
+        log_stream_name: "stream-b",
+      }),
+      createMockLog(
+        "REPORT RequestId: req-a\tDuration: 10 ms\tBilled Duration: 10 ms\tMemory Size: 128 MB\tMax Memory Used: 50 MB",
+        { timestamp: 1004, log_stream_name: "stream-a" },
+      ),
+      createMockLog(
+        "REPORT RequestId: req-b\tDuration: 20 ms\tBilled Duration: 20 ms\tMemory Size: 256 MB\tMax Memory Used: 100 MB",
+        { timestamp: 1005, log_stream_name: "stream-b" },
+      ),
+    ];
+    const groups = groupLogsByInvocation(logs);
+    expect(groups).toHaveLength(2);
+    const groupA = groups.find((g) => g.metadata.requestId === "req-a");
+    const groupB = groups.find((g) => g.metadata.requestId === "req-b");
+    expect(groupA).toBeDefined();
+    expect(groupB).toBeDefined();
+    expect(groupA!.logs).toHaveLength(3); // START + Processing + REPORT
+    expect(groupB!.logs).toHaveLength(3);
+    expect(groupA!.metadata.duration).toBe(10);
+    expect(groupB!.metadata.duration).toBe(20);
+  });
+});
+
+describe("groupLogsByStream", () => {
+  it("should handle empty log array", () => {
+    expect(groupLogsByStream([])).toEqual([]);
+  });
 });

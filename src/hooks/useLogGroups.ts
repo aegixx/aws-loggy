@@ -45,38 +45,31 @@ export function computeDisplayItems(
     }
 
     for (const group of groups) {
-      // Check if this group has any visible logs (passing both text + level filters)
-      const hasVisibleLogs = group.logs.some((log) => {
+      // Single pass: collect visible logs and check if group has any
+      const visibleLogs: { log: ParsedLogEvent; logIndex: number }[] = [];
+      for (const log of group.logs) {
         if (
           disabledLevels &&
           disabledLevels.size > 0 &&
           disabledLevels.has(log.level)
         ) {
-          return false;
+          continue;
         }
-        return logToIndex.has(log);
-      });
+        const logIndex = logToIndex.get(log);
+        if (logIndex !== undefined) {
+          visibleLogs.push({ log, logIndex });
+        }
+      }
 
       // Skip groups with no visible log entries
-      if (!hasVisibleLogs) {
+      if (visibleLogs.length === 0) {
         continue;
       }
 
       items.push({ type: "header", group });
       if (!collapsedGroups.has(group.id)) {
-        for (const log of group.logs) {
-          // Check if log passes level filter
-          if (
-            disabledLevels &&
-            disabledLevels.size > 0 &&
-            disabledLevels.has(log.level)
-          ) {
-            continue;
-          }
-          const logIndex = logToIndex.get(log);
-          if (logIndex !== undefined) {
-            items.push({ type: "log", log, logIndex });
-          }
+        for (const { log, logIndex } of visibleLogs) {
+          items.push({ type: "log", log, logIndex });
         }
       }
     }
