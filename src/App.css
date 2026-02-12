@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Prevent document-level scrolling in the Tauri webview.
+   All scrolling should happen within the virtualized log list. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  height: 100%;
+}
+
 /* Base styles */
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
