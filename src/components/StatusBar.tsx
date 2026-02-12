@@ -5,6 +5,7 @@ import {
   DEFAULT_CACHE_LIMITS,
 } from "../stores/settingsStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
+import { useLogGroups } from "../hooks/useLogGroups";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -156,6 +157,7 @@ export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
   } = useLogStore();
   const { cacheLimits } = useSettingsStore();
   const isDark = useSystemTheme();
+  const { groups, effectiveMode } = useLogGroups();
 
   if (!selectedLogGroup) {
     return null;
@@ -226,6 +228,12 @@ export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
                 ({formatBytes(totalSizeBytes)})
               </span>
             )}
+          </span>
+        )}
+        {effectiveMode !== "none" && groups.length > 0 && (
+          <span className={isDark ? "text-gray-500" : "text-gray-500"}>
+            ({groups.length}{" "}
+            {effectiveMode === "invocation" ? "invocations" : "streams"})
           </span>
         )}
         {isTailing && (
