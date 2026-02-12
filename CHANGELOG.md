@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.0](https://github.com/aegixx/aws-loggy/compare/v3.3.0...v3.4.0) (2026-02-12)
+
+
+### Features
+
+* Log grouping by stream and Lambda invocation ([#66](https://github.com/aegixx/aws-loggy/issues/66)) ([81cb38f](https://github.com/aegixx/aws-loggy/commit/81cb38f7f52f71c02ee9d49da7f6d1cf029a563d))
+
 ## [3.3.0](https://github.com/aegixx/aws-loggy/compare/v3.2.6...v3.3.0) (2026-02-10)
 
 
