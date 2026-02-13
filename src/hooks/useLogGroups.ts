@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useLogStore, filterLogs } from "../stores/logStore";
+import { useLogStore } from "../stores/logStore";
 import {
   groupLogsByStream,
   groupLogsByInvocation,
@@ -81,27 +81,24 @@ export function computeDisplayItems(
 export function useLogGroups() {
   const logs = useLogStore((s) => s.logs);
   const filteredLogs = useLogStore((s) => s.filteredLogs);
-  const filterText = useLogStore((s) => s.filterText);
   const disabledLevels = useLogStore((s) => s.disabledLevels);
   const effectiveMode = useLogStore((s) => s.effectiveGroupByMode);
   const collapsedGroups = useLogStore((s) => s.collapsedGroups);
 
-  // Text-only filtered logs (no level filtering) — used for group detection
-  // so that disabling a level (e.g., SYSTEM) doesn't break invocation boundaries
-  const textFilteredLogs = useMemo(
-    () => filterLogs(logs, filterText, new Set()),
-    [logs, filterText],
-  );
-
+  // Groups are always computed from ALL logs (unfiltered) so that
+  // invocation boundaries (START/END/REPORT) and stream assignments
+  // are never broken by text or level filters.
+  // Filtering only affects which logs are *visible* within each group
+  // (handled by computeDisplayItems).
   const groups = useMemo(() => {
     if (effectiveMode === "none") {
       return [];
     } else if (effectiveMode === "invocation") {
-      return groupLogsByInvocation(textFilteredLogs);
+      return groupLogsByInvocation(logs);
     } else {
-      return groupLogsByStream(textFilteredLogs);
+      return groupLogsByStream(logs);
     }
-  }, [textFilteredLogs, effectiveMode]);
+  }, [logs, effectiveMode]);
 
   const displayItems = useMemo(
     () =>
