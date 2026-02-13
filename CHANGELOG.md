@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.0](https://github.com/aegixx/aws-loggy/compare/v3.5.0...v3.6.0) (2026-02-13)
+
+
+### Features
+
+* Add demo mode with mock Lambda data for testing and screenshots ([#69](https://github.com/aegixx/aws-loggy/issues/69)) ([376ee17](https://github.com/aegixx/aws-loggy/commit/376ee1782d2aa20d82edb229cbc38e7da7720725))
+
 ## [3.5.0](https://github.com/aegixx/aws-loggy/compare/v3.4.0...v3.5.0) (2026-02-13)
 
 
