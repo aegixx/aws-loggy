@@ -6,8 +6,10 @@ interface ContextMenuProps {
   onClose: () => void;
   isDark: boolean;
   onCopy: () => void;
+  copyDisabled?: boolean;
   onRefresh: () => void;
   onClear: () => void;
+  clearDisabled?: boolean;
   onFindBy: () => void;
   onFilterBySelection: () => void;
   onFilterByRequestId: () => void;
@@ -35,8 +37,10 @@ export function ContextMenu({
   onClose,
   isDark,
   onCopy,
+  copyDisabled,
   onRefresh,
   onClear,
+  clearDisabled,
   onFindBy,
   onFilterBySelection,
   onFilterByRequestId,
@@ -122,8 +126,8 @@ export function ContextMenu({
     >
       {/* Copy */}
       <div
-        className={`${menuItemBase} ${menuItemEnabled}`}
-        onClick={() => handleItemClick(onCopy)}
+        className={`${menuItemBase} ${copyDisabled ? menuItemDisabled : menuItemEnabled}`}
+        onClick={() => handleItemClick(onCopy, copyDisabled)}
       >
         <span>{hasTextSelection ? "Copy selection" : "Copy"}</span>
         <span className={shortcutClass}>Cmd+C</span>
@@ -219,8 +223,8 @@ export function ContextMenu({
 
       {/* Clear */}
       <div
-        className={`${menuItemBase} ${menuItemEnabled}`}
-        onClick={() => handleItemClick(onClear)}
+        className={`${menuItemBase} ${clearDisabled ? menuItemDisabled : menuItemEnabled}`}
+        onClick={() => handleItemClick(onClear, clearDisabled)}
       >
         <span>Clear</span>
         <span className={shortcutClass}>Cmd+K</span>

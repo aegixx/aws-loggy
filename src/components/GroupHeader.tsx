@@ -10,6 +10,7 @@ interface GroupHeaderProps {
   getVisibleCount?: (group: LogGroupSection) => number;
   isDark: boolean;
   style: CSSProperties;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -55,6 +56,7 @@ export function GroupHeader({
   getVisibleCount,
   isDark,
   style,
+  onContextMenu,
 }: GroupHeaderProps) {
   const [copied, setCopied] = useState(false);
   const { metadata } = group;
@@ -78,6 +80,7 @@ export function GroupHeader({
     <div
       style={style}
       onClick={onToggle}
+      onContextMenu={onContextMenu}
       className={`group flex items-center gap-3 px-3 font-mono text-xs border-b cursor-pointer select-none ${
         isDark
           ? "bg-gray-750 border-gray-700 hover:bg-gray-700"

@@ -76,6 +76,7 @@ interface LogRowProps {
   getVisibleCount?: (
     group: import("../utils/groupLogs").LogGroupSection,
   ) => number;
+  onGroupHeaderContextMenu?: (e: React.MouseEvent) => void;
 }
 
 interface RowComponentPropsWithCustom {
@@ -115,6 +116,7 @@ interface RowComponentPropsWithCustom {
   getVisibleCount?: (
     group: import("../utils/groupLogs").LogGroupSection,
   ) => number;
+  onGroupHeaderContextMenu?: (e: React.MouseEvent) => void;
 }
 
 const LogRow = memo(function LogRow({
@@ -142,6 +144,7 @@ const LogRow = memo(function LogRow({
   collapsedGroups,
   getVisibleMessages,
   getVisibleCount,
+  onGroupHeaderContextMenu,
 }: RowComponentPropsWithCustom) {
   // If there's an expanded row, indices after it are shifted by 1
   const isDetailRow = expandedIndex !== null && index === expandedIndex + 1;
@@ -161,6 +164,7 @@ const LogRow = memo(function LogRow({
           getVisibleCount={getVisibleCount}
           isDark={isDark}
           style={style}
+          onContextMenu={onGroupHeaderContextMenu}
         />
       );
     }
@@ -413,6 +417,7 @@ export function LogViewer() {
   const handleContextMenu = useCallback(
     (logIndex: number, e: React.MouseEvent, isDetailView: boolean) => {
       e.preventDefault();
+      e.stopPropagation();
 
       let selectedText = "";
       if (isDetailView) {
@@ -446,6 +451,21 @@ export function LogViewer() {
     },
     [filteredLogs],
   );
+
+  // Context menu handler for group headers and empty areas (no log-specific data)
+  const handleGroupHeaderContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      selectedText: "",
+      targetLogIndex: -1,
+      requestId: null,
+      traceId: null,
+      clientIP: null,
+    });
+  }, []);
 
   // Context menu action handlers
   const handleContextCopy = useCallback(() => {
@@ -747,6 +767,7 @@ export function LogViewer() {
       }`}
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      onContextMenu={handleGroupHeaderContextMenu}
       onMouseMove={handleContainerMouseMove}
       onMouseUp={handleContainerMouseUp}
       onMouseLeave={handleContainerMouseLeave}
@@ -776,8 +797,14 @@ export function LogViewer() {
           onClose={() => setContextMenu(null)}
           isDark={isDark}
           onCopy={handleContextCopy}
+          copyDisabled={
+            !contextMenu.selectedText &&
+            selectedLogIndices.size === 0 &&
+            contextMenu.targetLogIndex === -1
+          }
           onRefresh={refreshConnection}
           onClear={clearLogs}
+          clearDisabled={!isTailing}
           onFindBy={handleFindBy}
           onFilterBySelection={handleFilterBySelection}
           onFilterByRequestId={handleFilterByRequestId}
@@ -827,6 +854,7 @@ export function LogViewer() {
           collapsedGroups,
           getVisibleMessages,
           getVisibleCount,
+          onGroupHeaderContextMenu: handleGroupHeaderContextMenu,
         }}
         onRowsRendered={handleRowsRendered}
         overscanCount={20}

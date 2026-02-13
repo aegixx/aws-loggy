@@ -188,7 +188,9 @@ function App() {
       setSessionExpired();
     });
     const unlistenClear = listen("clear-logs", () => {
-      clearLogs();
+      if (useLogStore.getState().isTailing) {
+        clearLogs();
+      }
     });
     const unlistenTheme = listen<string>("set-theme", (event) => {
       const newTheme = event.payload as "dark" | "light" | "system";
@@ -240,10 +242,12 @@ function App() {
           // Always refresh connection (picks up credential changes) and re-query logs
           refreshConnection();
         }
-        // CMD-K (or Ctrl-K) to clear logs
+        // CMD-K (or Ctrl-K) to clear logs (only during live tail)
         if (e.key === "k") {
           e.preventDefault();
-          clearLogs();
+          if (useLogStore.getState().isTailing) {
+            clearLogs();
+          }
         }
       }
     };
