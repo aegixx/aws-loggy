@@ -46,12 +46,13 @@ export function FilterBar() {
   // Debounce the filter operation to avoid excessive re-filtering on every keystroke
   const debouncedFilterText = useDebounce(inputValue, FILTER_DEBOUNCE_MS);
 
-  // Sync debounced value to store
+  // Sync debounced value to store.
+  // Only depends on debouncedFilterText so that external setFilterText calls
+  // (e.g., context menu "Filter by") aren't overwritten by a stale debounce.
   useEffect(() => {
-    if (debouncedFilterText !== filterText) {
-      setFilterText(debouncedFilterText);
-    }
-  }, [debouncedFilterText, filterText, setFilterText]);
+    setFilterText(debouncedFilterText);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitting filterText to avoid overwriting external changes
+  }, [debouncedFilterText, setFilterText]);
 
   // Sync store value to input (for external changes like Clear button)
   useEffect(() => {
