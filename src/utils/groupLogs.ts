@@ -76,8 +76,8 @@ export function groupLogsByStream(logs: ParsedLogEvent[]): LogGroupSection[] {
     });
   }
 
-  // Sort by most recent activity (descending)
-  groups.sort((a, b) => b.metadata.lastTimestamp - a.metadata.lastTimestamp);
+  // Sort by start time (oldest first) for chronological ordering
+  groups.sort((a, b) => a.metadata.firstTimestamp - b.metadata.firstTimestamp);
 
   return groups;
 }
@@ -280,8 +280,8 @@ export function groupLogsByInvocation(
     });
   }
 
-  // Sort by most recent activity (descending)
-  groups.sort((a, b) => b.metadata.lastTimestamp - a.metadata.lastTimestamp);
+  // Sort by start time (oldest first) for chronological ordering
+  groups.sort((a, b) => a.metadata.firstTimestamp - b.metadata.firstTimestamp);
 
   return groups;
 }

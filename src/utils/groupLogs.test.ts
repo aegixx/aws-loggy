@@ -33,14 +33,14 @@ describe("groupLogsByStream", () => {
     expect(groups[1].logs).toHaveLength(1);
   });
 
-  it("should sort groups by most recent activity (descending)", () => {
+  it("should sort groups by start time (oldest first)", () => {
     const logs = [
       createMockLog("old", { log_stream_name: "stream-a", timestamp: 1000 }),
       createMockLog("new", { log_stream_name: "stream-b", timestamp: 5000 }),
     ];
     const groups = groupLogsByStream(logs);
-    expect(groups[0].id).toBe("stream-b");
-    expect(groups[1].id).toBe("stream-a");
+    expect(groups[0].id).toBe("stream-a");
+    expect(groups[1].id).toBe("stream-b");
   });
 
   it("should set metadata correctly", () => {
@@ -143,8 +143,8 @@ describe("groupLogsByInvocation", () => {
     ];
     const groups = groupLogsByInvocation(logs);
     expect(groups).toHaveLength(2);
-    expect(groups[0].metadata.requestId).toBe("req-2");
-    expect(groups[1].metadata.requestId).toBe("req-1");
+    expect(groups[0].metadata.requestId).toBe("req-1");
+    expect(groups[1].metadata.requestId).toBe("req-2");
   });
 
   it("should put orphan logs (no START marker) in an ungrouped section", () => {
@@ -242,8 +242,8 @@ describe("groupLogsByInvocation", () => {
     const groups = groupLogsByInvocation(logs);
     const initGroups = groups.filter((g) => g.label === "Init");
     expect(initGroups).toHaveLength(2);
-    expect(initGroups[0].metadata.initDuration).toBe(1500.0);
-    expect(initGroups[1].metadata.initDuration).toBe(2000.0);
+    expect(initGroups[0].metadata.initDuration).toBe(2000.0);
+    expect(initGroups[1].metadata.initDuration).toBe(1500.0);
   });
 
   it("should keep init logs at end of window when no START follows", () => {
