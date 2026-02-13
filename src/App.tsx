@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./demo/demoInvoke";
 import { LogGroupSelector } from "./components/LogGroupSelector";
 import { FilterBar } from "./components/FilterBar";
 import { LogViewer } from "./components/LogViewer";
@@ -12,6 +12,7 @@ import { UpdateDialog, UpdateInfo } from "./components/UpdateDialog";
 import { useLogStore, getCurrentFetchId } from "./stores/logStore";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
+import { useDemoStore } from "./demo/demoStore";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import "./App.css";
 
@@ -209,6 +210,21 @@ function App() {
         }),
       );
     });
+    const unlistenDemoMode = listen<boolean>("toggle-demo-mode", (event) => {
+      const enabled = event.payload;
+      const store = useLogStore.getState();
+      // Stop any active tail before switching modes
+      if (store.isTailing) {
+        store.stopTail();
+      }
+      useDemoStore.getState().setDemoMode(enabled);
+      store.resetState();
+      // Refresh profiles (demo wrapper returns ["demo"], real returns AWS profiles)
+      invoke<string[]>("list_aws_profiles")
+        .then((profiles) => setAvailableProfiles(profiles))
+        .catch((err) => console.error("Failed to load profiles:", err));
+      store.initializeAws();
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
@@ -223,6 +239,7 @@ function App() {
       unlistenTheme.then((fn) => fn());
       unlistenCheckUpdates.then((fn) => fn());
       unlistenFind.then((fn) => fn());
+      unlistenDemoMode.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand store actions are stable refs; register listeners once to prevent race conditions on re-render
   }, []);

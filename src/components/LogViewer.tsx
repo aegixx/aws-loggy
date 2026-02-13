@@ -357,6 +357,7 @@ export function LogViewer() {
   const listRef = useRef<ListImperativeAPI>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const prevLogCount = useRef(0);
+  const prevRowCountForFollow = useRef(0);
 
   // Callback to navigate to a log when find navigates to a match
   const handleNavigateToLog = useCallback(
@@ -675,15 +676,25 @@ export function LogViewer() {
     }
   }, [isTailing, filteredLogs.length]);
 
+  // Sync prevRowCountForFollow after each render so handleRowsRendered
+  // can detect whether rowCount changed (new logs arrived vs user scroll)
+  useEffect(() => {
+    prevRowCountForFollow.current = rowCount;
+  }, [rowCount]);
+
   const handleRowsRendered = useCallback(
     (visibleRows: { startIndex: number; stopIndex: number }) => {
       if (!isTailing) return;
 
       const isAtBottom = visibleRows.stopIndex >= rowCount - 3;
+      // When new logs arrive, rowCount increases and onItemsRendered fires
+      // before the auto-scroll effect has a chance to run. Don't unfollow
+      // in that case — only unfollow when the user actively scrolled away.
+      const rowCountJustChanged = rowCount !== prevRowCountForFollow.current;
 
       if (isAtBottom && !isFollowing) {
         setIsFollowing(true);
-      } else if (!isAtBottom && isFollowing) {
+      } else if (!isAtBottom && isFollowing && !rowCountJustChanged) {
         setIsFollowing(false);
       }
     },

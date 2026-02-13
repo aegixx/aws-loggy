@@ -1,6 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../demo/demoInvoke";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { TailPoller } from "./TailPoller";
+import { DemoTailTransport } from "../demo/DemoTailTransport";
+import { getDemoMode } from "../demo/demoStore";
 import type { TailTransport } from "./TailTransport";
 import type {
   LogEvent,
@@ -44,6 +46,16 @@ export class LiveTailManager {
   }
 
   async start(): Promise<void> {
+    // In demo mode, use the demo transport instead of real streaming/polling
+    if (getDemoMode()) {
+      const demo = new DemoTailTransport(this.logGroupName, this.onNewLogs);
+      demo.start();
+      this.transport = demo;
+      this.transportType = "stream";
+      this.onTransportChange("stream");
+      return;
+    }
+
     // Streaming requires an ARN — fall back to polling if unavailable
     if (!this.logGroupArn) {
       console.log("[LiveTailManager] No ARN available, using polling");

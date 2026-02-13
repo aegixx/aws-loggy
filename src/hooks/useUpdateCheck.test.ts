@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { check, Update } from "@tauri-apps/plugin-updater";
@@ -9,9 +9,17 @@ vi.mock("@tauri-apps/plugin-updater");
 const mockCheck = vi.mocked(check);
 
 describe("useUpdateCheck", () => {
+  const originalDev = import.meta.env.DEV;
+
   beforeEach(() => {
     vi.clearAllMocks();
     useSettingsStore.setState({ autoUpdateEnabled: true });
+    // Override DEV so the auto-check fires in tests
+    import.meta.env.DEV = false;
+  });
+
+  afterEach(() => {
+    import.meta.env.DEV = originalDev;
   });
 
   it("should not check for updates when autoUpdateEnabled is false", async () => {

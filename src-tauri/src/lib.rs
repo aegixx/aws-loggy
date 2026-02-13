@@ -1457,12 +1457,19 @@ pub fn run() {
                 .item(&theme_system_item)
                 .build()?;
 
+            // Demo mode menu item (checkable)
+            let demo_mode_item = tauri::menu::CheckMenuItemBuilder::new("Demo Mode")
+                .id("demo-mode")
+                .checked(false)
+                .build(app)?;
+
             // App submenu (macOS application menu)
             let app_submenu = SubmenuBuilder::new(app, "Loggy")
                 .item(&about_item)
                 .item(&check_updates_item)
                 .separator()
                 .item(&preferences_item)
+                .item(&demo_mode_item)
                 .separator()
                 .services()
                 .separator()
@@ -1504,9 +1511,6 @@ pub fn run() {
                 .close_window()
                 .build()?;
 
-            // Help submenu (empty for now, but required for standard macOS menu)
-            let help_submenu = SubmenuBuilder::new(app, "Help").build()?;
-
             // Build the menu
             let menu = MenuBuilder::new(app)
                 .items(&[
@@ -1514,7 +1518,6 @@ pub fn run() {
                     &edit_submenu,
                     &view_submenu,
                     &window_submenu,
-                    &help_submenu,
                 ])
                 .build()?;
 
@@ -1587,6 +1590,8 @@ pub fn run() {
             let theme_dark = theme_dark_item.clone();
             let theme_light = theme_light_item.clone();
             let theme_system = theme_system_item.clone();
+            let demo_mode = demo_mode_item.clone();
+            let demo_mode_id = demo_mode_item.id().clone();
 
             app.on_menu_event(move |app_handle, event| {
                 if *event.id() == preferences_id {
@@ -1619,6 +1624,9 @@ pub fn run() {
                     theme_light.set_checked(false).ok();
                     theme_system.set_checked(true).ok();
                     app_handle.emit("set-theme", "system").ok();
+                } else if *event.id() == demo_mode_id {
+                    let is_checked = demo_mode.is_checked().unwrap_or(false);
+                    app_handle.emit("toggle-demo-mode", is_checked).ok();
                 }
             });
 

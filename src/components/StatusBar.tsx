@@ -4,6 +4,7 @@ import {
   useSettingsStore,
   DEFAULT_CACHE_LIMITS,
 } from "../stores/settingsStore";
+import { useDemoStore } from "../demo/demoStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import { useLogGroups } from "../hooks/useLogGroups";
 
@@ -156,6 +157,7 @@ export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
     isFollowing,
   } = useLogStore();
   const { cacheLimits } = useSettingsStore();
+  const { isDemoMode } = useDemoStore();
   const isDark = useSystemTheme();
   const { groups, effectiveMode } = useLogGroups();
 
@@ -181,6 +183,11 @@ export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
     >
       {/* Left side - log counts */}
       <div className="flex items-center gap-4">
+        {isDemoMode && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-orange-500 text-white">
+            DEMO
+          </span>
+        )}
         {isLoading ? (
           <div className="flex items-center gap-2">
             <Spinner />

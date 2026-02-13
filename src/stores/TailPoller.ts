@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../demo/demoInvoke";
 import type { LogEvent } from "../types";
 import type { TailTransport } from "./TailTransport";
 
