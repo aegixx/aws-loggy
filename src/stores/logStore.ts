@@ -164,6 +164,8 @@ interface LogStore {
   // Actions
   setGroupByMode: (mode: GroupByMode | "auto") => void;
   toggleGroupCollapsed: (groupId: string) => void;
+  expandAllGroups: () => void;
+  collapseAllGroups: (groupIds: string[]) => void;
   initializeAws: () => Promise<void>;
   refreshConnection: () => Promise<void>;
   loadLogGroups: () => Promise<void>;
@@ -1014,6 +1016,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
       next.add(groupId);
     }
     set({ collapsedGroups: next });
+  },
+
+  expandAllGroups: () => {
+    set({ collapsedGroups: new Set() });
+  },
+
+  collapseAllGroups: (groupIds: string[]) => {
+    set({ collapsedGroups: new Set(groupIds) });
   },
 
   setSessionExpired: () => {

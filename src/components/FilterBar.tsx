@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { MdFilterAltOff, MdDeleteOutline } from "react-icons/md";
+import {
+  MdFilterAltOff,
+  MdDeleteOutline,
+  MdUnfoldMore,
+  MdUnfoldLess,
+} from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
+import { useLogGroups } from "../hooks/useLogGroups";
 import { TimeRangePicker } from "./TimeRangePicker";
 import type { LogLevel, GroupByMode } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
@@ -24,7 +30,11 @@ export function FilterBar() {
     selectedLogGroup,
     groupByMode,
     setGroupByMode,
+    expandAllGroups,
+    collapseAllGroups,
+    collapsedGroups,
   } = useLogStore();
+  const { groups, effectiveMode } = useLogGroups();
   const { logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
   const filterInputRef = useRef<HTMLInputElement>(null);
@@ -226,6 +236,28 @@ export function FilterBar() {
             <option value="invocation">Invocation</option>
           )}
         </select>
+
+        {/* Expand/Collapse all buttons (only when grouping is active) */}
+        {effectiveMode !== "none" && groups.length > 0 && (
+          <>
+            <button
+              onClick={expandAllGroups}
+              disabled={collapsedGroups.size === 0}
+              className={`p-1 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
+              title="Expand all groups"
+            >
+              <MdUnfoldMore className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => collapseAllGroups(groups.map((g) => g.id))}
+              disabled={collapsedGroups.size === groups.length}
+              className={`p-1 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
+              title="Collapse all groups"
+            >
+              <MdUnfoldLess className="w-4 h-4" />
+            </button>
+          </>
+        )}
 
         {/* Spacer to push clear button to right */}
         <div className="flex-1" />
