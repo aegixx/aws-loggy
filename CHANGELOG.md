@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.5.0](https://github.com/aegixx/aws-loggy/compare/v3.4.0...v3.5.0) (2026-02-13)
+
+
+### Features
+
+* Add expand all / collapse all buttons for log groups ([6b48492](https://github.com/aegixx/aws-loggy/commit/6b48492aa9404cc7d00228f0fec61eb059c4d238))
+* Context menu on group headers and empty areas, disable clear in static mode ([a7cc49e](https://github.com/aegixx/aws-loggy/commit/a7cc49e3c3c9fba3514be64dfa086eb340e654c6))
+
+
+### Bug Fixes
+
+* Add click handler to Filter by submenu toggle ([8ec12dd](https://github.com/aegixx/aws-loggy/commit/8ec12dd63f9273a25f520150158b091802917471))
+* Compute groups from unfiltered logs to preserve invocation boundaries ([cd1b573](https://github.com/aegixx/aws-loggy/commit/cd1b573cfeb04b41eda659c147b94e87727a9bcc))
+* Prevent debounce from overwriting external filter changes ([44904e8](https://github.com/aegixx/aws-loggy/commit/44904e81888c8f39ada90a60555b62c402a4a118))
+* Prevent webview document-level scrolling ([1b6c2eb](https://github.com/aegixx/aws-loggy/commit/1b6c2ebd5d121b1a22108e2efcfd1498899c9cee))
+* Sort log groups chronologically (oldest first) ([8462f10](https://github.com/aegixx/aws-loggy/commit/8462f10d7771545aa98dc89f1881f91611073a71))
+
+
+### Miscellaneous
+
+* Remove unused AWS env vars from VS Code launch config ([8b9e706](https://github.com/aegixx/aws-loggy/commit/8b9e7060fe53e2a23cd65c43c1765ea2ecf14418))
+
 ## [3.4.0](https://github.com/aegixx/aws-loggy/compare/v3.3.0...v3.4.0) (2026-02-12)
 
 
