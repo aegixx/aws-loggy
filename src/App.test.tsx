@@ -31,6 +31,7 @@ describe("App - Tauri event listeners", () => {
       "set-theme",
       "check-for-updates",
       "open-find",
+      "toggle-demo-mode",
     ];
 
     for (const event of menuEvents) {

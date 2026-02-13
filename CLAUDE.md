@@ -31,6 +31,10 @@ See `docs/DESIGN.md` for full architecture documentation.
 - `src/components/GroupHeader.tsx` - Group header component for stream/invocation headers
 - `src/stores/LiveTailManager.ts` - Stream/poll transport orchestrator for live tail
 - `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
+- `src/demo/demoStore.ts` - Demo mode state (Zustand, non-persisted)
+- `src/demo/demoInvoke.ts` - Invoke wrapper that intercepts Tauri commands in demo mode
+- `src/demo/mockData.ts` - Mock Lambda log groups and log event generators
+- `src/demo/DemoTailTransport.ts` - Simulated live tail transport for demo mode
 - `src/stores/TailTransport.ts` - Transport interface
 - `src/types/index.ts` - TypeScript type definitions
 - `src/components/UpdateDialog.tsx` - Auto-update dialog with changelog display and release notes link
@@ -112,6 +116,7 @@ The Loggy application menu includes:
 | About Loggy          | Show about dialog                                                  |
 | Check for Updates... | Manually check for updates (shows result in status bar and dialog) |
 | Preferences... (⌘,)  | Open settings                                                      |
+| Demo Mode            | Toggle demo mode with mock Lambda data (no AWS required)           |
 
 ## Context Menu
 
@@ -174,3 +179,14 @@ Grouping is purely visual — filtering, find-in-log, and selection operate on i
 - Settings persisted to localStorage via zustand/persist middleware
 - Last selected log group is remembered and auto-selected on app launch
 - Auto-update checks for new GitHub Releases on startup (configurable in Settings)
+
+## Demo Mode
+
+- Toggled via Loggy > Demo Mode menu item (works in published builds)
+- Hides real AWS profiles and shows only mock log groups when active
+- Intercepts all Tauri `invoke()` calls at the frontend layer (`src/demo/demoInvoke.ts`)
+- Provides 4 Lambda log groups with realistic invocations (START/END/REPORT, structured JSON, errors)
+- Live tail simulation via `DemoTailTransport` generates new invocations every ~1.5 seconds
+- StatusBar shows orange "DEMO" badge; profile dropdown shows "demo" and is disabled
+- Toggling off reconnects to real AWS automatically
+- Demo state is not persisted — always starts in normal mode

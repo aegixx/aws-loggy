@@ -41,7 +41,7 @@ export function useUpdateCheck(): UseUpdateCheckResult {
   const checkNow = useCallback(() => performCheck(true), [performCheck]);
 
   useEffect(() => {
-    if (!autoUpdateEnabled) {
+    if (!autoUpdateEnabled || import.meta.env.DEV) {
       return;
     }
 
