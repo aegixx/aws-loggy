@@ -150,6 +150,9 @@ export function ContextMenu({
       <div
         ref={filterItemRef}
         className={`${menuItemBase} relative ${hasAnyFilterOption ? menuItemEnabled : menuItemDisabled}`}
+        onClick={() =>
+          hasAnyFilterOption && setShowFilterSubmenu((prev) => !prev)
+        }
         onMouseEnter={() => hasAnyFilterOption && setShowFilterSubmenu(true)}
         onMouseLeave={() => setShowFilterSubmenu(false)}
       >
