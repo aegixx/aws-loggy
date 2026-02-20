@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.1](https://github.com/aegixx/aws-loggy/compare/v3.7.0...v3.7.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* Prevent scroll-to-bottom when follow mode is off during live tail ([#76](https://github.com/aegixx/aws-loggy/issues/76)) ([1d38ca1](https://github.com/aegixx/aws-loggy/commit/1d38ca188c3189bc623dc1ba0b80b696f96ed315))
+
 ## [3.7.0](https://github.com/aegixx/aws-loggy/compare/v3.6.1...v3.7.0) (2026-02-20)
 
 
