@@ -77,7 +77,10 @@ interface LogRowProps {
   getVisibleCount?: (
     group: import("../utils/groupLogs").LogGroupSection,
   ) => number;
-  onGroupHeaderContextMenu?: (e: React.MouseEvent) => void;
+  onGroupHeaderContextMenu?: (
+    e: React.MouseEvent,
+    group: import("../utils/groupLogs").LogGroupSection,
+  ) => void;
 }
 
 interface RowComponentPropsWithCustom {
@@ -118,7 +121,10 @@ interface RowComponentPropsWithCustom {
   getVisibleCount?: (
     group: import("../utils/groupLogs").LogGroupSection,
   ) => number;
-  onGroupHeaderContextMenu?: (e: React.MouseEvent) => void;
+  onGroupHeaderContextMenu?: (
+    e: React.MouseEvent,
+    group: import("../utils/groupLogs").LogGroupSection,
+  ) => void;
 }
 
 const LogRow = memo(function LogRow({
@@ -167,7 +173,11 @@ const LogRow = memo(function LogRow({
           getVisibleCount={getVisibleCount}
           isDark={isDark}
           style={style}
-          onContextMenu={onGroupHeaderContextMenu}
+          onContextMenu={
+            onGroupHeaderContextMenu
+              ? (e: React.MouseEvent) => onGroupHeaderContextMenu(e, item.group)
+              : undefined
+          }
         />
       );
     }
@@ -326,6 +336,9 @@ export function LogViewer() {
     isFollowing,
     setIsFollowing,
   } = useLogStore();
+  const groupFilter = useLogStore((s) => s.groupFilter);
+  const disabledLevels = useLogStore((s) => s.disabledLevels);
+  const filterText = useLogStore((s) => s.filterText);
   const { displayItems, effectiveMode } = useLogGroups();
   const toggleGroupCollapsed = useLogStore((s) => s.toggleGroupCollapsed);
   const collapsedGroups = useLogStore((s) => s.collapsedGroups);
@@ -426,6 +439,7 @@ export function LogViewer() {
     selectedText: string;
     targetLogIndex: number;
     targetLog: ParsedLogEvent | undefined;
+    targetGroup?: import("../utils/groupLogs").LogGroupSection;
     requestId: string | null;
     traceId: string | null;
     clientIP: string | null;
@@ -481,20 +495,71 @@ export function LogViewer() {
   );
 
   // Context menu handler for group headers and empty areas (no log-specific data)
-  const handleGroupHeaderContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      selectedText: "",
-      targetLogIndex: -1,
-      targetLog: undefined,
-      requestId: null,
-      traceId: null,
-      clientIP: null,
-    });
-  }, []);
+  const handleGroupHeaderContextMenu = useCallback(
+    (
+      e: React.MouseEvent,
+      group?: import("../utils/groupLogs").LogGroupSection,
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        selectedText: "",
+        targetLogIndex: -1,
+        targetLog: undefined,
+        targetGroup: group,
+        requestId: null,
+        traceId: null,
+        clientIP: null,
+      });
+    },
+    [],
+  );
+
+  // Build a Set of visible logs for fast lookup (used by group copy)
+  const filteredLogSet = useMemo(() => new Set(filteredLogs), [filteredLogs]);
+
+  // When group filter is ON with active text, the group shows all level-passing logs.
+  // Copy and count should reflect what's actually visible, not just text matches.
+  const isGroupFilterActive =
+    groupFilter && filterText && filterText.trim() !== "";
+
+  const getVisibleMessages = useCallback(
+    (group: import("../utils/groupLogs").LogGroupSection) => {
+      if (
+        isGroupFilterActive &&
+        group.logs.some((log) => filteredLogSet.has(log))
+      ) {
+        // Group has a text match — include all level-passing logs
+        return group.logs
+          .filter((log) => !disabledLevels.has(log.level))
+          .map((log) => log.message)
+          .join("\n");
+      } else {
+        return group.logs
+          .filter((log) => filteredLogSet.has(log))
+          .map((log) => log.message)
+          .join("\n");
+      }
+    },
+    [filteredLogSet, isGroupFilterActive, disabledLevels],
+  );
+
+  const getVisibleCount = useCallback(
+    (group: import("../utils/groupLogs").LogGroupSection) => {
+      if (
+        isGroupFilterActive &&
+        group.logs.some((log) => filteredLogSet.has(log))
+      ) {
+        return group.logs.filter((log) => !disabledLevels.has(log.level))
+          .length;
+      } else {
+        return group.logs.filter((log) => filteredLogSet.has(log)).length;
+      }
+    },
+    [filteredLogSet, isGroupFilterActive, disabledLevels],
+  );
 
   // Context menu action handlers
   const handleContextCopy = useCallback(() => {
@@ -514,12 +579,22 @@ export function LogViewer() {
         .filter(Boolean)
         .join("\n");
       navigator.clipboard.writeText(messages);
+    } else if (contextMenu?.targetGroup) {
+      // Copy all visible messages for the group header
+      const messages = getVisibleMessages(contextMenu.targetGroup);
+      navigator.clipboard.writeText(messages);
     } else if (contextMenu?.targetLogIndex != null) {
       // Copy single targeted row — use stored targetLog for negative indices
       navigator.clipboard.writeText(contextMenu.targetLog?.message || "");
     }
     setContextMenu(null);
-  }, [contextMenu, selectedLogIndices, filteredLogs, logByIndex]);
+  }, [
+    contextMenu,
+    selectedLogIndices,
+    filteredLogs,
+    logByIndex,
+    getVisibleMessages,
+  ]);
 
   const handleFindBy = useCallback(() => {
     if (contextMenu?.selectedText) {
@@ -569,26 +644,6 @@ export function LogViewer() {
   const handleCloseDetail = useCallback(() => {
     setExpandedLogIndex(null);
   }, [setExpandedLogIndex]);
-
-  // Build a Set of visible logs for fast lookup (used by group copy)
-  const filteredLogSet = useMemo(() => new Set(filteredLogs), [filteredLogs]);
-
-  const getVisibleMessages = useCallback(
-    (group: import("../utils/groupLogs").LogGroupSection) => {
-      return group.logs
-        .filter((log) => filteredLogSet.has(log))
-        .map((log) => log.message)
-        .join("\n");
-    },
-    [filteredLogSet],
-  );
-
-  const getVisibleCount = useCallback(
-    (group: import("../utils/groupLogs").LogGroupSection) => {
-      return group.logs.filter((log) => filteredLogSet.has(log)).length;
-    },
-    [filteredLogSet],
-  );
 
   // Drag selection hook
   const {
@@ -699,15 +754,20 @@ export function LogViewer() {
     }
   }, [filteredLogs.length, isTailing, isFollowing, rowCount]);
 
-  // Scroll to bottom when starting tail
+  // Scroll to bottom when starting tail (or when following resumes)
   useEffect(() => {
-    if (isTailing && listRef.current && filteredLogs.length > 0) {
+    if (
+      isTailing &&
+      isFollowing &&
+      listRef.current &&
+      filteredLogs.length > 0
+    ) {
       listRef.current.scrollToRow({
         index: rowCount - 1,
         align: "end",
       });
     }
-  }, [isTailing, filteredLogs.length, rowCount]);
+  }, [isTailing, isFollowing, filteredLogs.length, rowCount]);
 
   // Sync prevRowCountForFollow after each render so handleRowsRendered
   // can detect whether rowCount changed (new logs arrived vs user scroll)
@@ -844,6 +904,7 @@ export function LogViewer() {
           copyDisabled={
             !contextMenu.selectedText &&
             selectedLogIndices.size === 0 &&
+            !contextMenu.targetGroup &&
             contextMenu.targetLogIndex === -1
           }
           onRefresh={refreshConnection}
