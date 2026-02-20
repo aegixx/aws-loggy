@@ -288,4 +288,262 @@ describe("computeDisplayItems", () => {
     // Group hidden entirely — no visible logs
     expect(items).toHaveLength(0);
   });
+
+  it("should show all group logs when groupFilter is ON and any log matches text filter", () => {
+    const matchLog = createMockLog("contains BLAH here", {
+      log_stream_name: "stream-a",
+      timestamp: 1000,
+      level: "info",
+    });
+    const noMatchLog = createMockLog("something else entirely", {
+      log_stream_name: "stream-a",
+      timestamp: 1001,
+      level: "info",
+    });
+    const filteredLogs = [matchLog];
+    const groups: LogGroupSection[] = [
+      {
+        id: "stream-a",
+        label: "stream-a",
+        logs: [matchLog, noMatchLog],
+        collapsed: false,
+        metadata: {
+          logCount: 2,
+          hasError: false,
+          firstTimestamp: 1000,
+          lastTimestamp: 1001,
+        },
+      },
+    ];
+    const items = computeDisplayItems(
+      filteredLogs,
+      "stream",
+      new Set(),
+      groups,
+      new Set(),
+      true,
+      "BLAH",
+    );
+    expect(items).toHaveLength(3);
+    expect(items[0].type).toBe("header");
+    expect(items[1].type).toBe("log");
+    expect(items[2].type).toBe("log");
+    // The text-matching log should have its real filteredLogs index
+    const matchItem = items[1] as DisplayItem & { type: "log" };
+    expect(matchItem.logIndex).toBe(0);
+    // The non-matching log should have a unique negative index
+    const noMatchItem = items[2] as DisplayItem & { type: "log" };
+    expect(noMatchItem.logIndex).toBeLessThan(0);
+    // Both items carry the actual log object
+    expect(matchItem.log).toBe(matchLog);
+    expect(noMatchItem.log).toBe(noMatchLog);
+  });
+
+  it("should assign unique negative indices to multiple non-matching logs in group filter mode", () => {
+    const matchLog = createMockLog("contains BLAH here", {
+      log_stream_name: "stream-a",
+      timestamp: 1000,
+      level: "info",
+    });
+    const noMatch1 = createMockLog("something else", {
+      log_stream_name: "stream-a",
+      timestamp: 1001,
+      level: "info",
+    });
+    const noMatch2 = createMockLog("another thing", {
+      log_stream_name: "stream-a",
+      timestamp: 1002,
+      level: "info",
+    });
+    const filteredLogs = [matchLog];
+    const groups: LogGroupSection[] = [
+      {
+        id: "stream-a",
+        label: "stream-a",
+        logs: [matchLog, noMatch1, noMatch2],
+        collapsed: false,
+        metadata: {
+          logCount: 3,
+          hasError: false,
+          firstTimestamp: 1000,
+          lastTimestamp: 1002,
+        },
+      },
+    ];
+    const items = computeDisplayItems(
+      filteredLogs,
+      "stream",
+      new Set(),
+      groups,
+      new Set(),
+      true,
+      "BLAH",
+    );
+    const logItems = items.filter(
+      (i): i is DisplayItem & { type: "log" } => i.type === "log",
+    );
+    expect(logItems).toHaveLength(3);
+    // Non-matching logs should have distinct negative indices
+    const negativeIndices = logItems
+      .filter((i) => i.logIndex < 0)
+      .map((i) => i.logIndex);
+    expect(negativeIndices).toHaveLength(2);
+    expect(new Set(negativeIndices).size).toBe(2); // All unique
+  });
+
+  it("should hide group when groupFilter is ON but no log matches text filter", () => {
+    const noMatchLog1 = createMockLog("something else", {
+      log_stream_name: "stream-a",
+      timestamp: 1000,
+      level: "info",
+    });
+    const noMatchLog2 = createMockLog("another thing", {
+      log_stream_name: "stream-a",
+      timestamp: 1001,
+      level: "info",
+    });
+    const filteredLogs: ParsedLogEvent[] = [];
+    const groups: LogGroupSection[] = [
+      {
+        id: "stream-a",
+        label: "stream-a",
+        logs: [noMatchLog1, noMatchLog2],
+        collapsed: false,
+        metadata: {
+          logCount: 2,
+          hasError: false,
+          firstTimestamp: 1000,
+          lastTimestamp: 1001,
+        },
+      },
+    ];
+    const items = computeDisplayItems(
+      filteredLogs,
+      "stream",
+      new Set(),
+      groups,
+      new Set(),
+      true,
+      "BLAH",
+    );
+    expect(items).toHaveLength(0);
+  });
+
+  it("should still apply level filter per-row when groupFilter is ON", () => {
+    const matchLog = createMockLog("contains BLAH here", {
+      log_stream_name: "stream-a",
+      timestamp: 1000,
+      level: "info",
+    });
+    const systemLog = createMockLog("START RequestId: abc-123", {
+      log_stream_name: "stream-a",
+      timestamp: 1001,
+      level: "system",
+    });
+    const filteredLogs = [matchLog];
+    const groups: LogGroupSection[] = [
+      {
+        id: "stream-a",
+        label: "stream-a",
+        logs: [matchLog, systemLog],
+        collapsed: false,
+        metadata: {
+          logCount: 2,
+          hasError: false,
+          firstTimestamp: 1000,
+          lastTimestamp: 1001,
+        },
+      },
+    ];
+    const disabledLevels = new Set(["system"]);
+    const items = computeDisplayItems(
+      filteredLogs,
+      "stream",
+      new Set(),
+      groups,
+      disabledLevels,
+      true,
+      "BLAH",
+    );
+    expect(items).toHaveLength(2);
+    expect(items[0].type).toBe("header");
+    expect(items[1].type).toBe("log");
+  });
+
+  it("should behave like OFF when groupFilter is ON but filterText is empty", () => {
+    const log1 = createMockLog("msg1", {
+      log_stream_name: "stream-a",
+      timestamp: 1000,
+      level: "info",
+    });
+    const log2 = createMockLog("msg2", {
+      log_stream_name: "stream-a",
+      timestamp: 1001,
+      level: "info",
+    });
+    const groups: LogGroupSection[] = [
+      {
+        id: "stream-a",
+        label: "stream-a",
+        logs: [log1, log2],
+        collapsed: false,
+        metadata: {
+          logCount: 2,
+          hasError: false,
+          firstTimestamp: 1000,
+          lastTimestamp: 1001,
+        },
+      },
+    ];
+    const items = computeDisplayItems(
+      [log1, log2],
+      "stream",
+      new Set(),
+      groups,
+      new Set(),
+      true,
+      "",
+    );
+    expect(items).toHaveLength(3);
+  });
+
+  it("should behave normally when groupFilter is OFF", () => {
+    const matchLog = createMockLog("contains BLAH here", {
+      log_stream_name: "stream-a",
+      timestamp: 1000,
+      level: "info",
+    });
+    const noMatchLog = createMockLog("something else entirely", {
+      log_stream_name: "stream-a",
+      timestamp: 1001,
+      level: "info",
+    });
+    const filteredLogs = [matchLog];
+    const groups: LogGroupSection[] = [
+      {
+        id: "stream-a",
+        label: "stream-a",
+        logs: [matchLog, noMatchLog],
+        collapsed: false,
+        metadata: {
+          logCount: 2,
+          hasError: false,
+          firstTimestamp: 1000,
+          lastTimestamp: 1001,
+        },
+      },
+    ];
+    const items = computeDisplayItems(
+      filteredLogs,
+      "stream",
+      new Set(),
+      groups,
+      new Set(),
+      false,
+      "BLAH",
+    );
+    expect(items).toHaveLength(2);
+    expect(items[0].type).toBe("header");
+    expect(items[1].type).toBe("log");
+  });
 });

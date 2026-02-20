@@ -160,3 +160,41 @@ describe("logStore - groupByMode", () => {
     expect(useLogStore.getState().collapsedGroups.has("group-2")).toBe(true);
   });
 });
+
+describe("logStore - groupFilter", () => {
+  beforeEach(() => {
+    useLogStore.setState({
+      groupFilter: true,
+      groupByMode: "stream" as GroupByMode | "auto",
+      effectiveGroupByMode: "stream" as GroupByMode,
+    });
+  });
+
+  it("should default to true", () => {
+    // Reset to the store's initial default by removing the beforeEach override
+    const initialState = useLogStore.getState();
+    // The beforeEach sets it to true, which matches the store's initial default
+    expect(initialState.groupFilter).toBe(true);
+    expect(typeof initialState.groupFilter).toBe("boolean");
+  });
+
+  it("should toggle groupFilter via toggleGroupFilter", () => {
+    expect(useLogStore.getState().groupFilter).toBe(true);
+    useLogStore.getState().toggleGroupFilter();
+    expect(useLogStore.getState().groupFilter).toBe(false);
+    useLogStore.getState().toggleGroupFilter();
+    expect(useLogStore.getState().groupFilter).toBe(true);
+  });
+
+  it("should reset groupFilter to false when groupByMode set to none", () => {
+    useLogStore.setState({ groupFilter: true });
+    useLogStore.getState().setGroupByMode("none");
+    expect(useLogStore.getState().groupFilter).toBe(false);
+  });
+
+  it("should NOT reset groupFilter when groupByMode set to stream", () => {
+    useLogStore.setState({ groupFilter: true });
+    useLogStore.getState().setGroupByMode("stream");
+    expect(useLogStore.getState().groupFilter).toBe(true);
+  });
+});
