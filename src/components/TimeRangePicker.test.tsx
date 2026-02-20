@@ -27,8 +27,8 @@ describe("TimeRangePicker - custom presets", () => {
   it("should render custom preset labels from store", () => {
     useSettingsStore.setState({
       timePresets: [
-        { label: "30m", ms: 30 * 60 * 1000 },
-        { label: "2h", ms: 2 * 60 * 60 * 1000 },
+        { id: "test-30m", label: "30m", ms: 30 * 60 * 1000 },
+        { id: "test-2h", label: "2h", ms: 2 * 60 * 60 * 1000 },
       ],
     });
     render(<TimeRangePicker />);

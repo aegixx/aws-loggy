@@ -5,6 +5,7 @@ import {
   DEFAULT_CACHE_LIMITS,
   type LogLevelConfig,
 } from "../stores/settingsStore";
+import { TimePresetEditor } from "./TimePresetEditor";
 
 // Helper to compute adaptive preview colors using color-mix formulas
 function getPreviewColors(
@@ -446,6 +447,9 @@ export function SettingsDialog() {
                 </div>
               </div>
             </div>
+
+            {/* Time Presets */}
+            <TimePresetEditor />
 
             {/* Log Levels */}
             <div className="flex items-center justify-between">

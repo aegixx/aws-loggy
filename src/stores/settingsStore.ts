@@ -40,16 +40,17 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
 };
 
 export interface TimePreset {
+  id: string;
   label: string;
   ms: number;
 }
 
 export const DEFAULT_TIME_PRESETS: TimePreset[] = [
-  { label: "15m", ms: 15 * 60 * 1000 },
-  { label: "1h", ms: 60 * 60 * 1000 },
-  { label: "6h", ms: 6 * 60 * 60 * 1000 },
-  { label: "24h", ms: 24 * 60 * 60 * 1000 },
-  { label: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
+  { id: "preset-15m", label: "15m", ms: 15 * 60 * 1000 },
+  { id: "preset-1h", label: "1h", ms: 60 * 60 * 1000 },
+  { id: "preset-6h", label: "6h", ms: 6 * 60 * 60 * 1000 },
+  { id: "preset-24h", label: "24h", ms: 24 * 60 * 60 * 1000 },
+  { id: "preset-7d", label: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
 ];
 
 export const MAX_TIME_PRESETS = 5;
@@ -179,6 +180,10 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
 
 function generateId(): string {
   return `level-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function generatePresetId(): string {
+  return `preset-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
 // Migration from old format
@@ -382,7 +387,10 @@ export const useSettingsStore = create<SettingsStore>()(
           // Do nothing — already at max
         } else {
           set({
-            timePresets: [...current, { label: "5m", ms: 5 * 60 * 1000 }],
+            timePresets: [
+              ...current,
+              { id: generatePresetId(), label: "5m", ms: 5 * 60 * 1000 },
+            ],
           });
         }
       },
@@ -401,7 +409,9 @@ export const useSettingsStore = create<SettingsStore>()(
         const { timePresets } = get();
         const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
         set({
-          timePresets: current.map((p, i) => (i === index ? preset : p)),
+          timePresets: current.map((p, i) =>
+            i === index ? { ...preset, id: p.id } : p,
+          ),
         });
       },
 
@@ -642,6 +652,25 @@ export const useSettingsStore = create<SettingsStore>()(
             ...data,
             timePresets: data.timePresets ?? null,
           };
+          currentVersion = 14;
+        }
+
+        // v13 -> v14: Add id field to timePresets
+        if (currentVersion <= 13) {
+          const existing = data.timePresets as Array<{
+            id?: string;
+            label: string;
+            ms: number;
+          }> | null;
+          if (existing) {
+            data = {
+              ...data,
+              timePresets: existing.map((p, i) => ({
+                ...p,
+                id: p.id ?? `preset-migrated-${i}`,
+              })),
+            };
+          }
           currentVersion = 14;
         }
 

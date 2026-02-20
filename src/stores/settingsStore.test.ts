@@ -60,27 +60,33 @@ describe("settingsStore - timePresets", () => {
   it("should expose DEFAULT_TIME_PRESETS with 5 entries", () => {
     expect(DEFAULT_TIME_PRESETS).toHaveLength(5);
     expect(DEFAULT_TIME_PRESETS[0]).toEqual({
+      id: "preset-15m",
       label: "15m",
       ms: 15 * 60 * 1000,
     });
     expect(DEFAULT_TIME_PRESETS[4]).toEqual({
+      id: "preset-7d",
       label: "7d",
       ms: 7 * 24 * 60 * 60 * 1000,
     });
   });
 
   it("should set timePresets via setTimePresets", () => {
-    const custom = [{ label: "30m", ms: 30 * 60 * 1000 }];
+    const custom = [{ id: "custom-30m", label: "30m", ms: 30 * 60 * 1000 }];
     useSettingsStore.getState().setTimePresets(custom);
     expect(useSettingsStore.getState().timePresets).toEqual(custom);
   });
 
   it("should add a time preset via addTimePreset", () => {
-    useSettingsStore.getState().setTimePresets([{ label: "1h", ms: 3600000 }]);
+    useSettingsStore
+      .getState()
+      .setTimePresets([{ id: "test-1h", label: "1h", ms: 3600000 }]);
     useSettingsStore.getState().addTimePreset();
     const presets = useSettingsStore.getState().timePresets!;
     expect(presets).toHaveLength(2);
-    expect(presets[1]).toEqual({ label: "5m", ms: 5 * 60 * 1000 });
+    expect(presets[1].label).toBe("5m");
+    expect(presets[1].ms).toBe(5 * 60 * 1000);
+    expect(presets[1].id).toMatch(/^preset-/);
   });
 
   it("should not add beyond MAX_TIME_PRESETS", () => {
@@ -98,20 +104,24 @@ describe("settingsStore - timePresets", () => {
   });
 
   it("should not remove when only 1 preset remains", () => {
-    useSettingsStore.getState().setTimePresets([{ label: "1h", ms: 3600000 }]);
+    useSettingsStore
+      .getState()
+      .setTimePresets([{ id: "test-1h", label: "1h", ms: 3600000 }]);
     useSettingsStore.getState().removeTimePreset(0);
     expect(useSettingsStore.getState().timePresets).toHaveLength(1);
   });
 
   it("should update a time preset via updateTimePreset", () => {
     useSettingsStore.getState().setTimePresets([...DEFAULT_TIME_PRESETS]);
-    useSettingsStore
-      .getState()
-      .updateTimePreset(0, { label: "20m", ms: 20 * 60 * 1000 });
-    expect(useSettingsStore.getState().timePresets![0]).toEqual({
+    useSettingsStore.getState().updateTimePreset(0, {
+      id: "ignored",
       label: "20m",
       ms: 20 * 60 * 1000,
     });
+    const updated = useSettingsStore.getState().timePresets![0];
+    expect(updated.label).toBe("20m");
+    expect(updated.ms).toBe(20 * 60 * 1000);
+    expect(updated.id).toBe("preset-15m"); // preserves original id
   });
 
   it("should move a time preset via moveTimePreset", () => {
@@ -134,7 +144,7 @@ describe("settingsStore - timePresets", () => {
   it("should reset time presets to defaults via resetTimePresets", () => {
     useSettingsStore
       .getState()
-      .setTimePresets([{ label: "99h", ms: 99 * 3600000 }]);
+      .setTimePresets([{ id: "test-99h", label: "99h", ms: 99 * 3600000 }]);
     useSettingsStore.getState().resetTimePresets();
     expect(useSettingsStore.getState().timePresets).toBeNull();
   });
