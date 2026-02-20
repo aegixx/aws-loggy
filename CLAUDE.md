@@ -200,6 +200,8 @@ The filter bar time quickfilter buttons are customizable in Settings (CMD-,):
 - Settings persisted to localStorage via zustand/persist middleware
 - Last selected log group is remembered and auto-selected on app launch
 - Auto-update checks for new GitHub Releases on startup (configurable in Settings)
+- Homebrew tap: `aegixx/homebrew-aws-loggy` — cask auto-updated by release workflow
+- WinGet package: `SteampunkLabs.AWSLoggy` — manifest auto-submitted by release workflow via `vedantmgoyal9/winget-releaser`
 
 ## Demo Mode
 

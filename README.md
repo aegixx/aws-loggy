@@ -33,6 +33,27 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 
 ## Installation
 
+### Homebrew (macOS)
+
+```bash
+brew tap aegixx/aws-loggy
+brew install --cask aws-loggy
+```
+
+### WinGet (Windows)
+
+```bash
+winget install SteampunkLabs.AWSLoggy
+```
+
+### Pre-built Binaries
+
+Download the latest release for your platform from the [Releases](https://github.com/aegixx/aws-loggy/releases) page:
+
+- **macOS**: `.dmg` installer (Apple Silicon and Intel)
+- **Windows**: `.msi` or `.exe` installer
+- **Linux**: `.deb`, `.AppImage`, or `.rpm`
+
 ### From Source
 
 ```bash
@@ -51,14 +72,6 @@ npm run app:build
 ```
 
 The built application will be in `src-tauri/target/release/bundle/`.
-
-### Pre-built Binaries
-
-Download the latest release for your platform from the [Releases](https://github.com/aegixx/aws-loggy/releases) page:
-
-- **macOS**: `.dmg` installer (Apple Silicon and Intel)
-- **Windows**: `.msi` or `.exe` installer
-- **Linux**: `.deb`, `.AppImage`, or `.rpm`
 
 ## Usage
 
@@ -176,7 +189,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Multi-account support
 - Timeline / histogram view based on volume
 - Stacked timeline view based on log level
-- Configurable time filters - specific absolute (2-3am) or relative times (12h)
 - Configurable Group By filters (i.e. by JSON path)
 - Load more button for loading logs outside of filtered time range
 - (?) Pagination support
