@@ -29,13 +29,13 @@ export function TimeRangePicker() {
     if (persistedTimePreset === "custom") {
       return "custom";
     }
-    if (
-      persistedTimePreset &&
-      presets.some((p) => p.label === persistedTimePreset)
-    ) {
-      return persistedTimePreset;
+    if (persistedTimePreset) {
+      const match = presets.find((p) => p.label === persistedTimePreset);
+      if (match) {
+        return match.id;
+      }
     }
-    return presets[0]?.label ?? "15m";
+    return presets[0]?.id ?? "preset-15m";
   });
   const [customStart, setCustomStart] = useState<Date>(() => {
     // If we have a persisted custom range, use it
@@ -61,9 +61,12 @@ export function TimeRangePicker() {
   // Sync activePreset with store's timeRange (e.g., when Clear resets timeRange to null)
   useEffect(() => {
     if (timeRange === null && !isTailing) {
-      setActivePreset(presets[0]?.label ?? "15m");
+      const { timePresets: currentPresets } = useSettingsStore.getState();
+      const active = currentPresets ?? DEFAULT_TIME_PRESETS;
+      setActivePreset(active[0]?.id ?? "preset-15m");
     }
-  }, [timeRange, isTailing, presets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange, isTailing]);
 
   // Close custom picker when clicking outside (but not when clicking in datepicker portal)
   useEffect(() => {
@@ -96,7 +99,7 @@ export function TimeRangePicker() {
 
   const handlePresetClick = (preset: TimePreset) => {
     if (isTailing) stopTail();
-    setActivePreset(preset.label);
+    setActivePreset(preset.id);
     setShowCustom(false);
     const now = Date.now();
     setTimeRange({ start: now - preset.ms, end: null }, preset.label);
@@ -163,11 +166,11 @@ export function TimeRangePicker() {
       {/* Preset buttons */}
       {presets.map((preset) => (
         <button
-          key={preset.label}
+          key={preset.id}
           onClick={() => handlePresetClick(preset)}
           disabled={isDisabled}
           className={`px-2 py-1 text-xs rounded transition-colors ${
-            activePreset === preset.label && !isTailing
+            activePreset === preset.id && !isTailing
               ? "bg-blue-600 text-white"
               : isDark
                 ? "bg-gray-700 hover:bg-gray-600 text-gray-300"

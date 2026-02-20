@@ -383,9 +383,7 @@ export const useSettingsStore = create<SettingsStore>()(
       addTimePreset: () => {
         const { timePresets } = get();
         const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
-        if (current.length >= MAX_TIME_PRESETS) {
-          // Do nothing — already at max
-        } else {
+        if (current.length < MAX_TIME_PRESETS) {
           set({
             timePresets: [
               ...current,
@@ -398,9 +396,7 @@ export const useSettingsStore = create<SettingsStore>()(
       removeTimePreset: (index) => {
         const { timePresets } = get();
         const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
-        if (current.length <= 1) {
-          // Do nothing — must keep at least 1
-        } else {
+        if (current.length > 1) {
           set({ timePresets: current.filter((_, i) => i !== index) });
         }
       },
@@ -419,9 +415,7 @@ export const useSettingsStore = create<SettingsStore>()(
         const { timePresets } = get();
         const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
         const newIndex = direction === "up" ? index - 1 : index + 1;
-        if (newIndex < 0 || newIndex >= current.length) {
-          // Do nothing — can't move beyond bounds
-        } else {
+        if (newIndex >= 0 && newIndex < current.length) {
           const updated = [...current];
           [updated[index], updated[newIndex]] = [
             updated[newIndex],
