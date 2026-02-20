@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.0](https://github.com/aegixx/aws-loggy/compare/v3.7.1...v3.8.0) (2026-02-20)
+
+
+### Features
+
+* customizable time preset quickfilters ([#78](https://github.com/aegixx/aws-loggy/issues/78)) ([c3eaa00](https://github.com/aegixx/aws-loggy/commit/c3eaa00b501a20de9fc235e2ff3915467a656a08))
+
 ## [3.7.1](https://github.com/aegixx/aws-loggy/compare/v3.7.0...v3.7.1) (2026-02-20)
 
 
