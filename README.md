@@ -176,7 +176,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Multi-account support
 - Timeline / histogram view based on volume
 - Stacked timeline view based on log level
-- Configurable time filters - specific absolute (2-3am) or relative times (12h)
 - Configurable Group By filters (i.e. by JSON path)
 - Load more button for loading logs outside of filtered time range
 - (?) Pagination support
