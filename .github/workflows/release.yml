@@ -274,3 +274,86 @@ jobs:
 
           # Upload to release
           gh release upload "$TAG" latest.json --repo "$REPO" --clobber
+
+  update-homebrew-tap:
+    needs: [create-release, publish-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS DMGs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.create-release.outputs.tag }}"
+          VERSION="${{ needs.create-release.outputs.version }}"
+          REPO="${{ github.repository }}"
+          mkdir -p dmgs
+          gh release download "$TAG" --repo "$REPO" --dir dmgs/ --pattern "Loggy-${VERSION}-macos-*.dmg"
+
+      - name: Compute SHA256 checksums
+        id: checksums
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          ARM64_SHA=$(sha256sum "dmgs/Loggy-${VERSION}-macos-arm64.dmg" | cut -d' ' -f1)
+          X86_64_SHA=$(sha256sum "dmgs/Loggy-${VERSION}-macos-x86_64.dmg" | cut -d' ' -f1)
+          echo "arm64=$ARM64_SHA" >> "$GITHUB_OUTPUT"
+          echo "x86_64=$X86_64_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Update Homebrew cask
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          ARM64_SHA="${{ steps.checksums.outputs.arm64 }}"
+          X86_64_SHA="${{ steps.checksums.outputs.x86_64 }}"
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/aegixx/homebrew-aws-loggy.git" tap
+          cd tap
+
+          mkdir -p Casks
+          cat > Casks/aws-loggy.rb << CASK
+          cask "aws-loggy" do
+            version "${VERSION}"
+
+            on_arm do
+              url "https://github.com/aegixx/aws-loggy/releases/download/v#{version}/Loggy-#{version}-macos-arm64.dmg"
+              sha256 "${ARM64_SHA}"
+            end
+            on_intel do
+              url "https://github.com/aegixx/aws-loggy/releases/download/v#{version}/Loggy-#{version}-macos-x86_64.dmg"
+              sha256 "${X86_64_SHA}"
+            end
+
+            name "Loggy"
+            desc "A fast, native desktop app for browsing and tailing AWS CloudWatch logs"
+            homepage "https://github.com/aegixx/aws-loggy"
+
+            app "Loggy.app"
+
+            zap trash: [
+              "~/Library/Application Support/dev.steampunk.aws-loggy",
+              "~/Library/Caches/dev.steampunk.aws-loggy",
+              "~/Library/Preferences/dev.steampunk.aws-loggy.plist",
+            ]
+          end
+          CASK
+
+          # Strip leading whitespace from heredoc indentation
+          sed -i 's/^          //' Casks/aws-loggy.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/aws-loggy.rb
+          git commit -m "chore: update aws-loggy to ${VERSION}"
+          git push origin main
+
+  update-winget:
+    needs: [create-release, publish-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish to WinGet
+        uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: SteampunkLabs.AWSLoggy
+          installers-regex: \.msi$
+          release-tag: ${{ needs.create-release.outputs.tag }}
+          token: ${{ secrets.WINGET_TOKEN }}
