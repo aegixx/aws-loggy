@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.0](https://github.com/aegixx/aws-loggy/compare/v3.6.1...v3.7.0) (2026-02-20)
+
+
+### Features
+
+* Add group-level filter toggle for grouped log views ([#74](https://github.com/aegixx/aws-loggy/issues/74)) ([9593f8f](https://github.com/aegixx/aws-loggy/commit/9593f8ffdb1f3d7a637bc9fe4d22cd2372faa150))
+
 ## [3.6.1](https://github.com/aegixx/aws-loggy/compare/v3.6.0...v3.6.1) (2026-02-20)
 
 
