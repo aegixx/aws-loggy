@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.0](https://github.com/aegixx/aws-loggy/compare/v3.8.0...v3.9.0) (2026-02-20)
+
+
+### Features
+
+* add Homebrew and WinGet package manager automation ([#80](https://github.com/aegixx/aws-loggy/issues/80)) ([1490588](https://github.com/aegixx/aws-loggy/commit/14905884f84b5eb5090b43ec1ce5145c9b1e4967))
+
 ## [3.8.0](https://github.com/aegixx/aws-loggy/compare/v3.7.1...v3.8.0) (2026-02-20)
 
 
