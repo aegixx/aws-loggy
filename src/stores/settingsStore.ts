@@ -435,7 +435,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 14,
+      version: 15,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -655,8 +655,8 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 14;
         }
 
-        // v13 -> v14: Add id field to timePresets
-        if (currentVersion <= 13) {
+        // v14 -> v15: Add id field to timePresets
+        if (currentVersion <= 14) {
           const existing = data.timePresets as Array<{
             id?: string;
             label: string;
@@ -671,7 +671,7 @@ export const useSettingsStore = create<SettingsStore>()(
               })),
             };
           }
-          currentVersion = 14;
+          currentVersion = 15;
         }
 
         return data as {

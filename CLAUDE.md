@@ -16,7 +16,7 @@ See `docs/DESIGN.md` for full architecture documentation.
 
 - `src-tauri/src/lib.rs` - Rust backend with AWS CloudWatch integration
 - `src/stores/logStore.ts` - Zustand store with log/connection state
-- `src/stores/settingsStore.ts` - Zustand store with persisted settings (colors, patterns)
+- `src/stores/settingsStore.ts` - Zustand store with persisted settings (colors, patterns, time presets)
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/LogGroupSelector.tsx` - Fuzzy search log group selector (Fuse.js + virtualized dropdown)
 - `src/components/FilterBar.tsx` - Filter input and level toggles
@@ -39,6 +39,7 @@ See `docs/DESIGN.md` for full architecture documentation.
 - `src/types/index.ts` - TypeScript type definitions
 - `src/components/UpdateDialog.tsx` - Auto-update dialog with changelog display and release notes link
 - `src/hooks/useUpdateCheck.ts` - Hook for checking updates (startup + manual via menu)
+- `src/components/TimePresetEditor.tsx` - Time preset editor for Settings dialog
 
 ## Development
 
@@ -165,6 +166,16 @@ A toggle inside the filter input (layers icon) that switches text filtering to g
 - Only visible when grouping is active (Stream or Invocation mode)
 - Persisted across sessions
 - Does not affect log level filtering — levels always filter per-row
+
+## Time Presets
+
+The filter bar time quickfilter buttons are customizable in Settings (CMD-,):
+
+- Up to 5 presets, each with a duration value and unit (minutes/hours/days)
+- Defaults: 15m, 1h, 6h, 24h, 7d
+- Add, remove, reorder, and reset to defaults
+- Calendar picker (custom date range) always available regardless of presets
+- Presets persisted to localStorage via settingsStore
 
 ## Notes
 
