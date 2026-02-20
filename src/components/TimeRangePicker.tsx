@@ -2,22 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import { MdDateRange, MdArrowDropDown } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
-import { useSettingsStore } from "../stores/settingsStore";
+import {
+  useSettingsStore,
+  DEFAULT_TIME_PRESETS,
+  type TimePreset,
+} from "../stores/settingsStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import "react-datepicker/dist/react-datepicker.css";
-
-interface TimePreset {
-  label: string;
-  ms: number;
-}
-
-const TIME_PRESETS: TimePreset[] = [
-  { label: "15m", ms: 15 * 60 * 1000 },
-  { label: "1h", ms: 60 * 60 * 1000 },
-  { label: "6h", ms: 6 * 60 * 60 * 1000 },
-  { label: "24h", ms: 24 * 60 * 60 * 1000 },
-  { label: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
-];
 
 export function TimeRangePicker() {
   const {
@@ -29,12 +20,23 @@ export function TimeRangePicker() {
     selectedLogGroup,
     timeRange,
   } = useLogStore();
-  const { persistedTimePreset, persistedTimeRange } = useSettingsStore();
+  const { persistedTimePreset, persistedTimeRange, timePresets } =
+    useSettingsStore();
+  const presets: TimePreset[] = timePresets ?? DEFAULT_TIME_PRESETS;
   const [showCustom, setShowCustom] = useState(false);
-  // Initialize activePreset from persisted value, default to "15m"
-  const [activePreset, setActivePreset] = useState<string | null>(
-    () => persistedTimePreset ?? "15m",
-  );
+  // Initialize activePreset from persisted value, falling back to first preset
+  const [activePreset, setActivePreset] = useState<string | null>(() => {
+    if (persistedTimePreset === "custom") {
+      return "custom";
+    }
+    if (
+      persistedTimePreset &&
+      presets.some((p) => p.label === persistedTimePreset)
+    ) {
+      return persistedTimePreset;
+    }
+    return presets[0]?.label ?? "15m";
+  });
   const [customStart, setCustomStart] = useState<Date>(() => {
     // If we have a persisted custom range, use it
     if (persistedTimePreset === "custom" && persistedTimeRange) {
@@ -59,9 +61,9 @@ export function TimeRangePicker() {
   // Sync activePreset with store's timeRange (e.g., when Clear resets timeRange to null)
   useEffect(() => {
     if (timeRange === null && !isTailing) {
-      setActivePreset("15m");
+      setActivePreset(presets[0]?.label ?? "15m");
     }
-  }, [timeRange, isTailing]);
+  }, [timeRange, isTailing, presets]);
 
   // Close custom picker when clicking outside (but not when clicking in datepicker portal)
   useEffect(() => {
@@ -159,7 +161,7 @@ export function TimeRangePicker() {
       </button>
 
       {/* Preset buttons */}
-      {TIME_PRESETS.map((preset) => (
+      {presets.map((preset) => (
         <button
           key={preset.label}
           onClick={() => handlePresetClick(preset)}
