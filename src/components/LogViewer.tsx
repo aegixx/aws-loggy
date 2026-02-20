@@ -666,15 +666,20 @@ export function LogViewer() {
     }
   }, [filteredLogs.length, isTailing, isFollowing, rowCount]);
 
-  // Scroll to bottom when starting tail
+  // Scroll to bottom when starting tail (or when following resumes)
   useEffect(() => {
-    if (isTailing && listRef.current && filteredLogs.length > 0) {
+    if (
+      isTailing &&
+      isFollowing &&
+      listRef.current &&
+      filteredLogs.length > 0
+    ) {
       listRef.current.scrollToRow({
         index: rowCount - 1,
         align: "end",
       });
     }
-  }, [isTailing, filteredLogs.length, rowCount]);
+  }, [isTailing, isFollowing, filteredLogs.length, rowCount]);
 
   // Sync prevRowCountForFollow after each render so handleRowsRendered
   // can detect whether rowCount changed (new logs arrived vs user scroll)
