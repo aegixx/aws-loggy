@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.1](https://github.com/aegixx/aws-loggy/compare/v3.6.0...v3.6.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* Use rowCount for scroll target in grouped mode ([61f4cb5](https://github.com/aegixx/aws-loggy/commit/61f4cb56817d235b6567e3bf1b151ed6deaaefaa)), closes [#71](https://github.com/aegixx/aws-loggy/issues/71)
+
 ## [3.6.0](https://github.com/aegixx/aws-loggy/compare/v3.5.0...v3.6.0) (2026-02-13)
 
 
