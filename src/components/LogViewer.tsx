@@ -43,6 +43,7 @@ function getLogLevelStyle(level: string): {
 
 interface LogRowProps {
   logs: ParsedLogEvent[];
+  logByIndex?: Map<number, ParsedLogEvent>;
   expandedIndex: number | null;
   expandedLogFilteredIndex?: number | null;
   selectedIndex: number | null;
@@ -83,6 +84,7 @@ interface RowComponentPropsWithCustom {
   index: number;
   style: CSSProperties;
   logs: ParsedLogEvent[];
+  logByIndex?: Map<number, ParsedLogEvent>;
   expandedIndex: number | null;
   expandedLogFilteredIndex?: number | null;
   selectedIndex: number | null;
@@ -123,6 +125,7 @@ const LogRow = memo(function LogRow({
   index,
   style,
   logs,
+  logByIndex,
   expandedIndex,
   expandedLogFilteredIndex,
   selectedIndex,
@@ -209,8 +212,13 @@ const LogRow = memo(function LogRow({
     );
   }
 
-  // Regular log row
-  const log = logs[actualLogIndex];
+  // Regular log row — use logByIndex map for negative (group-filter) indices
+  let log: ParsedLogEvent | undefined;
+  if (actualLogIndex >= 0) {
+    log = logs[actualLogIndex];
+  } else if (logByIndex) {
+    log = logByIndex.get(actualLogIndex);
+  }
   if (!log) return <div style={style} />;
 
   const isExpanded =
@@ -323,6 +331,17 @@ export function LogViewer() {
   const collapsedGroups = useLogStore((s) => s.collapsedGroups);
   const isGrouped = effectiveMode !== "none";
 
+  // Map logIndex → ParsedLogEvent for all display items (handles negative indices from group filter)
+  const logByIndex = useMemo(() => {
+    const map = new Map<number, ParsedLogEvent>();
+    for (const item of displayItems) {
+      if (item.type === "log") {
+        map.set(item.logIndex, item.log);
+      }
+    }
+    return map;
+  }, [displayItems]);
+
   // Reverse index: logIndex → displayItems index (for O(1) lookup)
   const logIndexToDisplayIndex = useMemo(() => {
     if (!isGrouped) {
@@ -406,6 +425,7 @@ export function LogViewer() {
     y: number;
     selectedText: string;
     targetLogIndex: number;
+    targetLog: ParsedLogEvent | undefined;
     requestId: string | null;
     traceId: string | null;
     clientIP: string | null;
@@ -430,7 +450,13 @@ export function LogViewer() {
 
       // Extract filter fields from the target log's parsedJson
       // Check both top-level and nested under metadata
-      const targetLog = filteredLogs[logIndex];
+      // Use logByIndex for negative (group-filter) indices
+      let targetLog: ParsedLogEvent | undefined;
+      if (logIndex >= 0) {
+        targetLog = filteredLogs[logIndex];
+      } else {
+        targetLog = logByIndex.get(logIndex);
+      }
       const json = targetLog?.parsedJson;
 
       // Extract common fields using the utility function
@@ -445,12 +471,13 @@ export function LogViewer() {
         y: e.clientY,
         selectedText,
         targetLogIndex: logIndex,
+        targetLog,
         requestId,
         traceId,
         clientIP,
       });
     },
-    [filteredLogs],
+    [filteredLogs, logByIndex],
   );
 
   // Context menu handler for group headers and empty areas (no log-specific data)
@@ -462,6 +489,7 @@ export function LogViewer() {
       y: e.clientY,
       selectedText: "",
       targetLogIndex: -1,
+      targetLog: undefined,
       requestId: null,
       traceId: null,
       clientIP: null,
@@ -473,21 +501,25 @@ export function LogViewer() {
     if (contextMenu?.selectedText) {
       navigator.clipboard.writeText(contextMenu.selectedText);
     } else if (selectedLogIndices.size > 0) {
-      // Copy multi-selected rows
+      // Copy multi-selected rows — use logByIndex for negative (group-filter) indices
       const messages = [...selectedLogIndices]
         .sort((a, b) => a - b)
-        .map((i) => filteredLogs[i]?.message)
+        .map((i) => {
+          if (i >= 0) {
+            return filteredLogs[i]?.message;
+          } else {
+            return logByIndex.get(i)?.message;
+          }
+        })
         .filter(Boolean)
         .join("\n");
       navigator.clipboard.writeText(messages);
     } else if (contextMenu?.targetLogIndex != null) {
-      // Copy single targeted row
-      navigator.clipboard.writeText(
-        filteredLogs[contextMenu.targetLogIndex]?.message || "",
-      );
+      // Copy single targeted row — use stored targetLog for negative indices
+      navigator.clipboard.writeText(contextMenu.targetLog?.message || "");
     }
     setContextMenu(null);
-  }, [contextMenu, selectedLogIndices, filteredLogs]);
+  }, [contextMenu, selectedLogIndices, filteredLogs, logByIndex]);
 
   const handleFindBy = useCallback(() => {
     if (contextMenu?.selectedText) {
@@ -600,6 +632,7 @@ export function LogViewer() {
   // Keyboard navigation hook
   const { handleKeyDown } = useKeyboardNavigation({
     filteredLogs,
+    logByIndex: isGrouped ? logByIndex : undefined,
     selectedLogIndex,
     expandedLogIndex,
     setSelectedLogIndex,
@@ -840,6 +873,7 @@ export function LogViewer() {
         rowComponent={LogRow as any}
         rowProps={{
           logs: filteredLogs,
+          logByIndex: isGrouped ? logByIndex : undefined,
           expandedIndex: isGrouped ? expandedDisplayIndex : expandedLogIndex,
           expandedLogFilteredIndex: expandedLogIndex,
           selectedIndex: selectedLogIndex,

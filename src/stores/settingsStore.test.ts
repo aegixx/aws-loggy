@@ -32,3 +32,17 @@ describe("settingsStore - autoUpdateEnabled", () => {
     expect(useSettingsStore.getState().autoUpdateEnabled).toBe(true);
   });
 });
+
+describe("settingsStore - persistedGroupFilter", () => {
+  it("should default persistedGroupFilter to true", () => {
+    const { persistedGroupFilter } = useSettingsStore.getState();
+    expect(persistedGroupFilter).toBe(true);
+  });
+
+  it("should update persistedGroupFilter via setPersistedGroupFilter", () => {
+    useSettingsStore.getState().setPersistedGroupFilter(false);
+    expect(useSettingsStore.getState().persistedGroupFilter).toBe(false);
+    useSettingsStore.getState().setPersistedGroupFilter(true);
+    expect(useSettingsStore.getState().persistedGroupFilter).toBe(true);
+  });
+});

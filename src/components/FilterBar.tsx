@@ -4,6 +4,7 @@ import {
   MdDeleteOutline,
   MdUnfoldMore,
   MdUnfoldLess,
+  MdLayers,
 } from "react-icons/md";
 import { useLogStore } from "../stores/logStore";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
@@ -33,6 +34,8 @@ export function FilterBar() {
     expandAllGroups,
     collapseAllGroups,
     collapsedGroups,
+    groupFilter,
+    toggleGroupFilter,
   } = useLogStore();
   const { groups, effectiveMode } = useLogGroups();
   const { logLevels } = useSettingsStore();
@@ -106,8 +109,27 @@ export function FilterBar() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Filter logs... (use field:value for JSON fields)"
-            className={`w-full rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 ${isDark ? "bg-gray-900 border border-gray-700 placeholder-gray-500" : "bg-white border border-gray-300 placeholder-gray-400"}`}
+            className={`w-full rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 ${
+              effectiveMode !== "none" ? "pr-14" : inputValue ? "pr-8" : ""
+            } ${isDark ? "bg-gray-900 border border-gray-700 placeholder-gray-500" : "bg-white border border-gray-300 placeholder-gray-400"}`}
           />
+          {effectiveMode !== "none" && (
+            <button
+              onClick={toggleGroupFilter}
+              className={`absolute top-1/2 -translate-y-1/2 p-0.5 rounded cursor-pointer transition-colors ${
+                inputValue ? "right-7" : "right-2"
+              } ${
+                groupFilter
+                  ? "text-blue-400 hover:text-blue-300"
+                  : isDark
+                    ? "text-gray-600 hover:text-gray-400"
+                    : "text-gray-400 hover:text-gray-600"
+              }`}
+              title={groupFilter ? "Group filter ON" : "Group filter OFF"}
+            >
+              <MdLayers className="w-4 h-4" />
+            </button>
+          )}
           {inputValue && (
             <button
               onClick={() => setInputValue("")}
