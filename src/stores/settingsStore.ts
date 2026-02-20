@@ -60,6 +60,7 @@ interface SettingsStore {
   persistedTimeRange: { start: number; end: number | null } | null;
   persistedTimePreset: string | null; // "15m", "1h", "6h", "24h", "7d", "custom", or null
   persistedGroupByMode: string; // "none" | "stream" | "invocation"
+  persistedGroupFilter: boolean;
 
   // Settings dialog visibility
   isSettingsOpen: boolean;
@@ -91,6 +92,7 @@ interface SettingsStore {
   ) => void;
   getPersistedDisabledLevelsAsSet: () => Set<string>;
   setPersistedGroupByMode: (mode: string) => void;
+  setPersistedGroupFilter: (enabled: boolean) => void;
 }
 
 const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
@@ -235,6 +237,7 @@ export const useSettingsStore = create<SettingsStore>()(
       persistedTimeRange: null,
       persistedTimePreset: null,
       persistedGroupByMode: "none",
+      persistedGroupFilter: true,
       isSettingsOpen: false,
       autoUpdateEnabled: true,
 
@@ -342,10 +345,12 @@ export const useSettingsStore = create<SettingsStore>()(
       getPersistedDisabledLevelsAsSet: () =>
         new Set(get().persistedDisabledLevels),
       setPersistedGroupByMode: (mode) => set({ persistedGroupByMode: mode }),
+      setPersistedGroupFilter: (enabled) =>
+        set({ persistedGroupFilter: enabled }),
     }),
     {
       name: "loggy-settings",
-      version: 12,
+      version: 13,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -357,6 +362,7 @@ export const useSettingsStore = create<SettingsStore>()(
         persistedTimePreset: state.persistedTimePreset,
         autoUpdateEnabled: state.autoUpdateEnabled,
         persistedGroupByMode: state.persistedGroupByMode,
+        persistedGroupFilter: state.persistedGroupFilter,
       }),
       migrate: (persisted, version) => {
         // Use chaining pattern: each migration runs if version <= N, then chains to next
@@ -545,6 +551,15 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 12;
         }
 
+        // v12 -> v13: Add persistedGroupFilter
+        if (currentVersion <= 12) {
+          data = {
+            ...data,
+            persistedGroupFilter: data.persistedGroupFilter ?? true,
+          };
+          currentVersion = 13;
+        }
+
         return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
@@ -556,6 +571,7 @@ export const useSettingsStore = create<SettingsStore>()(
           persistedTimePreset: string | null;
           autoUpdateEnabled: boolean;
           persistedGroupByMode: string;
+          persistedGroupFilter: boolean;
         };
       },
     },

@@ -11,6 +11,7 @@ interface ContextMenuState {
 
 interface UseKeyboardNavigationOptions {
   filteredLogs: ParsedLogEvent[];
+  logByIndex?: Map<number, ParsedLogEvent>;
   selectedLogIndex: number | null;
   expandedLogIndex: number | null;
   setSelectedLogIndex: (index: number | null) => void;
@@ -39,6 +40,7 @@ interface UseKeyboardNavigationOptions {
  */
 export function useKeyboardNavigation({
   filteredLogs,
+  logByIndex,
   selectedLogIndex,
   expandedLogIndex,
   setSelectedLogIndex,
@@ -131,7 +133,15 @@ export function useKeyboardNavigation({
             e.preventDefault();
             const messages = [...selectedLogIndices]
               .sort((a, b) => a - b)
-              .map((i) => filteredLogs[i]?.message)
+              .map((i) => {
+                if (i >= 0) {
+                  return filteredLogs[i]?.message;
+                } else if (logByIndex) {
+                  return logByIndex.get(i)?.message;
+                } else {
+                  return undefined;
+                }
+              })
               .filter(Boolean)
               .join("\n");
             navigator.clipboard.writeText(messages);
@@ -169,6 +179,7 @@ export function useKeyboardNavigation({
     },
     [
       filteredLogs,
+      logByIndex,
       selectedLogIndex,
       expandedLogIndex,
       setSelectedLogIndex,

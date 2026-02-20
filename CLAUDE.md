@@ -156,6 +156,16 @@ Group headers show metadata (log count, error indicator, relative time). Invocat
 
 Grouping is purely visual — filtering, find-in-log, and selection operate on individual log rows unchanged.
 
+## Group Filter Toggle
+
+A toggle inside the filter input (layers icon) that switches text filtering to group scope:
+
+- **ON (default)**: Shows all groups containing at least one text match; all logs in matching groups are visible (level filtering still per-row)
+- **OFF**: Current behavior — only individually matching rows shown
+- Only visible when grouping is active (Stream or Invocation mode)
+- Persisted across sessions
+- Does not affect log level filtering — levels always filter per-row
+
 ## Notes
 
 - AWS credentials use default provider chain (profiles, SSO, env vars)

@@ -151,6 +151,9 @@ interface LogStore {
   groupByMode: GroupByMode | "auto";
   collapsedGroups: Set<string>;
 
+  // Group filter (when ON, text filter applies at group level)
+  groupFilter: boolean;
+
   // Derived (computed from groupByMode + selectedLogGroup)
   effectiveGroupByMode: GroupByMode;
 
@@ -162,6 +165,7 @@ interface LogStore {
   tailToast: string | null;
 
   // Actions
+  toggleGroupFilter: () => void;
   setGroupByMode: (mode: GroupByMode | "auto") => void;
   toggleGroupCollapsed: (groupId: string) => void;
   expandAllGroups: () => void;
@@ -450,6 +454,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   groupByMode: "none" as GroupByMode | "auto",
   collapsedGroups: new Set<string>(),
   effectiveGroupByMode: "none" as GroupByMode,
+  groupFilter: true,
   isTailing: false,
   tailManager: null,
   activeTransport: null,
@@ -479,6 +484,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         persistedTimeRange,
         persistedTimePreset,
         persistedGroupByMode,
+        persistedGroupFilter,
         getDefaultDisabledLevels,
       } = useSettingsStore.getState();
 
@@ -523,6 +529,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         timeRange: restoredTimeRange,
         groupByMode: restoredGroupByMode,
         effectiveGroupByMode: restoredGroupByMode,
+        groupFilter:
+          restoredGroupByMode === "none" ? false : persistedGroupFilter,
       });
 
       // Auto-select last used log group if available
@@ -996,13 +1004,23 @@ export const useLogStore = create<LogStore>((set, get) => ({
     set({ tailToast: message });
   },
 
+  toggleGroupFilter: () => {
+    const { groupFilter } = get();
+    const { setPersistedGroupFilter } = useSettingsStore.getState();
+    const next = !groupFilter;
+    set({ groupFilter: next });
+    setPersistedGroupFilter(next);
+  },
+
   setGroupByMode: (mode) => {
     const { selectedLogGroup } = get();
     const { setPersistedGroupByMode } = useSettingsStore.getState();
+    const effectiveMode = resolveGroupByMode(mode, selectedLogGroup);
     set({
       groupByMode: mode,
       collapsedGroups: new Set(),
-      effectiveGroupByMode: resolveGroupByMode(mode, selectedLogGroup),
+      effectiveGroupByMode: effectiveMode,
+      groupFilter: effectiveMode === "none" ? false : get().groupFilter,
     });
     setPersistedGroupByMode(mode);
   },

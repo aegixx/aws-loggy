@@ -26,6 +26,8 @@ export function computeDisplayItems(
   collapsedGroups: Set<string>,
   groups: LogGroupSection[],
   disabledLevels?: Set<LogLevel>,
+  groupFilter?: boolean,
+  filterText?: string,
 ): DisplayItem[] {
   if (effectiveMode === "none") {
     return filteredLogs.map((log, index) => ({
@@ -44,32 +46,73 @@ export function computeDisplayItems(
       logToIndex.set(filteredLogs[i], i);
     }
 
+    const isGroupFilterActive =
+      groupFilter && filterText && filterText.trim() !== "";
+
+    let nextNegativeIndex = -1;
+
     for (const group of groups) {
-      // Single pass: collect visible logs and check if group has any
-      const visibleLogs: { log: ParsedLogEvent; logIndex: number }[] = [];
-      for (const log of group.logs) {
-        if (
-          disabledLevels &&
-          disabledLevels.size > 0 &&
-          disabledLevels.has(log.level)
-        ) {
+      if (isGroupFilterActive) {
+        // Group filter mode: if ANY log in the group passes the text filter,
+        // show ALL logs in the group (subject to level filtering).
+        // Check if any log in this group is in the filteredLogs set (text match)
+        const groupHasMatch = group.logs.some((log) => logToIndex.has(log));
+
+        if (groupHasMatch) {
+          // Collect all logs that pass the level filter (regardless of text match)
+          const visibleLogs: { log: ParsedLogEvent; logIndex: number }[] = [];
+          for (const log of group.logs) {
+            if (
+              disabledLevels &&
+              disabledLevels.size > 0 &&
+              disabledLevels.has(log.level)
+            ) {
+              continue;
+            }
+            const existingIndex = logToIndex.get(log);
+            if (existingIndex !== undefined) {
+              visibleLogs.push({ log, logIndex: existingIndex });
+            } else {
+              visibleLogs.push({ log, logIndex: nextNegativeIndex-- });
+            }
+          }
+
+          if (visibleLogs.length > 0) {
+            items.push({ type: "header", group });
+            if (!collapsedGroups.has(group.id)) {
+              for (const { log, logIndex } of visibleLogs) {
+                items.push({ type: "log", log, logIndex });
+              }
+            }
+          }
+        }
+      } else {
+        // Default mode: only show logs that are in filteredLogs
+        const visibleLogs: { log: ParsedLogEvent; logIndex: number }[] = [];
+        for (const log of group.logs) {
+          if (
+            disabledLevels &&
+            disabledLevels.size > 0 &&
+            disabledLevels.has(log.level)
+          ) {
+            continue;
+          }
+          const logIndex = logToIndex.get(log);
+          if (logIndex !== undefined) {
+            visibleLogs.push({ log, logIndex });
+          }
+        }
+
+        // Skip groups with no visible log entries
+        if (visibleLogs.length === 0) {
           continue;
         }
-        const logIndex = logToIndex.get(log);
-        if (logIndex !== undefined) {
-          visibleLogs.push({ log, logIndex });
-        }
-      }
 
-      // Skip groups with no visible log entries
-      if (visibleLogs.length === 0) {
-        continue;
-      }
-
-      items.push({ type: "header", group });
-      if (!collapsedGroups.has(group.id)) {
-        for (const { log, logIndex } of visibleLogs) {
-          items.push({ type: "log", log, logIndex });
+        items.push({ type: "header", group });
+        if (!collapsedGroups.has(group.id)) {
+          for (const { log, logIndex } of visibleLogs) {
+            items.push({ type: "log", log, logIndex });
+          }
         }
       }
     }
@@ -84,6 +127,8 @@ export function useLogGroups() {
   const disabledLevels = useLogStore((s) => s.disabledLevels);
   const effectiveMode = useLogStore((s) => s.effectiveGroupByMode);
   const collapsedGroups = useLogStore((s) => s.collapsedGroups);
+  const groupFilter = useLogStore((s) => s.groupFilter);
+  const filterText = useLogStore((s) => s.filterText);
 
   // Groups are always computed from ALL logs (unfiltered) so that
   // invocation boundaries (START/END/REPORT) and stream assignments
@@ -108,8 +153,18 @@ export function useLogGroups() {
         collapsedGroups,
         groups,
         disabledLevels,
+        groupFilter,
+        filterText,
       ),
-    [filteredLogs, effectiveMode, collapsedGroups, groups, disabledLevels],
+    [
+      filteredLogs,
+      effectiveMode,
+      collapsedGroups,
+      groups,
+      disabledLevels,
+      groupFilter,
+      filterText,
+    ],
   );
 
   return { groups, displayItems, effectiveMode };
