@@ -39,6 +39,22 @@ export const DEFAULT_CACHE_LIMITS: CacheLimits = {
   maxSizeMb: 100,
 };
 
+export interface TimePreset {
+  id: string;
+  label: string;
+  ms: number;
+}
+
+export const DEFAULT_TIME_PRESETS: TimePreset[] = [
+  { id: "preset-15m", label: "15m", ms: 15 * 60 * 1000 },
+  { id: "preset-1h", label: "1h", ms: 60 * 60 * 1000 },
+  { id: "preset-6h", label: "6h", ms: 6 * 60 * 60 * 1000 },
+  { id: "preset-24h", label: "24h", ms: 24 * 60 * 60 * 1000 },
+  { id: "preset-7d", label: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
+];
+
+export const MAX_TIME_PRESETS = 5;
+
 interface SettingsStore {
   // Theme
   theme: Theme;
@@ -68,6 +84,9 @@ interface SettingsStore {
   // Auto-update setting
   autoUpdateEnabled: boolean;
 
+  // Time presets (null = use defaults)
+  timePresets: TimePreset[] | null;
+
   // Actions
   setTheme: (theme: Theme) => void;
   setLastSelectedLogGroup: (logGroup: string | null) => void;
@@ -93,6 +112,12 @@ interface SettingsStore {
   getPersistedDisabledLevelsAsSet: () => Set<string>;
   setPersistedGroupByMode: (mode: string) => void;
   setPersistedGroupFilter: (enabled: boolean) => void;
+  setTimePresets: (presets: TimePreset[]) => void;
+  addTimePreset: () => void;
+  removeTimePreset: (index: number) => void;
+  updateTimePreset: (index: number, preset: TimePreset) => void;
+  moveTimePreset: (index: number, direction: "up" | "down") => void;
+  resetTimePresets: () => void;
 }
 
 const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
@@ -155,6 +180,10 @@ const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
 
 function generateId(): string {
   return `level-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function generatePresetId(): string {
+  return `preset-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
 // Migration from old format
@@ -240,6 +269,7 @@ export const useSettingsStore = create<SettingsStore>()(
       persistedGroupFilter: true,
       isSettingsOpen: false,
       autoUpdateEnabled: true,
+      timePresets: null,
 
       setTheme: (theme) => set({ theme }),
       setLastSelectedLogGroup: (logGroup) =>
@@ -347,10 +377,59 @@ export const useSettingsStore = create<SettingsStore>()(
       setPersistedGroupByMode: (mode) => set({ persistedGroupByMode: mode }),
       setPersistedGroupFilter: (enabled) =>
         set({ persistedGroupFilter: enabled }),
+
+      setTimePresets: (presets) => set({ timePresets: presets }),
+
+      addTimePreset: () => {
+        const { timePresets } = get();
+        const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
+        if (current.length < MAX_TIME_PRESETS) {
+          set({
+            timePresets: [
+              ...current,
+              { id: generatePresetId(), label: "5m", ms: 5 * 60 * 1000 },
+            ],
+          });
+        }
+      },
+
+      removeTimePreset: (index) => {
+        const { timePresets } = get();
+        const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
+        if (current.length > 1) {
+          set({ timePresets: current.filter((_, i) => i !== index) });
+        }
+      },
+
+      updateTimePreset: (index, preset) => {
+        const { timePresets } = get();
+        const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
+        set({
+          timePresets: current.map((p, i) =>
+            i === index ? { ...preset, id: p.id } : p,
+          ),
+        });
+      },
+
+      moveTimePreset: (index, direction) => {
+        const { timePresets } = get();
+        const current = timePresets ?? [...DEFAULT_TIME_PRESETS];
+        const newIndex = direction === "up" ? index - 1 : index + 1;
+        if (newIndex >= 0 && newIndex < current.length) {
+          const updated = [...current];
+          [updated[index], updated[newIndex]] = [
+            updated[newIndex],
+            updated[index],
+          ];
+          set({ timePresets: updated });
+        }
+      },
+
+      resetTimePresets: () => set({ timePresets: null }),
     }),
     {
       name: "loggy-settings",
-      version: 13,
+      version: 15,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -363,6 +442,7 @@ export const useSettingsStore = create<SettingsStore>()(
         autoUpdateEnabled: state.autoUpdateEnabled,
         persistedGroupByMode: state.persistedGroupByMode,
         persistedGroupFilter: state.persistedGroupFilter,
+        timePresets: state.timePresets,
       }),
       migrate: (persisted, version) => {
         // Use chaining pattern: each migration runs if version <= N, then chains to next
@@ -560,6 +640,34 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 13;
         }
 
+        // v13 -> v14: Add timePresets
+        if (currentVersion <= 13) {
+          data = {
+            ...data,
+            timePresets: data.timePresets ?? null,
+          };
+          currentVersion = 14;
+        }
+
+        // v14 -> v15: Add id field to timePresets
+        if (currentVersion <= 14) {
+          const existing = data.timePresets as Array<{
+            id?: string;
+            label: string;
+            ms: number;
+          }> | null;
+          if (existing) {
+            data = {
+              ...data,
+              timePresets: existing.map((p, i) => ({
+                ...p,
+                id: p.id ?? `preset-migrated-${i}`,
+              })),
+            };
+          }
+          currentVersion = 15;
+        }
+
         return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
@@ -572,6 +680,7 @@ export const useSettingsStore = create<SettingsStore>()(
           autoUpdateEnabled: boolean;
           persistedGroupByMode: string;
           persistedGroupFilter: boolean;
+          timePresets: TimePreset[] | null;
         };
       },
     },
