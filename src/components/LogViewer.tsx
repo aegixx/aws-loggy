@@ -660,21 +660,21 @@ export function LogViewer() {
       filteredLogs.length > 0
     ) {
       listRef.current.scrollToRow({
-        index: filteredLogs.length - 1,
+        index: rowCount - 1,
         align: "end",
       });
     }
-  }, [filteredLogs.length, isTailing, isFollowing]);
+  }, [filteredLogs.length, isTailing, isFollowing, rowCount]);
 
   // Scroll to bottom when starting tail
   useEffect(() => {
     if (isTailing && listRef.current && filteredLogs.length > 0) {
       listRef.current.scrollToRow({
-        index: filteredLogs.length - 1,
+        index: rowCount - 1,
         align: "end",
       });
     }
-  }, [isTailing, filteredLogs.length]);
+  }, [isTailing, filteredLogs.length, rowCount]);
 
   // Sync prevRowCountForFollow after each render so handleRowsRendered
   // can detect whether rowCount changed (new logs arrived vs user scroll)
@@ -877,9 +877,9 @@ export function LogViewer() {
         <button
           onClick={() => {
             setIsFollowing(true);
-            if (listRef.current && filteredLogs.length > 0) {
+            if (listRef.current && rowCount > 0) {
               listRef.current.scrollToRow({
-                index: filteredLogs.length - 1,
+                index: rowCount - 1,
                 align: "end",
               });
             }
