@@ -349,6 +349,7 @@ jobs:
   update-winget:
     needs: [create-release, publish-release]
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Publish to WinGet
         uses: vedantmgoyal9/winget-releaser@main
