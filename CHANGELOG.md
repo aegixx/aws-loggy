@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.1](https://github.com/aegixx/aws-loggy/compare/v3.9.0...v3.9.1) (2026-02-26)
+
+
+### Bug Fixes
+
+* add continue-on-error to update-winget release job ([#82](https://github.com/aegixx/aws-loggy/issues/82)) ([88e238d](https://github.com/aegixx/aws-loggy/commit/88e238d6355438177c61e77c513efa646fe179d7))
+
 ## [3.9.0](https://github.com/aegixx/aws-loggy/compare/v3.8.0...v3.9.0) (2026-02-20)
 
 
