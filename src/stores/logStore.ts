@@ -430,6 +430,76 @@ function resolveGroupByMode(
   }
 }
 
+/**
+ * Restore persisted filter state (log group, time range, group mode, levels)
+ * from settingsStore into logStore. Used after successful AWS connection
+ * when no log group is currently selected.
+ */
+function restorePersistedState(
+  get: () => LogStore,
+  set: (partial: Partial<LogStore>) => void,
+): void {
+  const {
+    lastSelectedLogGroup,
+    getPersistedDisabledLevelsAsSet,
+    persistedTimeRange,
+    persistedTimePreset,
+    persistedGroupByMode,
+    persistedGroupFilter,
+    getDefaultDisabledLevels,
+  } = useSettingsStore.getState();
+
+  const persistedLevels = getPersistedDisabledLevelsAsSet();
+
+  // Recalculate time range from preset (so "1h" is always relative to now)
+  const presetToMs: Record<string, number> = {
+    "15m": 15 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+    "6h": 6 * 60 * 60 * 1000,
+    "24h": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+  };
+
+  let restoredTimeRange: { start: number; end: number | null } | null = null;
+  if (persistedTimePreset && presetToMs[persistedTimePreset]) {
+    const now = Date.now();
+    restoredTimeRange = {
+      start: now - presetToMs[persistedTimePreset],
+      end: null,
+    };
+  } else if (persistedTimePreset === "custom" && persistedTimeRange) {
+    restoredTimeRange = persistedTimeRange;
+  }
+
+  const restoredGroupByMode = (
+    ["none", "stream", "invocation"].includes(persistedGroupByMode)
+      ? persistedGroupByMode
+      : "none"
+  ) as GroupByMode;
+
+  set({
+    disabledLevels:
+      persistedLevels.size > 0 ? persistedLevels : getDefaultDisabledLevels(),
+    timeRange: restoredTimeRange,
+    groupByMode: restoredGroupByMode,
+    effectiveGroupByMode: restoredGroupByMode,
+    groupFilter: restoredGroupByMode === "none" ? false : persistedGroupFilter,
+  });
+
+  // Auto-select last used log group if available
+  const { logGroups, selectLogGroup, startTail } = get();
+  if (
+    lastSelectedLogGroup &&
+    logGroups.some((g) => g.name === lastSelectedLogGroup)
+  ) {
+    selectLogGroup(lastSelectedLogGroup);
+
+    if (persistedTimePreset === "live") {
+      startTail();
+    }
+  }
+}
+
 export const useLogStore = create<LogStore>((set, get) => ({
   // Initial state
   isConnected: false,
@@ -476,76 +546,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         awsInfo,
       });
       await get().loadLogGroups();
-
-      // Restore persisted filter state
-      const {
-        lastSelectedLogGroup,
-        getPersistedDisabledLevelsAsSet,
-        persistedTimeRange,
-        persistedTimePreset,
-        persistedGroupByMode,
-        persistedGroupFilter,
-        getDefaultDisabledLevels,
-      } = useSettingsStore.getState();
-
-      const persistedLevels = getPersistedDisabledLevelsAsSet();
-
-      // Recalculate time range from preset (so "1h" is always relative to now)
-      const presetToMs: Record<string, number> = {
-        "15m": 15 * 60 * 1000,
-        "1h": 60 * 60 * 1000,
-        "6h": 6 * 60 * 60 * 1000,
-        "24h": 24 * 60 * 60 * 1000,
-        "7d": 7 * 24 * 60 * 60 * 1000,
-      };
-
-      let restoredTimeRange: { start: number; end: number | null } | null =
-        null;
-      if (persistedTimePreset && presetToMs[persistedTimePreset]) {
-        // Recalculate relative time range from now
-        const now = Date.now();
-        restoredTimeRange = {
-          start: now - presetToMs[persistedTimePreset],
-          end: null,
-        };
-      } else if (persistedTimePreset === "custom" && persistedTimeRange) {
-        // Use absolute timestamps for custom ranges
-        restoredTimeRange = persistedTimeRange;
-      }
-      // If no preset or unknown, leave timeRange as null (will use default 15m)
-
-      // Restore groupByMode from persisted settings
-      const restoredGroupByMode = (
-        ["none", "stream", "invocation"].includes(persistedGroupByMode)
-          ? persistedGroupByMode
-          : "none"
-      ) as GroupByMode;
-
-      set({
-        disabledLevels:
-          persistedLevels.size > 0
-            ? persistedLevels
-            : getDefaultDisabledLevels(),
-        timeRange: restoredTimeRange,
-        groupByMode: restoredGroupByMode,
-        effectiveGroupByMode: restoredGroupByMode,
-        groupFilter:
-          restoredGroupByMode === "none" ? false : persistedGroupFilter,
-      });
-
-      // Auto-select last used log group if available
-      const { logGroups, selectLogGroup, startTail } = get();
-      if (
-        lastSelectedLogGroup &&
-        logGroups.some((g) => g.name === lastSelectedLogGroup)
-      ) {
-        selectLogGroup(lastSelectedLogGroup);
-
-        // If the user was in live tail mode, restart it
-        if (persistedTimePreset === "live") {
-          startTail();
-        }
-      }
+      restorePersistedState(get, set);
     } catch (error) {
       set({
         isConnected: false,
@@ -580,7 +581,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         awsInfo,
       });
       await get().loadLogGroups();
-      // If in Live mode (tailing), restart tail from now instead of pulling history
+
+      // If we already have a selected log group, just refresh it
       if (selectedLogGroup) {
         if (isTailing) {
           stopTail();
@@ -588,6 +590,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
         } else {
           await fetchLogs(timeRange?.start, timeRange?.end ?? undefined);
         }
+      } else {
+        // No log group selected (e.g., initial connection failed) — restore persisted settings
+        restorePersistedState(get, set);
       }
     } catch (error) {
       set({
