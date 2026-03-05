@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.2](https://github.com/aegixx/aws-loggy/compare/v3.9.1...v3.9.2) (2026-03-05)
+
+
+### Bug Fixes
+
+* restore persisted log group and time settings after session recovery ([#85](https://github.com/aegixx/aws-loggy/issues/85)) ([ac06ebf](https://github.com/aegixx/aws-loggy/commit/ac06ebfbdc910d5cbcb2eb3362c9d88523798e6b))
+
 ## [3.9.1](https://github.com/aegixx/aws-loggy/compare/v3.9.0...v3.9.1) (2026-02-26)
 
 
