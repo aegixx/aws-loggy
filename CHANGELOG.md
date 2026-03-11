@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.3](https://github.com/aegixx/aws-loggy/compare/v3.9.2...v3.9.3) (2026-03-11)
+
+
+### Bug Fixes
+
+* resolve expanded log via logByIndex when group filter uses negative indices ([#87](https://github.com/aegixx/aws-loggy/issues/87)) ([bb6878c](https://github.com/aegixx/aws-loggy/commit/bb6878cc5d7f8caed3a987b0534e90383ff86f43))
+
 ## [3.9.2](https://github.com/aegixx/aws-loggy/compare/v3.9.1...v3.9.2) (2026-03-05)
 
 
