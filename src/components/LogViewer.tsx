@@ -200,10 +200,18 @@ const LogRow = memo(function LogRow({
       expandedIndex !== null && index > expandedIndex ? index - 1 : index;
   }
 
-  // Render the detail panel
+  // Render the detail panel (resolve log via logByIndex when index is negative — group filter)
   if (isDetailRow) {
     const logIdx = expandedLogFilteredIndex ?? expandedIndex;
-    const log = logs[logIdx];
+    let log: ParsedLogEvent | undefined;
+    if (logIdx >= 0) {
+      log = logs[logIdx];
+    } else if (logByIndex) {
+      log = logByIndex.get(logIdx);
+    }
+    if (!log) {
+      return <div style={style} />;
+    }
     return (
       <LogRowDetail
         log={log}
