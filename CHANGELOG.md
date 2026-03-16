@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.10.0](https://github.com/aegixx/aws-loggy/compare/v3.9.3...v3.10.0) (2026-03-16)
+
+
+### Features
+
+* add Playwright E2E testing with demo mode ([#89](https://github.com/aegixx/aws-loggy/issues/89)) ([c78eedf](https://github.com/aegixx/aws-loggy/commit/c78eedf899f2b573ded1ae354e3e58729371e724))
+
 ## [3.9.3](https://github.com/aegixx/aws-loggy/compare/v3.9.2...v3.9.3) (2026-03-11)
 
 
