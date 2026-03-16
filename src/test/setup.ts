@@ -16,6 +16,12 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+// Simulate Tauri runtime presence so __TAURI_INTERNALS__ guards pass in unit tests
+Object.defineProperty(window, "__TAURI_INTERNALS__", {
+  writable: true,
+  value: {},
+});
+
 // Mock Tauri APIs
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(() => Promise.resolve([])),

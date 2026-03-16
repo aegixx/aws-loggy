@@ -5,8 +5,11 @@ interface DemoStore {
   setDemoMode: (enabled: boolean) => void;
 }
 
+const urlParams = new URLSearchParams(window.location.search);
+const initialDemoMode = urlParams.get("demo") === "true";
+
 export const useDemoStore = create<DemoStore>((set) => ({
-  isDemoMode: false,
+  isDemoMode: initialDemoMode,
   setDemoMode: (enabled) => set({ isDemoMode: enabled }),
 }));
 

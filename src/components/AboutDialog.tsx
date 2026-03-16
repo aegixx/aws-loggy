@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../demo/demoInvoke";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import LoggyMascot from "../assets/loggy-mascot.png";
 import LoggyName from "../assets/loggy-name.png";
@@ -43,7 +43,11 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
   }, [handleKeyDown]);
 
   const openGitHub = () => {
-    openUrl(GITHUB_URL);
+    if ("__TAURI_INTERNALS__" in window) {
+      openUrl(GITHUB_URL);
+    } else {
+      window.open(GITHUB_URL, "_blank");
+    }
   };
 
   if (!isOpen) return null;

@@ -7,6 +7,14 @@ import { useSettingsStore } from "../stores/settingsStore";
 
 const RELEASE_URL_BASE = "https://github.com/aegixx/aws-loggy/releases/tag/v";
 
+function safeOpenUrl(url: string) {
+  if ("__TAURI_INTERNALS__" in window) {
+    openUrl(url);
+  } else {
+    window.open(url, "_blank");
+  }
+}
+
 export interface UpdateInfo {
   version: string;
   currentVersion: string;
@@ -69,7 +77,9 @@ export function UpdateDialog({ isOpen, onClose, update }: UpdateDialogProps) {
         }
       });
 
-      await relaunch();
+      if ("__TAURI_INTERNALS__" in window) {
+        await relaunch();
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : String(err || "Update failed");
@@ -146,7 +156,7 @@ export function UpdateDialog({ isOpen, onClose, update }: UpdateDialogProps) {
                       onClick={(e) => {
                         e.preventDefault();
                         if (href && /^https?:\/\//.test(href)) {
-                          openUrl(href);
+                          safeOpenUrl(href);
                         }
                       }}
                       className="text-emerald-500 hover:underline"
@@ -191,7 +201,9 @@ export function UpdateDialog({ isOpen, onClose, update }: UpdateDialogProps) {
           {/* View Release Notes link */}
           <div className="mt-3 text-center">
             <button
-              onClick={() => openUrl(`${RELEASE_URL_BASE}${update.version}`)}
+              onClick={() =>
+                safeOpenUrl(`${RELEASE_URL_BASE}${update.version}`)
+              }
               className={`text-xs cursor-pointer hover:underline ${
                 isDark ? "text-emerald-400" : "text-emerald-600"
               }`}
