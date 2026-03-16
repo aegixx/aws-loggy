@@ -27,7 +27,11 @@ function handleDemoCommand<T>(
     return undefined as T;
   } else {
     // Pass through for commands that still need the real backend (e.g., sync_theme_menu)
-    return tauriInvoke<T>(cmd, args);
+    if ("__TAURI_INTERNALS__" in window) {
+      return tauriInvoke<T>(cmd, args);
+    } else {
+      return undefined as T;
+    }
   }
 }
 

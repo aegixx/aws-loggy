@@ -21,6 +21,8 @@ lint:
       paths:
         # Upstream Tauri/GTK dependencies - cannot be fixed directly
         - src-tauri/Cargo.lock
+        # Transitive undici vulnerabilities via Node runtime - not directly fixable
+        - package-lock.json
     - linters: [clippy, rustfmt]
       paths:
         # Rust linting handled by dedicated cargo-check job in CI

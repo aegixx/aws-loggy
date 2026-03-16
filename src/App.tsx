@@ -141,8 +141,10 @@ function App() {
     }
   };
 
-  // Listen for menu events from Tauri
+  // Listen for menu events from Tauri (skip when running outside the Tauri shell, e.g. Playwright E2E)
   useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+
     const unlistenSettings = listen("open-settings", () => {
       openSettings();
     });
@@ -274,7 +276,7 @@ function App() {
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     // Only start dragging on left mouse button and if not clicking interactive elements
-    if (e.buttons === 1) {
+    if (e.buttons === 1 && "__TAURI_INTERNALS__" in window) {
       getCurrentWindow().startDragging();
     }
   }, []);
