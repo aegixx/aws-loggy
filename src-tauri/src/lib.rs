@@ -2,7 +2,7 @@ use aws_config::BehaviorVersion;
 use aws_credential_types::provider::ProvideCredentials;
 use aws_sdk_cloudwatchlogs::{types::FilteredLogEvent, Client as CloudWatchClient};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -48,8 +48,8 @@ pub struct AppState {
     pub client: Arc<Mutex<Option<CloudWatchClient>>>,
     pub config: Arc<Mutex<Option<aws_config::SdkConfig>>>,
     pub current_profile: Arc<Mutex<Option<String>>>,
-    pub fetch_cancelled: Arc<AtomicBool>,
-    pub live_tail_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    pub cancel_flags: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    pub live_tail_handles: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
 }
 
 /// Validates an AWS profile name for security
@@ -82,8 +82,8 @@ impl Default for AppState {
             client: Arc::new(Mutex::new(None)),
             config: Arc::new(Mutex::new(None)),
             current_profile: Arc::new(Mutex::new(None)),
-            fetch_cancelled: Arc::new(AtomicBool::new(false)),
-            live_tail_handle: Arc::new(Mutex::new(None)),
+            cancel_flags: Arc::new(Mutex::new(HashMap::new())),
+            live_tail_handles: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -1045,6 +1045,7 @@ async fn list_log_groups(
 /// Progress update sent to frontend during log fetching
 #[derive(Clone, serde::Serialize)]
 struct LogsProgress {
+    panel_id: String,
     fetch_id: u32,
     count: usize,
     size_bytes: usize,
@@ -1053,6 +1054,7 @@ struct LogsProgress {
 /// Truncation info sent when limits are hit
 #[derive(Clone, serde::Serialize)]
 struct LogsTruncated {
+    panel_id: String,
     count: usize,
     size_bytes: usize,
     reason: String, // "count" or "size"
@@ -1061,6 +1063,7 @@ struct LogsTruncated {
 /// Payload for live-tail-event
 #[derive(Debug, Clone, Serialize)]
 struct LiveTailEventPayload {
+    panel_id: String,
     logs: Vec<LogEvent>,
     count: usize,
 }
@@ -1068,14 +1071,25 @@ struct LiveTailEventPayload {
 /// Payload for live-tail-error
 #[derive(Debug, Clone, Serialize)]
 struct LiveTailErrorPayload {
+    panel_id: String,
     message: String,
+}
+
+/// Payload for live-tail-ended
+#[derive(Debug, Clone, Serialize)]
+struct LiveTailEndedPayload {
+    panel_id: String,
 }
 
 /// Cancel any in-progress log fetch
 #[tauri::command]
-fn cancel_fetch(state: State<'_, AppState>) {
-    log::info!("Cancelling log fetch");
-    state.fetch_cancelled.store(true, Ordering::SeqCst);
+async fn cancel_fetch(state: State<'_, AppState>, panel_id: String) -> Result<(), String> {
+    log::info!("Cancelling log fetch for panel {}", panel_id);
+    let flags = state.cancel_flags.lock().await;
+    if let Some(flag) = flags.get(&panel_id) {
+        flag.store(true, Ordering::SeqCst);
+    }
+    Ok(())
 }
 
 /// Fetch logs from a specific log group with automatic pagination
@@ -1084,6 +1098,7 @@ fn cancel_fetch(state: State<'_, AppState>) {
 async fn fetch_logs(
     app: AppHandle,
     state: State<'_, AppState>,
+    panel_id: String,
     log_group_name: String,
     start_time: Option<i64>,
     end_time: Option<i64>,
@@ -1093,8 +1108,15 @@ async fn fetch_logs(
     fetch_id: Option<u32>,
 ) -> Result<Vec<LogEvent>, String> {
     let fetch_id = fetch_id.unwrap_or(0);
-    // Reset cancellation flag at start of new fetch
-    state.fetch_cancelled.store(false, Ordering::SeqCst);
+    // Lazily create a cancel flag for this panel and reset it
+    let cancel_flag = {
+        let mut flags = state.cancel_flags.lock().await;
+        let flag = flags
+            .entry(panel_id.clone())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)));
+        flag.store(false, Ordering::SeqCst);
+        flag.clone()
+    };
 
     let client_lock = state.client.lock().await;
     let client = client_lock.as_ref().ok_or("AWS client not initialized")?;
@@ -1109,9 +1131,10 @@ async fn fetch_logs(
 
     loop {
         // Check if fetch was cancelled
-        if state.fetch_cancelled.load(Ordering::SeqCst) {
+        if cancel_flag.load(Ordering::SeqCst) {
             log::info!(
-                "Log fetch cancelled, returning {} logs fetched so far",
+                "Log fetch cancelled for panel {}, returning {} logs fetched so far",
+                panel_id,
                 all_events.len()
             );
             return Ok(all_events);
@@ -1155,6 +1178,7 @@ async fn fetch_logs(
                 app.emit(
                     "logs-progress",
                     LogsProgress {
+                        panel_id: panel_id.clone(),
                         fetch_id,
                         count: all_events.len(),
                         size_bytes: total_size,
@@ -1172,6 +1196,7 @@ async fn fetch_logs(
                         app.emit(
                             "logs-truncated",
                             LogsTruncated {
+                                panel_id: panel_id.clone(),
                                 count: all_events.len(),
                                 size_bytes: total_size,
                                 reason: "count".to_string(),
@@ -1188,6 +1213,7 @@ async fn fetch_logs(
                         app.emit(
                             "logs-truncated",
                             LogsTruncated {
+                                panel_id: panel_id.clone(),
                                 count: all_events.len(),
                                 size_bytes: total_size,
                                 reason: "size".to_string(),
@@ -1283,15 +1309,18 @@ fn normalize_log_group_identifier(raw: &str) -> String {
 async fn start_live_tail(
     log_group_arn: String,
     filter_pattern: Option<String>,
+    panel_id: String,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
     let normalized = normalize_log_group_identifier(&log_group_arn);
 
-    // Stop any existing live tail first
-    let mut handle_lock = state.live_tail_handle.lock().await;
-    if let Some(handle) = handle_lock.take() {
-        handle.abort();
+    // Stop any existing live tail for this panel first
+    {
+        let mut handles_lock = state.live_tail_handles.lock().await;
+        if let Some(handle) = handles_lock.remove(&panel_id) {
+            handle.abort();
+        }
     }
 
     let client_lock = state.client.lock().await;
@@ -1301,9 +1330,11 @@ async fn start_live_tail(
         .clone();
     drop(client_lock);
 
-    let live_tail_handle = state.live_tail_handle.clone();
+    let live_tail_handles = state.live_tail_handles.clone();
+    let panel_id_clone = panel_id.clone();
 
     let handle = tokio::spawn(async move {
+        let panel_id = panel_id_clone;
         let mut request = client
             .start_live_tail()
             .log_group_identifiers(normalized.as_str());
@@ -1332,25 +1363,25 @@ async fn start_live_tail(
                                     }).collect();
 
                                     if !logs.is_empty() {
-                                        app.emit("live-tail-event", LiveTailEventPayload { logs, count }).ok();
+                                        app.emit("live-tail-event", LiveTailEventPayload { panel_id: panel_id.clone(), logs, count }).ok();
                                     }
                                 }
                                 aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionStart(_) => {
-                                    log::info!("Live tail session started for {}", log_group_arn);
+                                    log::info!("Live tail session started for {} (panel {})", log_group_arn, panel_id);
                                 }
                                 _ => {}
                             }
                         }
                         Ok(None) => {
                             // Stream ended (3-hour timeout)
-                            log::info!("Live tail stream ended for {}", log_group_arn);
-                            app.emit("live-tail-ended", serde_json::json!({})).ok();
+                            log::info!("Live tail stream ended for {} (panel {})", log_group_arn, panel_id);
+                            app.emit("live-tail-ended", LiveTailEndedPayload { panel_id: panel_id.clone() }).ok();
                             break;
                         }
                         Err(e) => {
                             let error_msg = format!("{:?}", e);
                             log::error!("Live tail stream error: {}", error_msg);
-                            app.emit("live-tail-error", LiveTailErrorPayload { message: error_msg }).ok();
+                            app.emit("live-tail-error", LiveTailErrorPayload { panel_id: panel_id.clone(), message: error_msg }).ok();
                             break;
                         }
                     }
@@ -1361,28 +1392,35 @@ async fn start_live_tail(
                 log::error!("Failed to start live tail: {}", error_msg);
                 app.emit(
                     "live-tail-error",
-                    LiveTailErrorPayload { message: error_msg },
+                    LiveTailErrorPayload { panel_id: panel_id.clone(), message: error_msg },
                 )
                 .ok();
             }
         }
 
-        // Clear handle when done
-        let mut handle_lock = live_tail_handle.lock().await;
-        *handle_lock = None;
+        // Remove this panel's handle when done
+        let mut handles_lock = live_tail_handles.lock().await;
+        handles_lock.remove(&panel_id);
     });
 
-    *handle_lock = Some(handle);
+    let mut handles_lock = state.live_tail_handles.lock().await;
+    handles_lock.insert(panel_id, handle);
     Ok(())
 }
 
 #[tauri::command]
-async fn stop_live_tail(state: State<'_, AppState>) -> Result<(), String> {
-    let mut handle_lock = state.live_tail_handle.lock().await;
-    if let Some(handle) = handle_lock.take() {
+async fn stop_live_tail(state: State<'_, AppState>, panel_id: String) -> Result<(), String> {
+    let mut handles_lock = state.live_tail_handles.lock().await;
+    if let Some(handle) = handles_lock.remove(&panel_id) {
         handle.abort();
-        log::info!("Live tail stopped");
+        log::info!("Live tail stopped for panel {}", panel_id);
     }
+    drop(handles_lock);
+
+    // Clean up cancel flag for this panel to prevent unbounded HashMap growth
+    let mut flags = state.cancel_flags.lock().await;
+    flags.remove(&panel_id);
+
     Ok(())
 }
 

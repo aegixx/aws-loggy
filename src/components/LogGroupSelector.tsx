@@ -11,7 +11,11 @@ import {
 import { MdArrowDropDown } from "react-icons/md";
 import { List, type ListImperativeAPI } from "react-window";
 import { useSystemTheme } from "../hooks/useSystemTheme";
-import { useLogStore } from "../stores/logStore";
+import { useConnectionStore } from "../stores/connectionStore";
+import {
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import type { LogGroup } from "../types";
 
 const ITEM_HEIGHT = 32;
@@ -70,13 +74,10 @@ const LogGroupRow = memo(function LogGroupRow({
 });
 
 export function LogGroupSelector() {
-  const {
-    logGroups,
-    selectedLogGroup,
-    selectLogGroup,
-    isConnected,
-    connectionError,
-  } = useLogStore();
+  const { logGroups, isConnected, connectionError } = useConnectionStore();
+  const panel = useCurrentPanelState();
+  const { selectLogGroup } = useCurrentPanelActions();
+  const selectedLogGroup = panel.logGroupName;
   const isDark = useSystemTheme();
 
   const [isOpen, setIsOpen] = useState(false);

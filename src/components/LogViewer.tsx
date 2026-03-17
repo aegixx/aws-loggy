@@ -8,7 +8,11 @@ import React, {
   memo,
 } from "react";
 import { List, ListImperativeAPI } from "react-window";
-import { useLogStore } from "../stores/logStore";
+import { useConnectionStore } from "../stores/connectionStore";
+import {
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import { FindBar } from "./FindBar";
 import { ContextMenu } from "./ContextMenu";
 import { MaximizedLogView } from "./MaximizedLogView";
@@ -325,31 +329,35 @@ const LogRow = memo(function LogRow({
 });
 
 export function LogViewer() {
+  const panel = useCurrentPanelState();
+  const actions = useCurrentPanelActions();
   const {
     filteredLogs,
     isLoading,
     error,
-    selectedLogGroup,
     isTailing,
     expandedLogIndex,
-    setExpandedLogIndex,
     selectedLogIndex,
-    setSelectedLogIndex,
     selectedLogIndices,
+    isFollowing,
+    groupFilter,
+    disabledLevels,
+    filterText,
+    collapsedGroups,
+  } = panel;
+  const selectedLogGroup = panel.logGroupName;
+  const {
+    setExpandedLogIndex,
+    setSelectedLogIndex,
     setSelectedLogIndices,
     clearSelection,
-    refreshConnection,
     clearLogs,
     setFilterText,
-    isFollowing,
     setIsFollowing,
-  } = useLogStore();
-  const groupFilter = useLogStore((s) => s.groupFilter);
-  const disabledLevels = useLogStore((s) => s.disabledLevels);
-  const filterText = useLogStore((s) => s.filterText);
+    toggleGroupCollapsed,
+  } = actions;
+  const { refreshConnection } = useConnectionStore();
   const { displayItems, effectiveMode } = useLogGroups();
-  const toggleGroupCollapsed = useLogStore((s) => s.toggleGroupCollapsed);
-  const collapsedGroups = useLogStore((s) => s.collapsedGroups);
   const isGrouped = effectiveMode !== "none";
 
   // Map logIndex → ParsedLogEvent for all display items (handles negative indices from group filter)

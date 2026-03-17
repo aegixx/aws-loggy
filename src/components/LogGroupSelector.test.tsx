@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LogGroupSelector } from "./LogGroupSelector";
-import { useLogStore } from "../stores/logStore";
 import { useConnectionStore } from "../stores/connectionStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import type { PanelState } from "../stores/panelSlice";
@@ -140,7 +139,12 @@ describe("LogGroupSelector", () => {
 
   it("should select group on click", async () => {
     const selectLogGroup = vi.fn();
-    useLogStore.setState({ selectLogGroup });
+    const { activePanelId } = useWorkspaceStore.getState();
+    const realActions = useWorkspaceStore.getState().panelAction(activePanelId);
+    vi.spyOn(useWorkspaceStore.getState(), "panelAction").mockReturnValue({
+      ...realActions,
+      selectLogGroup,
+    });
 
     render(<LogGroupSelector />);
     const input = screen.getByRole("combobox");
@@ -153,7 +157,12 @@ describe("LogGroupSelector", () => {
 
   it("should select highlighted group on Enter", async () => {
     const selectLogGroup = vi.fn();
-    useLogStore.setState({ selectLogGroup });
+    const { activePanelId } = useWorkspaceStore.getState();
+    const realActions = useWorkspaceStore.getState().panelAction(activePanelId);
+    vi.spyOn(useWorkspaceStore.getState(), "panelAction").mockReturnValue({
+      ...realActions,
+      selectLogGroup,
+    });
 
     render(<LogGroupSelector />);
     const input = screen.getByRole("combobox");

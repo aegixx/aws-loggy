@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FilterBar } from "./FilterBar";
-import { useLogStore } from "../stores/logStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import type { PanelState } from "../stores/panelSlice";
 
@@ -85,6 +84,7 @@ describe("FilterBar - Group filter toggle", () => {
     render(<FilterBar />);
     const toggle = screen.getByTitle("Group filter ON");
     await user.click(toggle);
-    expect(useLogStore.getState().groupFilter).toBe(false);
+    const { activePanelId, panels } = useWorkspaceStore.getState();
+    expect(panels.get(activePanelId)?.groupFilter).toBe(false);
   });
 });

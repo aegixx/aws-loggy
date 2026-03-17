@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import type { GroupByMode } from "../types";
 import type {
   LayoutMode,
@@ -424,7 +425,7 @@ export function useActivePanelId(): string {
 
 /** Get ordered list of panel IDs */
 export function usePanelIds(): string[] {
-  return useWorkspaceStore((s) => [...s.panels.keys()]);
+  return useWorkspaceStore(useShallow((s) => [...s.panels.keys()]));
 }
 
 // ─── Connection Callbacks ───────────────────────────────────────────────────

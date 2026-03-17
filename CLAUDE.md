@@ -14,9 +14,25 @@ See `docs/DESIGN.md` for full architecture documentation.
 
 ## Key Files
 
-- `src-tauri/src/lib.rs` - Rust backend with AWS CloudWatch integration
-- `src/stores/logStore.ts` - Zustand store with log/connection state
-- `src/stores/settingsStore.ts` - Zustand store with persisted settings (colors, patterns, time presets)
+### Backend
+
+- `src-tauri/src/lib.rs` - Rust backend with AWS CloudWatch integration (per-panel commands and events)
+
+### Stores (Zustand)
+
+- `src/stores/connectionStore.ts` - AWS connection state, log groups (shared across panels)
+- `src/stores/workspaceStore.ts` - Panel manager, merged view, correlation, workspace config (composed slices)
+- `src/stores/panelSlice.ts` - Per-panel state factory (logs, filters, tail, grouping)
+- `src/stores/settingsStore.ts` - Persisted settings (colors, patterns, time presets)
+- `src/stores/LiveTailManager.ts` - Stream/poll transport orchestrator for live tail (per-panel)
+- `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
+- `src/stores/TailTransport.ts` - Transport interface
+
+### Components
+
+- `src/components/WorkspaceBar.tsx` - Tab bar for multi-panel switching (drag-to-reorder, status dots)
+- `src/components/PanelContainer.tsx` - Renders all panels, hides inactive with CSS
+- `src/components/PanelView.tsx` - Wraps per-panel components with PanelContext
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/LogGroupSelector.tsx` - Fuzzy search log group selector (Fuse.js + virtualized dropdown)
 - `src/components/FilterBar.tsx` - Filter input and level toggles
@@ -24,22 +40,36 @@ See `docs/DESIGN.md` for full architecture documentation.
 - `src/components/ContextMenu.tsx` - Right-click context menu for log rows
 - `src/components/SettingsDialog.tsx` - Settings dialog (CMD-,)
 - `src/components/StatusBar.tsx` - Status bar with log counts and cache usage
+- `src/components/GroupHeader.tsx` - Group header component for stream/invocation headers
+- `src/components/UpdateDialog.tsx` - Auto-update dialog with changelog display and release notes link
+- `src/components/TimePresetEditor.tsx` - Time preset editor for Settings dialog
+
+### Contexts & Hooks
+
+- `src/contexts/PanelContext.tsx` - React context for panel ID scoping + convenience hooks
+- `src/hooks/useLogGroups.ts` - Hook for computing grouped display items
 - `src/hooks/useFindInLog.ts` - Find-in-log state management hook
+- `src/hooks/useUpdateCheck.ts` - Hook for checking updates (startup + manual via menu)
+
+### Utilities
+
+- `src/utils/logParsing.ts` - Log event parsing, JSON detection, fragment merging, timestamp formatting
+- `src/utils/logFiltering.ts` - Text/level filtering, FilterCache class, field:value syntax
+- `src/utils/connectionErrors.ts` - AWS connection/credential error detection
 - `src/utils/highlightMatches.ts` - Text search and highlight utilities
 - `src/utils/groupLogs.ts` - Log grouping logic (by stream and Lambda invocation)
-- `src/hooks/useLogGroups.ts` - Hook for computing grouped display items
-- `src/components/GroupHeader.tsx` - Group header component for stream/invocation headers
-- `src/stores/LiveTailManager.ts` - Stream/poll transport orchestrator for live tail
-- `src/stores/TailPoller.ts` - Polling transport (fallback for live tail)
+
+### Types
+
+- `src/types/index.ts` - Core TypeScript type definitions (LogEvent, ParsedLogEvent, event payloads)
+- `src/types/workspace.ts` - Workspace types (PanelConfig, WorkspaceConfig, LayoutMode, etc.)
+
+### Demo Mode
+
 - `src/demo/demoStore.ts` - Demo mode state (Zustand, non-persisted)
 - `src/demo/demoInvoke.ts` - Invoke wrapper that intercepts Tauri commands in demo mode
 - `src/demo/mockData.ts` - Mock Lambda log groups and log event generators
 - `src/demo/DemoTailTransport.ts` - Simulated live tail transport for demo mode
-- `src/stores/TailTransport.ts` - Transport interface
-- `src/types/index.ts` - TypeScript type definitions
-- `src/components/UpdateDialog.tsx` - Auto-update dialog with changelog display and release notes link
-- `src/hooks/useUpdateCheck.ts` - Hook for checking updates (startup + manual via menu)
-- `src/components/TimePresetEditor.tsx` - Time preset editor for Settings dialog
 
 ## Development
 
@@ -80,7 +110,7 @@ npm run test:watch # Run in watch mode
 
 ### Modifying log parsing
 
-- Edit `parseLogLevel()` in `src/stores/logStore.ts`
+- Edit `parseLogLevel()` in `src/utils/logParsing.ts`
 - Default log levels: `error`, `warn`, `info`, `debug`, `trace`, `system`, `unknown`
 - Log levels are configurable in Settings (colors, keywords, default visibility)
 
@@ -92,21 +122,26 @@ npm run test:watch # Run in watch mode
 
 ## Keyboard Shortcuts
 
-| Shortcut           | Action                                       |
-| ------------------ | -------------------------------------------- |
-| `⌘F` / `Ctrl+F`    | Find text in logs                            |
-| `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
-| `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
-| `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
-| `⌘,` / `Ctrl+,`    | Open Settings                                |
-| `⌘A` / `Ctrl+A`    | Select all visible logs                      |
-| `⌘C` / `Ctrl+C`    | Copy selected messages to clipboard          |
-| `Tab`              | Focus log viewer for keyboard navigation     |
-| `↑` / `↓`          | Navigate between log rows                    |
-| `Page Up` / `Down` | Jump one page at a time                      |
-| `Home` / `End`     | Jump to first / last log                     |
-| `Space` / `Enter`  | Expand / collapse selected log               |
-| `Escape`           | Close dialogs / collapse expanded log        |
+| Shortcut            | Action                                       |
+| ------------------- | -------------------------------------------- |
+| `⌘F` / `Ctrl+F`     | Find text in logs                            |
+| `⌘L` / `Ctrl+L`     | Focus filter input and select all            |
+| `⌘R` / `Ctrl+R`     | Refresh - reconnect to AWS and re-query logs |
+| `⌘K` / `Ctrl+K`     | Clear logs (keep filters, re-fetch)          |
+| `⌘,` / `Ctrl+,`     | Open Settings                                |
+| `⌘A` / `Ctrl+A`     | Select all visible logs                      |
+| `⌘C` / `Ctrl+C`     | Copy selected messages to clipboard          |
+| `Tab`               | Focus log viewer for keyboard navigation     |
+| `↑` / `↓`           | Navigate between log rows                    |
+| `Page Up` / `Down`  | Jump one page at a time                      |
+| `Home` / `End`      | Jump to first / last log                     |
+| `Space` / `Enter`   | Expand / collapse selected log               |
+| `Escape`            | Close dialogs / collapse expanded log        |
+| `⌘T` / `Ctrl+T`     | Open new tab                                 |
+| `⌘W` / `Ctrl+W`     | Close active tab                             |
+| `⌘⇧[` / `Ctrl+⇧[`   | Switch to previous tab                       |
+| `⌘⇧]` / `Ctrl+⇧]`   | Switch to next tab                           |
+| `⌘1-9` / `Ctrl+1-9` | Jump to tab by index                         |
 
 ## Menu Bar
 

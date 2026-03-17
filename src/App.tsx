@@ -2,14 +2,20 @@ import { useEffect, useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "./demo/demoInvoke";
-import { LogGroupSelector } from "./components/LogGroupSelector";
-import { FilterBar } from "./components/FilterBar";
-import { LogViewer } from "./components/LogViewer";
-import { StatusBar } from "./components/StatusBar";
+import { WorkspaceBar } from "./components/WorkspaceBar";
+import { PanelContainer } from "./components/PanelContainer";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { AboutDialog } from "./components/AboutDialog";
 import { UpdateDialog, UpdateInfo } from "./components/UpdateDialog";
-import { useLogStore, getCurrentFetchId } from "./stores/logStore";
+import { useConnectionStore } from "./stores/connectionStore";
+import { useWorkspaceStore } from "./stores/workspaceStore";
+import type {
+  LiveTailEventPayload,
+  LiveTailErrorPayload,
+  LiveTailEndedPayload,
+  LogsProgressPayload,
+  LogsTruncatedPayload,
+} from "./types";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { useSettingsStore, getLogLevelCssVars } from "./stores/settingsStore";
 import { useDemoStore } from "./demo/demoStore";
@@ -50,16 +56,12 @@ function App() {
   const {
     initializeAws,
     refreshConnection,
-    resetState,
-    clearLogs,
-    setLoadingProgress,
-    setSessionExpired,
     isConnected,
     isConnecting,
     connectionError,
     awsInfo,
-    tailToast,
-  } = useLogStore();
+    setSessionExpired,
+  } = useConnectionStore();
   const {
     theme,
     logLevels,
@@ -79,12 +81,13 @@ function App() {
   ]);
   const [isChangingProfile, setIsChangingProfile] = useState(false);
 
-  const {
-    update: availableUpdate,
-    isChecking: isCheckingForUpdates,
-    noUpdateCount,
-    checkNow,
-  } = useUpdateCheck();
+  // Toast from active panel's tail manager — select primitives to avoid re-render loops
+  const activePanelId = useWorkspaceStore((s) => s.activePanelId);
+  const tailToast = useWorkspaceStore(
+    (s) => s.panels.get(s.activePanelId)?.tailToast ?? null,
+  );
+
+  const { update: availableUpdate, noUpdateCount, checkNow } = useUpdateCheck();
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [showUpToDate, setShowUpToDate] = useState(false);
 
@@ -127,9 +130,12 @@ function App() {
     setIsChangingProfile(true);
     setAwsProfile(profileValue);
 
-    // Reset state if switching to a different profile
+    // Reset state on all panels if switching to a different profile
     if (isProfileChange) {
-      resetState();
+      const { panels, panelAction } = useWorkspaceStore.getState();
+      for (const panelId of panels.keys()) {
+        panelAction(panelId).resetState();
+      }
     }
 
     try {
@@ -141,7 +147,7 @@ function App() {
     }
   };
 
-  // Listen for menu events from Tauri (skip when running outside the Tauri shell, e.g. Playwright E2E)
+  // Listen for menu events from Tauri and global backend events (skip when running outside the Tauri shell, e.g. Playwright E2E)
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
 
@@ -155,29 +161,92 @@ function App() {
       // Always refresh connection (picks up credential changes) and re-query logs
       refreshConnection();
     });
-    const unlistenTruncated = listen<{
-      count: number;
-      size_bytes: number;
-      reason: string;
-    }>("logs-truncated", (event) => {
-      setTruncationWarning({
-        count: event.payload.count,
-        sizeBytes: event.payload.size_bytes,
-        reason: event.payload.reason,
-      });
-      // Auto-dismiss after 10 seconds
-      setTimeout(() => setTruncationWarning(null), 10000);
-    });
-    const unlistenProgress = listen<{
-      fetch_id: number;
-      count: number;
-      size_bytes: number;
-    }>("logs-progress", (event) => {
-      // Only update progress for the current fetch (ignore stale events)
-      if (event.payload.fetch_id === getCurrentFetchId()) {
-        setLoadingProgress(event.payload.count, event.payload.size_bytes);
-      }
-    });
+
+    // ─── Per-panel event routing ─────────────────────────────────────
+    // Backend events now include panel_id; route to the correct panel.
+
+    const unlistenTruncated = listen<LogsTruncatedPayload>(
+      "logs-truncated",
+      (event) => {
+        const { panel_id, count, size_bytes, reason } = event.payload;
+        // Only show truncation warning for the active panel
+        const { activePanelId: currentActive } = useWorkspaceStore.getState();
+        if (panel_id === currentActive) {
+          setTruncationWarning({
+            count,
+            sizeBytes: size_bytes,
+            reason,
+          });
+          setTimeout(() => setTruncationWarning(null), 10000);
+        }
+      },
+    );
+
+    const unlistenProgress = listen<LogsProgressPayload>(
+      "logs-progress",
+      (event) => {
+        const { panel_id, fetch_id, count, size_bytes } = event.payload;
+        // Route progress to the correct panel
+        const { panels, panelAction } = useWorkspaceStore.getState();
+        const panel = panels.get(panel_id);
+        if (panel && panel.currentFetchId === fetch_id) {
+          panelAction(panel_id).setLoadingProgress(count, size_bytes);
+        }
+      },
+    );
+
+    // ─── Live tail event routing ─────────────────────────────────────
+    // Single global listener per event type, dispatches by panel_id
+    // to the correct panel's LiveTailManager.
+
+    const unlistenTailEvent = listen<LiveTailEventPayload>(
+      "live-tail-event",
+      (event) => {
+        const { panel_id } = event.payload;
+        const { panels } = useWorkspaceStore.getState();
+        const panel = panels.get(panel_id);
+        if (panel?.tailManager) {
+          panel.tailManager.onTailEvent(event.payload);
+        } else {
+          console.warn(
+            `[App] Received live-tail-event for unknown/inactive panel: ${panel_id}`,
+          );
+        }
+      },
+    );
+
+    const unlistenTailError = listen<LiveTailErrorPayload>(
+      "live-tail-error",
+      (event) => {
+        const { panel_id } = event.payload;
+        const { panels } = useWorkspaceStore.getState();
+        const panel = panels.get(panel_id);
+        if (panel?.tailManager) {
+          panel.tailManager.onTailError(event.payload);
+        } else {
+          console.warn(
+            `[App] Received live-tail-error for unknown/inactive panel: ${panel_id}`,
+          );
+        }
+      },
+    );
+
+    const unlistenTailEnded = listen<LiveTailEndedPayload>(
+      "live-tail-ended",
+      (event) => {
+        const { panel_id } = event.payload;
+        const { panels } = useWorkspaceStore.getState();
+        const panel = panels.get(panel_id);
+        if (panel?.tailManager) {
+          panel.tailManager.onTailEnded();
+        } else {
+          console.warn(
+            `[App] Received live-tail-ended for unknown/inactive panel: ${panel_id}`,
+          );
+        }
+      },
+    );
+
     const unlistenDebug = listen<string>("debug-log", (event) => {
       console.log("[Backend]", event.payload);
     });
@@ -191,8 +260,14 @@ function App() {
       setSessionExpired();
     });
     const unlistenClear = listen("clear-logs", () => {
-      if (useLogStore.getState().isTailing) {
-        clearLogs();
+      const {
+        activePanelId: currentActive,
+        panels,
+        panelAction,
+      } = useWorkspaceStore.getState();
+      const panel = panels.get(currentActive);
+      if (panel?.isTailing) {
+        panelAction(currentActive).clearLogs();
       }
     });
     const unlistenTheme = listen<string>("set-theme", (event) => {
@@ -214,18 +289,23 @@ function App() {
     });
     const unlistenDemoMode = listen<boolean>("toggle-demo-mode", (event) => {
       const enabled = event.payload;
-      const store = useLogStore.getState();
-      // Stop any active tail before switching modes
-      if (store.isTailing) {
-        store.stopTail();
+      // Stop all active tails before switching modes
+      const { panels, panelAction } = useWorkspaceStore.getState();
+      for (const [panelId, panel] of panels) {
+        if (panel.isTailing) {
+          panelAction(panelId).stopTail();
+        }
       }
       useDemoStore.getState().setDemoMode(enabled);
-      store.resetState();
+      // Reset all panels
+      for (const panelId of panels.keys()) {
+        panelAction(panelId).resetState();
+      }
       // Refresh profiles (demo wrapper returns ["demo"], real returns AWS profiles)
       invoke<string[]>("list_aws_profiles")
         .then((profiles) => setAvailableProfiles(profiles))
         .catch((err) => console.error("Failed to load profiles:", err));
-      store.initializeAws();
+      useConnectionStore.getState().initializeAws();
     });
 
     return () => {
@@ -234,6 +314,9 @@ function App() {
       unlistenRefresh.then((fn) => fn());
       unlistenTruncated.then((fn) => fn());
       unlistenProgress.then((fn) => fn());
+      unlistenTailEvent.then((fn) => fn());
+      unlistenTailError.then((fn) => fn());
+      unlistenTailEnded.then((fn) => fn());
       unlistenDebug.then((fn) => fn());
       unlistenSessionRefreshed.then((fn) => fn());
       unlistenSessionExpired.then((fn) => fn());
@@ -264,15 +347,73 @@ function App() {
         // CMD-K (or Ctrl-K) to clear logs (only during live tail)
         if (e.key === "k") {
           e.preventDefault();
-          if (useLogStore.getState().isTailing) {
-            clearLogs();
+          const {
+            activePanelId: currentActive,
+            panels,
+            panelAction,
+          } = useWorkspaceStore.getState();
+          const panel = panels.get(currentActive);
+          if (panel?.isTailing) {
+            panelAction(currentActive).clearLogs();
+          }
+        }
+        // CMD-T (or Ctrl-T) to open new tab
+        if (e.key === "t") {
+          e.preventDefault();
+          useWorkspaceStore.getState().addPanel();
+        }
+        // CMD-W (or Ctrl-W) to close active tab
+        if (e.key === "w") {
+          e.preventDefault();
+          const { activePanelId: currentActive } = useWorkspaceStore.getState();
+          useWorkspaceStore.getState().removePanel(currentActive);
+        }
+        // CMD-Shift-[ / CMD-Shift-] to switch tabs
+        if (e.shiftKey && (e.key === "[" || e.key === "{")) {
+          e.preventDefault();
+          const {
+            panels,
+            activePanelId: currentActive,
+            setActivePanel,
+          } = useWorkspaceStore.getState();
+          const ids = [...panels.keys()];
+          const idx = ids.indexOf(currentActive);
+          if (idx > 0) {
+            setActivePanel(ids[idx - 1]);
+          } else if (ids.length > 1) {
+            setActivePanel(ids[ids.length - 1]); // wrap around
+          }
+        }
+        if (e.shiftKey && (e.key === "]" || e.key === "}")) {
+          e.preventDefault();
+          const {
+            panels,
+            activePanelId: currentActive,
+            setActivePanel,
+          } = useWorkspaceStore.getState();
+          const ids = [...panels.keys()];
+          const idx = ids.indexOf(currentActive);
+          if (idx < ids.length - 1) {
+            setActivePanel(ids[idx + 1]);
+          } else if (ids.length > 1) {
+            setActivePanel(ids[0]); // wrap around
+          }
+        }
+        // CMD-1 through CMD-9 to jump to tab by index
+        if (e.key >= "1" && e.key <= "9" && !e.shiftKey) {
+          e.preventDefault();
+          const { panels, setActivePanel } = useWorkspaceStore.getState();
+          const ids = [...panels.keys()];
+          const targetIdx = parseInt(e.key) - 1;
+          if (targetIdx < ids.length) {
+            setActivePanel(ids[targetIdx]);
           }
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openSettings, refreshConnection, clearLogs]);
+  }, [openSettings, refreshConnection]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     // Only start dragging on left mouse button and if not clicking interactive elements
@@ -311,15 +452,9 @@ function App() {
         }`}
         onMouseDown={handleDragStart}
       >
-        <div
-          className="flex-1 relative z-10"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <LogGroupSelector />
-        </div>
         {/* Profile selector - always visible */}
         <div
-          className="flex items-center gap-2 text-sm relative z-10"
+          className="flex items-center gap-2 text-sm relative z-10 ml-auto"
           onMouseDown={(e) => e.stopPropagation()}
         >
           {/* Connection status indicator */}
@@ -404,8 +539,8 @@ function App() {
         </button>
       </header>
 
-      {/* Filter bar */}
-      <FilterBar />
+      {/* Workspace tab bar (only visible with multiple panels) */}
+      <WorkspaceBar />
 
       {/* Truncation warning */}
       {truncationWarning && (
@@ -439,11 +574,16 @@ function App() {
         <Toast
           message={tailToast}
           isDark={isDark}
-          onDismiss={() => useLogStore.getState().setTailToast(null)}
+          onDismiss={() =>
+            useWorkspaceStore
+              .getState()
+              .panelAction(activePanelId)
+              .setTailToast(null)
+          }
         />
       )}
 
-      {/* Log viewer or connection error */}
+      {/* Connection error or panel container */}
       {connectionError && !isConnected ? (
         <div className="flex-1 flex items-center justify-center">
           <div
@@ -498,11 +638,8 @@ function App() {
           </div>
         </div>
       ) : (
-        <LogViewer />
+        <PanelContainer />
       )}
-
-      {/* Status bar */}
-      <StatusBar isCheckingForUpdates={isCheckingForUpdates} />
 
       {/* Portal for DatePicker popups */}
       <div id="datepicker-portal" className={isDark ? "datepicker-dark" : ""} />

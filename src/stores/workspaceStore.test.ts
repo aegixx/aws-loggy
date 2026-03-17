@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useLogStore } from "./logStore";
 import { useWorkspaceStore } from "./workspaceStore";
 import type { PanelState } from "./panelSlice";
 import type { ParsedLogEvent, GroupByMode } from "../types";
@@ -20,6 +19,18 @@ function createMockLog(
   };
 }
 
+/** Get the active panel's state */
+function getActivePanel(): PanelState {
+  const { panels, activePanelId } = useWorkspaceStore.getState();
+  return panels.get(activePanelId)!;
+}
+
+/** Get the active panel's actions */
+function getActiveActions() {
+  const { activePanelId, panelAction } = useWorkspaceStore.getState();
+  return panelAction(activePanelId);
+}
+
 /** Set partial state on the active panel in workspaceStore */
 function setActivePanelState(partial: Partial<PanelState>): void {
   const { panels, activePanelId } = useWorkspaceStore.getState();
@@ -30,7 +41,7 @@ function setActivePanelState(partial: Partial<PanelState>): void {
   useWorkspaceStore.setState({ panels: updated });
 }
 
-describe("logStore - filterText", () => {
+describe("workspaceStore - filterText", () => {
   beforeEach(() => {
     setActivePanelState({
       logs: [
@@ -46,16 +57,16 @@ describe("logStore - filterText", () => {
   });
 
   it("should match on a single term", () => {
-    useLogStore.getState().setFilterText("Database");
-    const { filteredLogs } = useLogStore.getState();
+    getActiveActions().setFilterText("Database");
+    const { filteredLogs } = getActivePanel();
     expect(filteredLogs).toHaveLength(2);
     expect(filteredLogs[0].message).toContain("Database");
     expect(filteredLogs[1].message).toContain("Database");
   });
 
   it("should treat space-separated terms as AND (all must match)", () => {
-    useLogStore.getState().setFilterText("application server");
-    const { filteredLogs } = useLogStore.getState();
+    getActiveActions().setFilterText("application server");
+    const { filteredLogs } = getActivePanel();
     expect(filteredLogs).toHaveLength(2);
     expect(filteredLogs[0].message).toContain("Application");
     expect(filteredLogs[0].message).toContain("server");
@@ -64,33 +75,33 @@ describe("logStore - filterText", () => {
   });
 
   it("should match AND terms in any order", () => {
-    useLogStore.getState().setFilterText("server database");
-    const { filteredLogs } = useLogStore.getState();
+    getActiveActions().setFilterText("server database");
+    const { filteredLogs } = getActivePanel();
     expect(filteredLogs).toHaveLength(1);
     expect(filteredLogs[0].message).toContain("Database");
     expect(filteredLogs[0].message).toContain("server");
   });
 
   it("should be case-insensitive", () => {
-    useLogStore.getState().setFilterText("APPLICATION SERVER");
-    const { filteredLogs } = useLogStore.getState();
+    getActiveActions().setFilterText("APPLICATION SERVER");
+    const { filteredLogs } = getActivePanel();
     expect(filteredLogs).toHaveLength(2);
   });
 
   it("should return all logs when filter is empty", () => {
-    useLogStore.getState().setFilterText("");
-    const { filteredLogs } = useLogStore.getState();
+    getActiveActions().setFilterText("");
+    const { filteredLogs } = getActivePanel();
     expect(filteredLogs).toHaveLength(5);
   });
 
   it("should return no results when AND terms don't co-occur", () => {
-    useLogStore.getState().setFilterText("Database Application");
-    const { filteredLogs } = useLogStore.getState();
+    getActiveActions().setFilterText("Database Application");
+    const { filteredLogs } = getActivePanel();
     expect(filteredLogs).toHaveLength(0);
   });
 });
 
-describe("logStore - groupByMode", () => {
+describe("workspaceStore - groupByMode", () => {
   beforeEach(() => {
     setActivePanelState({
       groupByMode: "none" as GroupByMode | "auto",
@@ -101,73 +112,72 @@ describe("logStore - groupByMode", () => {
   });
 
   it("should default to 'none'", () => {
-    const { groupByMode } = useLogStore.getState();
-    expect(groupByMode).toBe("none");
+    expect(getActivePanel().groupByMode).toBe("none");
   });
 
   it("should update groupByMode via setGroupByMode", () => {
-    useLogStore.getState().setGroupByMode("stream");
-    expect(useLogStore.getState().groupByMode).toBe("stream");
+    getActiveActions().setGroupByMode("stream");
+    expect(getActivePanel().groupByMode).toBe("stream");
   });
 
   it("should set effectiveGroupByMode to the explicit mode when not auto", () => {
-    useLogStore.getState().setGroupByMode("stream");
-    expect(useLogStore.getState().effectiveGroupByMode).toBe("stream");
+    getActiveActions().setGroupByMode("stream");
+    expect(getActivePanel().effectiveGroupByMode).toBe("stream");
 
-    useLogStore.getState().setGroupByMode("invocation");
-    expect(useLogStore.getState().effectiveGroupByMode).toBe("invocation");
+    getActiveActions().setGroupByMode("invocation");
+    expect(getActivePanel().effectiveGroupByMode).toBe("invocation");
 
-    useLogStore.getState().setGroupByMode("none");
-    expect(useLogStore.getState().effectiveGroupByMode).toBe("none");
+    getActiveActions().setGroupByMode("none");
+    expect(getActivePanel().effectiveGroupByMode).toBe("none");
   });
 
   it("should auto-detect invocation mode for Lambda log groups", () => {
     setActivePanelState({ logGroupName: "/aws/lambda/my-function" });
-    useLogStore.getState().setGroupByMode("auto");
-    expect(useLogStore.getState().effectiveGroupByMode).toBe("invocation");
+    getActiveActions().setGroupByMode("auto");
+    expect(getActivePanel().effectiveGroupByMode).toBe("invocation");
   });
 
   it("should auto-detect stream mode for non-Lambda log groups", () => {
     setActivePanelState({ logGroupName: "/ecs/my-service" });
-    useLogStore.getState().setGroupByMode("auto");
-    expect(useLogStore.getState().effectiveGroupByMode).toBe("stream");
+    getActiveActions().setGroupByMode("auto");
+    expect(getActivePanel().effectiveGroupByMode).toBe("stream");
   });
 
   it("should auto-detect stream mode when no log group is selected", () => {
-    useLogStore.getState().setGroupByMode("auto");
-    expect(useLogStore.getState().effectiveGroupByMode).toBe("stream");
+    getActiveActions().setGroupByMode("auto");
+    expect(getActivePanel().effectiveGroupByMode).toBe("stream");
   });
 
   it("should reset collapsed state when mode changes", () => {
-    useLogStore.getState().toggleGroupCollapsed("group-1");
-    useLogStore.getState().toggleGroupCollapsed("group-2");
-    expect(useLogStore.getState().collapsedGroups.size).toBe(2);
+    getActiveActions().toggleGroupCollapsed("group-1");
+    getActiveActions().toggleGroupCollapsed("group-2");
+    expect(getActivePanel().collapsedGroups.size).toBe(2);
 
-    useLogStore.getState().setGroupByMode("stream");
-    expect(useLogStore.getState().collapsedGroups.size).toBe(0);
+    getActiveActions().setGroupByMode("stream");
+    expect(getActivePanel().collapsedGroups.size).toBe(0);
   });
 
   it("should toggle group collapsed state", () => {
-    useLogStore.getState().toggleGroupCollapsed("group-1");
-    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(true);
+    getActiveActions().toggleGroupCollapsed("group-1");
+    expect(getActivePanel().collapsedGroups.has("group-1")).toBe(true);
 
-    useLogStore.getState().toggleGroupCollapsed("group-1");
-    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(false);
+    getActiveActions().toggleGroupCollapsed("group-1");
+    expect(getActivePanel().collapsedGroups.has("group-1")).toBe(false);
   });
 
   it("should toggle multiple groups independently", () => {
-    useLogStore.getState().toggleGroupCollapsed("group-1");
-    useLogStore.getState().toggleGroupCollapsed("group-2");
-    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(true);
-    expect(useLogStore.getState().collapsedGroups.has("group-2")).toBe(true);
+    getActiveActions().toggleGroupCollapsed("group-1");
+    getActiveActions().toggleGroupCollapsed("group-2");
+    expect(getActivePanel().collapsedGroups.has("group-1")).toBe(true);
+    expect(getActivePanel().collapsedGroups.has("group-2")).toBe(true);
 
-    useLogStore.getState().toggleGroupCollapsed("group-1");
-    expect(useLogStore.getState().collapsedGroups.has("group-1")).toBe(false);
-    expect(useLogStore.getState().collapsedGroups.has("group-2")).toBe(true);
+    getActiveActions().toggleGroupCollapsed("group-1");
+    expect(getActivePanel().collapsedGroups.has("group-1")).toBe(false);
+    expect(getActivePanel().collapsedGroups.has("group-2")).toBe(true);
   });
 });
 
-describe("logStore - groupFilter", () => {
+describe("workspaceStore - groupFilter", () => {
   beforeEach(() => {
     setActivePanelState({
       groupFilter: true,
@@ -177,28 +187,28 @@ describe("logStore - groupFilter", () => {
   });
 
   it("should default to true", () => {
-    const initialState = useLogStore.getState();
-    expect(initialState.groupFilter).toBe(true);
-    expect(typeof initialState.groupFilter).toBe("boolean");
+    const panel = getActivePanel();
+    expect(panel.groupFilter).toBe(true);
+    expect(typeof panel.groupFilter).toBe("boolean");
   });
 
   it("should toggle groupFilter via toggleGroupFilter", () => {
-    expect(useLogStore.getState().groupFilter).toBe(true);
-    useLogStore.getState().toggleGroupFilter();
-    expect(useLogStore.getState().groupFilter).toBe(false);
-    useLogStore.getState().toggleGroupFilter();
-    expect(useLogStore.getState().groupFilter).toBe(true);
+    expect(getActivePanel().groupFilter).toBe(true);
+    getActiveActions().toggleGroupFilter();
+    expect(getActivePanel().groupFilter).toBe(false);
+    getActiveActions().toggleGroupFilter();
+    expect(getActivePanel().groupFilter).toBe(true);
   });
 
   it("should reset groupFilter to false when groupByMode set to none", () => {
     setActivePanelState({ groupFilter: true });
-    useLogStore.getState().setGroupByMode("none");
-    expect(useLogStore.getState().groupFilter).toBe(false);
+    getActiveActions().setGroupByMode("none");
+    expect(getActivePanel().groupFilter).toBe(false);
   });
 
   it("should NOT reset groupFilter when groupByMode set to stream", () => {
     setActivePanelState({ groupFilter: true });
-    useLogStore.getState().setGroupByMode("stream");
-    expect(useLogStore.getState().groupFilter).toBe(true);
+    getActiveActions().setGroupByMode("stream");
+    expect(getActivePanel().groupFilter).toBe(true);
   });
 });

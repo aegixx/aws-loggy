@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import { MdDateRange, MdArrowDropDown } from "react-icons/md";
-import { useLogStore } from "../stores/logStore";
+import {
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import {
   useSettingsStore,
   DEFAULT_TIME_PRESETS,
@@ -11,15 +14,11 @@ import { useSystemTheme } from "../hooks/useSystemTheme";
 import "react-datepicker/dist/react-datepicker.css";
 
 export function TimeRangePicker() {
-  const {
-    isTailing,
-    startTail,
-    stopTail,
-    clearLogs,
-    setTimeRange,
-    selectedLogGroup,
-    timeRange,
-  } = useLogStore();
+  const panel = useCurrentPanelState();
+  const actions = useCurrentPanelActions();
+  const { isTailing, timeRange } = panel;
+  const selectedLogGroup = panel.logGroupName;
+  const { startTail, stopTail, clearLogs, setTimeRange } = actions;
   const { persistedTimePreset, persistedTimeRange, timePresets } =
     useSettingsStore();
   const presets: TimePreset[] = timePresets ?? DEFAULT_TIME_PRESETS;

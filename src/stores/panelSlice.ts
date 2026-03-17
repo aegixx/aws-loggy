@@ -199,7 +199,7 @@ export function createPanelActions(
       const fetchId = panel.currentFetchId + 1;
 
       // Cancel any in-progress backend fetch
-      invoke("cancel_fetch").catch((e) => {
+      invoke("cancel_fetch", { panelId }).catch((e) => {
         console.debug("[Backend Activity] cancel_fetch:", e);
       });
 
@@ -223,6 +223,7 @@ export function createPanelActions(
         const { cacheLimits } = useSettingsStore.getState();
 
         const rawLogs = await invoke<LogEvent[]>("fetch_logs", {
+          panelId,
           logGroupName: panel.logGroupName,
           startTime: defaultStart,
           endTime: effectiveEnd,
@@ -365,7 +366,7 @@ export function createPanelActions(
 
       // Cancel any in-flight fetch requests
       setPanel({ currentFetchId: panel.currentFetchId + 1 });
-      invoke("cancel_fetch").catch((e) => {
+      invoke("cancel_fetch", { panelId }).catch((e) => {
         console.debug("[Backend Activity] cancel_fetch:", e);
       });
 
@@ -390,6 +391,7 @@ export function createPanelActions(
         logGroups.find((g) => g.name === panel.logGroupName)?.arn ?? null;
 
       const manager = new LiveTailManager({
+        panelId,
         logGroupName: panel.logGroupName,
         logGroupArn,
         onNewLogs: (newLogs: LogEvent[]) => {
