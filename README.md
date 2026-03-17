@@ -9,6 +9,8 @@ A fast, native desktop app for browsing and tailing AWS CloudWatch logs.
 
 ## Features
 
+- **Multi-Panel Tabs** - View multiple log groups simultaneously in independent tabs with drag-to-reorder
+- **Split Views** - Side-by-side or stacked panel layouts with optional time-synchronized scrubbing
 - **Live Log Tailing** - Stream new log events in real-time with auto-scroll
 - **Instant Filtering** - Client-side filtering as you type (no AWS roundtrip)
 - **JSON Query Syntax** - Filter by JSON fields with `field:value` or `field.nested:value`
@@ -94,21 +96,26 @@ The built application will be in `src-tauri/target/release/bundle/`.
 
 ## Keyboard Shortcuts
 
-| Shortcut           | Action                                       |
-| ------------------ | -------------------------------------------- |
-| `⌘F` / `Ctrl+F`    | Find text in logs                            |
-| `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
-| `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
-| `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
-| `⌘,` / `Ctrl+,`    | Open Settings                                |
-| `⌘A` / `Ctrl+A`    | Select all visible logs                      |
-| `⌘C` / `Ctrl+C`    | Copy selected messages to clipboard          |
-| `Tab`              | Focus log viewer for keyboard navigation     |
-| `↑` / `↓`          | Navigate between log rows                    |
-| `Page Up` / `Down` | Jump one page at a time                      |
-| `Home` / `End`     | Jump to first / last log                     |
-| `Space` / `Enter`  | Expand / collapse selected log               |
-| `Escape`           | Close dialogs / collapse expanded log        |
+| Shortcut            | Action                                       |
+| ------------------- | -------------------------------------------- |
+| `⌘F` / `Ctrl+F`     | Find text in logs                            |
+| `⌘L` / `Ctrl+L`     | Focus filter input and select all            |
+| `⌘R` / `Ctrl+R`     | Refresh - reconnect to AWS and re-query logs |
+| `⌘K` / `Ctrl+K`     | Clear logs (keep filters, re-fetch)          |
+| `⌘,` / `Ctrl+,`     | Open Settings                                |
+| `⌘A` / `Ctrl+A`     | Select all visible logs                      |
+| `⌘C` / `Ctrl+C`     | Copy selected messages to clipboard          |
+| `Tab`               | Focus log viewer for keyboard navigation     |
+| `↑` / `↓`           | Navigate between log rows                    |
+| `Page Up` / `Down`  | Jump one page at a time                      |
+| `Home` / `End`      | Jump to first / last log                     |
+| `Space` / `Enter`   | Expand / collapse selected log               |
+| `Escape`            | Close dialogs / collapse expanded log        |
+| `⌘T` / `Ctrl+T`     | Open new tab                                 |
+| `⌘W` / `Ctrl+W`     | Close active tab                             |
+| `⌘⇧[` / `Ctrl+⇧[`   | Switch to previous tab                       |
+| `⌘⇧]` / `Ctrl+⇧]`   | Switch to next tab                           |
+| `⌘1-9` / `Ctrl+1-9` | Jump to tab by index                         |
 
 ## Development
 
@@ -182,7 +189,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Saved/favorite queries
 - (!) Export to JSON/CSV
 - CloudWatch Logs Insights integration
-- (!) Multiple tabs / panes support - for viewing multiple streams simultaneously
+- ~~Multiple tabs / panes support~~ ✓ Shipped (multi-panel tabs + split views)
 - Alternate file support (e.g. local files, Azure Log Analytics, etc.)
 - Multi-source aggregation (e.g. combine logs from multiple sources into a single view)
 - Multi-region support

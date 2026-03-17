@@ -1,25 +1,25 @@
 import { useState, useRef, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import { MdDateRange, MdArrowDropDown } from "react-icons/md";
-import { useLogStore } from "../stores/logStore";
+import {
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import {
   useSettingsStore,
   DEFAULT_TIME_PRESETS,
   type TimePreset,
 } from "../stores/settingsStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import "react-datepicker/dist/react-datepicker.css";
 
 export function TimeRangePicker() {
-  const {
-    isTailing,
-    startTail,
-    stopTail,
-    clearLogs,
-    setTimeRange,
-    selectedLogGroup,
-    timeRange,
-  } = useLogStore();
+  const panel = useCurrentPanelState();
+  const actions = useCurrentPanelActions();
+  const { isTailing, timeRange } = panel;
+  const selectedLogGroup = panel.logGroupName;
+  const { startTail, stopTail, clearLogs, setTimeRange } = actions;
   const { persistedTimePreset, persistedTimeRange, timePresets } =
     useSettingsStore();
   const presets: TimePreset[] = timePresets ?? DEFAULT_TIME_PRESETS;
@@ -97,18 +97,31 @@ export function TimeRangePicker() {
     }
   };
 
+  const applyTimeRange = (
+    range: { start: number; end: number | null } | null,
+    preset?: string | null,
+  ) => {
+    const { timeSyncEnabled, setTimeRangeForAll } =
+      useWorkspaceStore.getState();
+    if (timeSyncEnabled) {
+      setTimeRangeForAll(range, preset);
+    } else {
+      setTimeRange(range, preset);
+    }
+  };
+
   const handlePresetClick = (preset: TimePreset) => {
     if (isTailing) stopTail();
     setActivePreset(preset.id);
     setShowCustom(false);
     const now = Date.now();
-    setTimeRange({ start: now - preset.ms, end: null }, preset.label);
+    applyTimeRange({ start: now - preset.ms, end: null }, preset.label);
   };
 
   const handleCustomApply = () => {
     if (isTailing) stopTail();
     setActivePreset("custom");
-    setTimeRange(
+    applyTimeRange(
       { start: customStart.getTime(), end: customEnd.getTime() },
       "custom",
     );

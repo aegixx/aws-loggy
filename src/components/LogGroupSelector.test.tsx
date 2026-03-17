@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LogGroupSelector } from "./LogGroupSelector";
-import { useLogStore } from "../stores/logStore";
+import { useConnectionStore } from "../stores/connectionStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
+import type { PanelState } from "../stores/panelSlice";
 
 // Mock useSystemTheme
 vi.mock("../hooks/useSystemTheme", () => ({
@@ -21,13 +23,35 @@ const MOCK_LOG_GROUPS = [
   { name: "/aws/ecs/web-frontend", arn: null, stored_bytes: null },
 ];
 
+/** Set partial state on the active panel in workspaceStore */
+function setActivePanelState(partial: Partial<PanelState>): void {
+  const { panels, activePanelId } = useWorkspaceStore.getState();
+  const existing = panels.get(activePanelId);
+  if (!existing) return;
+  const updated = new Map(panels);
+  updated.set(activePanelId, { ...existing, ...partial });
+  useWorkspaceStore.setState({ panels: updated });
+}
+
 function setStoreState(overrides: Record<string, unknown> = {}) {
-  useLogStore.setState({
+  const { logGroups, selectedLogGroup, isConnected, connectionError } = {
     logGroups: MOCK_LOG_GROUPS,
-    selectedLogGroup: null,
+    selectedLogGroup: null as string | null,
     isConnected: true,
-    connectionError: null,
+    connectionError: null as string | null,
     ...overrides,
+  };
+
+  // Connection state goes to connectionStore
+  useConnectionStore.setState({
+    logGroups,
+    isConnected,
+    connectionError,
+  });
+
+  // Panel state goes to active panel
+  setActivePanelState({
+    logGroupName: selectedLogGroup,
   });
 }
 
@@ -115,7 +139,12 @@ describe("LogGroupSelector", () => {
 
   it("should select group on click", async () => {
     const selectLogGroup = vi.fn();
-    useLogStore.setState({ selectLogGroup });
+    const { activePanelId } = useWorkspaceStore.getState();
+    const realActions = useWorkspaceStore.getState().panelAction(activePanelId);
+    vi.spyOn(useWorkspaceStore.getState(), "panelAction").mockReturnValue({
+      ...realActions,
+      selectLogGroup,
+    });
 
     render(<LogGroupSelector />);
     const input = screen.getByRole("combobox");
@@ -128,7 +157,12 @@ describe("LogGroupSelector", () => {
 
   it("should select highlighted group on Enter", async () => {
     const selectLogGroup = vi.fn();
-    useLogStore.setState({ selectLogGroup });
+    const { activePanelId } = useWorkspaceStore.getState();
+    const realActions = useWorkspaceStore.getState().panelAction(activePanelId);
+    vi.spyOn(useWorkspaceStore.getState(), "panelAction").mockReturnValue({
+      ...realActions,
+      selectLogGroup,
+    });
 
     render(<LogGroupSelector />);
     const input = screen.getByRole("combobox");

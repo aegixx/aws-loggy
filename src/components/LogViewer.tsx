@@ -8,7 +8,13 @@ import React, {
   memo,
 } from "react";
 import { List, ListImperativeAPI } from "react-window";
-import { useLogStore } from "../stores/logStore";
+import { useConnectionStore } from "../stores/connectionStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
+import {
+  useCurrentPanelId,
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import { FindBar } from "./FindBar";
 import { ContextMenu } from "./ContextMenu";
 import { MaximizedLogView } from "./MaximizedLogView";
@@ -81,6 +87,9 @@ interface LogRowProps {
     e: React.MouseEvent,
     group: import("../utils/groupLogs").LogGroupSection,
   ) => void;
+  // Correlation props
+  correlationField?: string | null;
+  correlationValue?: string | null;
 }
 
 interface RowComponentPropsWithCustom {
@@ -125,6 +134,9 @@ interface RowComponentPropsWithCustom {
     e: React.MouseEvent,
     group: import("../utils/groupLogs").LogGroupSection,
   ) => void;
+  // Correlation props
+  correlationField?: string | null;
+  correlationValue?: string | null;
 }
 
 const LogRow = memo(function LogRow({
@@ -154,6 +166,8 @@ const LogRow = memo(function LogRow({
   getVisibleMessages,
   getVisibleCount,
   onGroupHeaderContextMenu,
+  correlationField,
+  correlationValue,
 }: RowComponentPropsWithCustom) {
   // If there's an expanded row, indices after it are shifted by 1
   const isDetailRow = expandedIndex !== null && index === expandedIndex + 1;
@@ -245,7 +259,28 @@ const LogRow = memo(function LogRow({
   const isMultiSelected = selectedIndices.has(actualLogIndex);
   const levelStyle = getLogLevelStyle(log.level);
 
-  // Determine row styling based on expanded/selected/multi-selected state
+  // Check correlation highlight
+  let isCorrelated = false;
+  if (correlationField && correlationValue && log.parsedJson) {
+    const parts = correlationField.split(".");
+    let current: unknown = log.parsedJson;
+    for (const part of parts) {
+      if (current && typeof current === "object" && part in current) {
+        current = (current as Record<string, unknown>)[part];
+      } else {
+        current = undefined;
+        break;
+      }
+    }
+    if (
+      (typeof current === "string" && current === correlationValue) ||
+      (typeof current === "number" && String(current) === correlationValue)
+    ) {
+      isCorrelated = true;
+    }
+  }
+
+  // Determine row styling based on expanded/selected/multi-selected/correlated state
   let rowClasses =
     "flex items-center px-3 font-mono text-xs border-b cursor-pointer transition-colors border-l-2 select-none ";
   if (isExpanded) {
@@ -255,6 +290,10 @@ const LogRow = memo(function LogRow({
   } else if (isMultiSelected) {
     rowClasses += `border-l-blue-400 ${
       isDark ? "bg-blue-900/40" : "bg-blue-100/80"
+    }`;
+  } else if (isCorrelated) {
+    rowClasses += `border-l-yellow-400 ${
+      isDark ? "bg-yellow-900/20" : "bg-yellow-50"
     }`;
   } else if (isSelected) {
     rowClasses += `border-l-blue-400 ${
@@ -276,7 +315,7 @@ const LogRow = memo(function LogRow({
         ...style,
         color: levelStyle.color,
         backgroundColor:
-          isExpanded || isSelected || isMultiSelected
+          isExpanded || isSelected || isMultiSelected || isCorrelated
             ? undefined
             : levelStyle.backgroundColor,
       }}
@@ -325,31 +364,36 @@ const LogRow = memo(function LogRow({
 });
 
 export function LogViewer() {
+  const panelId = useCurrentPanelId();
+  const panel = useCurrentPanelState();
+  const actions = useCurrentPanelActions();
   const {
     filteredLogs,
     isLoading,
     error,
-    selectedLogGroup,
     isTailing,
     expandedLogIndex,
-    setExpandedLogIndex,
     selectedLogIndex,
-    setSelectedLogIndex,
     selectedLogIndices,
+    isFollowing,
+    groupFilter,
+    disabledLevels,
+    filterText,
+    collapsedGroups,
+  } = panel;
+  const selectedLogGroup = panel.logGroupName;
+  const {
+    setExpandedLogIndex,
+    setSelectedLogIndex,
     setSelectedLogIndices,
     clearSelection,
-    refreshConnection,
     clearLogs,
     setFilterText,
-    isFollowing,
     setIsFollowing,
-  } = useLogStore();
-  const groupFilter = useLogStore((s) => s.groupFilter);
-  const disabledLevels = useLogStore((s) => s.disabledLevels);
-  const filterText = useLogStore((s) => s.filterText);
+    toggleGroupCollapsed,
+  } = actions;
+  const { refreshConnection } = useConnectionStore();
   const { displayItems, effectiveMode } = useLogGroups();
-  const toggleGroupCollapsed = useLogStore((s) => s.toggleGroupCollapsed);
-  const collapsedGroups = useLogStore((s) => s.collapsedGroups);
   const isGrouped = effectiveMode !== "none";
 
   // Map logIndex → ParsedLogEvent for all display items (handles negative indices from group filter)
@@ -640,6 +684,37 @@ export function LogViewer() {
     setContextMenu(null);
   }, [contextMenu, setFilterText]);
 
+  // Correlation handlers
+  const correlationHighlight = useWorkspaceStore((s) => s.correlationHighlight);
+  const setCorrelation = useWorkspaceStore((s) => s.setCorrelation);
+  const clearCorrelation = useWorkspaceStore((s) => s.clearCorrelation);
+
+  const handleCorrelateByRequestId = useCallback(() => {
+    if (contextMenu?.requestId) {
+      setCorrelation("metadata.requestId", contextMenu.requestId, panelId);
+    }
+    setContextMenu(null);
+  }, [contextMenu, setCorrelation, panelId]);
+
+  const handleCorrelateByTraceId = useCallback(() => {
+    if (contextMenu?.traceId) {
+      setCorrelation("metadata.traceId", contextMenu.traceId, panelId);
+    }
+    setContextMenu(null);
+  }, [contextMenu, setCorrelation, panelId]);
+
+  const handleCorrelateByClientIP = useCallback(() => {
+    if (contextMenu?.clientIP) {
+      setCorrelation("metadata.clientIp", contextMenu.clientIP, panelId);
+    }
+    setContextMenu(null);
+  }, [contextMenu, setCorrelation, panelId]);
+
+  const handleClearCorrelation = useCallback(() => {
+    clearCorrelation();
+    setContextMenu(null);
+  }, [clearCorrelation]);
+
   const handleRowClick = useCallback(
     (index: number) => {
       // Set selection and toggle expansion
@@ -928,6 +1003,11 @@ export function LogViewer() {
           requestId={contextMenu.requestId}
           traceId={contextMenu.traceId}
           clientIP={contextMenu.clientIP}
+          onCorrelateByRequestId={handleCorrelateByRequestId}
+          onCorrelateByTraceId={handleCorrelateByTraceId}
+          onCorrelateByClientIP={handleCorrelateByClientIP}
+          onClearCorrelation={handleClearCorrelation}
+          hasActiveCorrelation={!!correlationHighlight}
         />
       )}
 
@@ -969,6 +1049,9 @@ export function LogViewer() {
           getVisibleMessages,
           getVisibleCount,
           onGroupHeaderContextMenu: handleGroupHeaderContextMenu,
+          // Correlation props
+          correlationField: correlationHighlight?.field ?? null,
+          correlationValue: correlationHighlight?.value ?? null,
         }}
         onRowsRendered={handleRowsRendered}
         overscanCount={20}

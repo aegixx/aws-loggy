@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLogStore } from "../stores/logStore";
+import { useCurrentPanelState } from "../contexts/PanelContext";
 import {
   useSettingsStore,
   DEFAULT_CACHE_LIMITS,
@@ -145,6 +145,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
+  const panel = useCurrentPanelState();
   const {
     logs,
     filteredLogs,
@@ -152,10 +153,10 @@ export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
     loadingProgress,
     loadingSizeBytes,
     totalSizeBytes,
-    selectedLogGroup,
     isTailing,
     isFollowing,
-  } = useLogStore();
+  } = panel;
+  const selectedLogGroup = panel.logGroupName;
   const { cacheLimits } = useSettingsStore();
   const { isDemoMode } = useDemoStore();
   const isDark = useSystemTheme();

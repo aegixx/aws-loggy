@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useLogStore } from "../stores/logStore";
+import { useCurrentPanelState } from "../contexts/PanelContext";
 import {
   groupLogsByStream,
   groupLogsByInvocation,
@@ -122,13 +122,14 @@ export function computeDisplayItems(
 }
 
 export function useLogGroups() {
-  const logs = useLogStore((s) => s.logs);
-  const filteredLogs = useLogStore((s) => s.filteredLogs);
-  const disabledLevels = useLogStore((s) => s.disabledLevels);
-  const effectiveMode = useLogStore((s) => s.effectiveGroupByMode);
-  const collapsedGroups = useLogStore((s) => s.collapsedGroups);
-  const groupFilter = useLogStore((s) => s.groupFilter);
-  const filterText = useLogStore((s) => s.filterText);
+  const panel = useCurrentPanelState();
+  const logs = panel.logs;
+  const filteredLogs = panel.filteredLogs;
+  const disabledLevels = panel.disabledLevels;
+  const effectiveMode = panel.effectiveGroupByMode;
+  const collapsedGroups = panel.collapsedGroups;
+  const groupFilter = panel.groupFilter;
+  const filterText = panel.filterText;
 
   // Groups are always computed from ALL logs (unfiltered) so that
   // invocation boundaries (START/END/REPORT) and stream assignments

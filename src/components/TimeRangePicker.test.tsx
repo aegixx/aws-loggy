@@ -2,17 +2,28 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { TimeRangePicker } from "./TimeRangePicker";
 import { useSettingsStore } from "../stores/settingsStore";
-import { useLogStore } from "../stores/logStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
+import type { PanelState } from "../stores/panelSlice";
 
 // Mock useSystemTheme
 vi.mock("../hooks/useSystemTheme", () => ({
   useSystemTheme: () => true,
 }));
 
+/** Set partial state on the active panel in workspaceStore */
+function setActivePanelState(partial: Partial<PanelState>): void {
+  const { panels, activePanelId } = useWorkspaceStore.getState();
+  const existing = panels.get(activePanelId);
+  if (!existing) return;
+  const updated = new Map(panels);
+  updated.set(activePanelId, { ...existing, ...partial });
+  useWorkspaceStore.setState({ panels: updated });
+}
+
 describe("TimeRangePicker - custom presets", () => {
   beforeEach(() => {
     useSettingsStore.setState({ timePresets: null });
-    useLogStore.setState({ selectedLogGroup: "test-group" });
+    setActivePanelState({ logGroupName: "test-group" });
   });
 
   it("should render default preset labels when timePresets is null", () => {
