@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useLogStore } from "./logStore";
+import { useWorkspaceStore } from "./workspaceStore";
+import type { PanelState } from "./panelSlice";
 import type { ParsedLogEvent, GroupByMode } from "../types";
 
 function createMockLog(
@@ -18,9 +20,19 @@ function createMockLog(
   };
 }
 
+/** Set partial state on the active panel in workspaceStore */
+function setActivePanelState(partial: Partial<PanelState>): void {
+  const { panels, activePanelId } = useWorkspaceStore.getState();
+  const existing = panels.get(activePanelId);
+  if (!existing) return;
+  const updated = new Map(panels);
+  updated.set(activePanelId, { ...existing, ...partial });
+  useWorkspaceStore.setState({ panels: updated });
+}
+
 describe("logStore - filterText", () => {
   beforeEach(() => {
-    useLogStore.setState({
+    setActivePanelState({
       logs: [
         createMockLog("Application server started on port 3000"),
         createMockLog("Database connection established"),
@@ -44,8 +56,6 @@ describe("logStore - filterText", () => {
   it("should treat space-separated terms as AND (all must match)", () => {
     useLogStore.getState().setFilterText("application server");
     const { filteredLogs } = useLogStore.getState();
-    // Should match "Application server started" and "Application server handling"
-    // but NOT "Error: server timeout" or "Database server restarted"
     expect(filteredLogs).toHaveLength(2);
     expect(filteredLogs[0].message).toContain("Application");
     expect(filteredLogs[0].message).toContain("server");
@@ -56,7 +66,6 @@ describe("logStore - filterText", () => {
   it("should match AND terms in any order", () => {
     useLogStore.getState().setFilterText("server database");
     const { filteredLogs } = useLogStore.getState();
-    // Should match "Database server restarted" (has both terms)
     expect(filteredLogs).toHaveLength(1);
     expect(filteredLogs[0].message).toContain("Database");
     expect(filteredLogs[0].message).toContain("server");
@@ -83,11 +92,11 @@ describe("logStore - filterText", () => {
 
 describe("logStore - groupByMode", () => {
   beforeEach(() => {
-    useLogStore.setState({
+    setActivePanelState({
       groupByMode: "none" as GroupByMode | "auto",
       collapsedGroups: new Set<string>(),
       effectiveGroupByMode: "none" as GroupByMode,
-      selectedLogGroup: null,
+      logGroupName: null,
     });
   });
 
@@ -113,14 +122,13 @@ describe("logStore - groupByMode", () => {
   });
 
   it("should auto-detect invocation mode for Lambda log groups", () => {
-    // Set selectedLogGroup first via setState, then trigger auto resolution
-    useLogStore.setState({ selectedLogGroup: "/aws/lambda/my-function" });
+    setActivePanelState({ logGroupName: "/aws/lambda/my-function" });
     useLogStore.getState().setGroupByMode("auto");
     expect(useLogStore.getState().effectiveGroupByMode).toBe("invocation");
   });
 
   it("should auto-detect stream mode for non-Lambda log groups", () => {
-    useLogStore.setState({ selectedLogGroup: "/ecs/my-service" });
+    setActivePanelState({ logGroupName: "/ecs/my-service" });
     useLogStore.getState().setGroupByMode("auto");
     expect(useLogStore.getState().effectiveGroupByMode).toBe("stream");
   });
@@ -131,12 +139,10 @@ describe("logStore - groupByMode", () => {
   });
 
   it("should reset collapsed state when mode changes", () => {
-    // Add some collapsed groups first
     useLogStore.getState().toggleGroupCollapsed("group-1");
     useLogStore.getState().toggleGroupCollapsed("group-2");
     expect(useLogStore.getState().collapsedGroups.size).toBe(2);
 
-    // Changing mode should reset collapsed groups
     useLogStore.getState().setGroupByMode("stream");
     expect(useLogStore.getState().collapsedGroups.size).toBe(0);
   });
@@ -163,7 +169,7 @@ describe("logStore - groupByMode", () => {
 
 describe("logStore - groupFilter", () => {
   beforeEach(() => {
-    useLogStore.setState({
+    setActivePanelState({
       groupFilter: true,
       groupByMode: "stream" as GroupByMode | "auto",
       effectiveGroupByMode: "stream" as GroupByMode,
@@ -171,9 +177,7 @@ describe("logStore - groupFilter", () => {
   });
 
   it("should default to true", () => {
-    // Reset to the store's initial default by removing the beforeEach override
     const initialState = useLogStore.getState();
-    // The beforeEach sets it to true, which matches the store's initial default
     expect(initialState.groupFilter).toBe(true);
     expect(typeof initialState.groupFilter).toBe("boolean");
   });
@@ -187,13 +191,13 @@ describe("logStore - groupFilter", () => {
   });
 
   it("should reset groupFilter to false when groupByMode set to none", () => {
-    useLogStore.setState({ groupFilter: true });
+    setActivePanelState({ groupFilter: true });
     useLogStore.getState().setGroupByMode("none");
     expect(useLogStore.getState().groupFilter).toBe(false);
   });
 
   it("should NOT reset groupFilter when groupByMode set to stream", () => {
-    useLogStore.setState({ groupFilter: true });
+    setActivePanelState({ groupFilter: true });
     useLogStore.getState().setGroupByMode("stream");
     expect(useLogStore.getState().groupFilter).toBe(true);
   });
