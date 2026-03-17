@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { invoke } from "../demo/demoInvoke";
-import type { GroupByMode } from "../types";
+import type { GroupByMode, ParsedLogEvent } from "../types";
 import type {
   LayoutMode,
   PanelConfig,
@@ -21,6 +21,7 @@ import {
   setOnConnectionEstablished,
   setOnConnectionRefreshed,
 } from "./connectionStore";
+import { mergePanelLogs, buildEventKeyMap } from "../utils/mergeLogs";
 
 // Loading sentinel returned when a panel ID is stale (panel closed but component not yet unmounted)
 const EMPTY_PANEL: PanelState = createPanelState("__empty__");
@@ -48,7 +49,10 @@ interface PanelManagerSlice {
 
 interface MergedViewSlice {
   mergedLogRefs: MergedLogRef[];
+  mergedEventKeyMap: Map<string, ParsedLogEvent>;
+  mergedSourceToggles: Map<string, boolean>; // panelId → visible
   recomputeMergedLogs: () => void;
+  setMergedSourceToggle: (panelId: string, visible: boolean) => void;
 }
 
 interface CorrelationSlice {
@@ -274,10 +278,34 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
 
     // ─── Merged View Slice ────────────────────────────────────────────
     mergedLogRefs: [],
+    mergedEventKeyMap: new Map(),
+    mergedSourceToggles: new Map(),
 
     recomputeMergedLogs: () => {
-      // Phase 4 — placeholder for now
-      set({ mergedLogRefs: [] });
+      const { panels, mergedSourceToggles } = get();
+
+      // Collect filtered logs from all panels that have log groups
+      const panelLogs = new Map<string, ParsedLogEvent[]>();
+      for (const [panelId, panel] of panels) {
+        if (!panel.logGroupName) continue;
+        // Respect source toggles — skip hidden panels
+        if (mergedSourceToggles.get(panelId) === false) continue;
+        panelLogs.set(panelId, panel.filteredLogs);
+      }
+
+      const refs = mergePanelLogs(panelLogs);
+      const keyMap = buildEventKeyMap(panelLogs);
+      set({ mergedLogRefs: refs, mergedEventKeyMap: keyMap });
+    },
+
+    setMergedSourceToggle: (panelId: string, visible: boolean) => {
+      const { mergedSourceToggles } = get();
+      const updated = new Map(mergedSourceToggles);
+      updated.set(panelId, visible);
+      set({ mergedSourceToggles: updated });
+      // Re-merge with updated toggles
+      // Defer to avoid calling set() during set()
+      setTimeout(() => get().recomputeMergedLogs(), 0);
     },
 
     // ─── Correlation Slice ────────────────────────────────────────────

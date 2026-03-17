@@ -1,5 +1,6 @@
 import { useWorkspaceStore, usePanelIds } from "../stores/workspaceStore";
 import { PanelView } from "./PanelView";
+import { MergedPanelView } from "./MergedPanelView";
 
 const MAX_SPLIT_PANELS = 3;
 
@@ -7,6 +8,20 @@ export function PanelContainer() {
   const panelIds = usePanelIds();
   const activePanelId = useWorkspaceStore((s) => s.activePanelId);
   const layoutMode = useWorkspaceStore((s) => s.layoutMode);
+
+  if (layoutMode === "merged") {
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        <MergedPanelView />
+        {/* Keep all panels mounted but hidden to preserve state */}
+        {panelIds.map((panelId) => (
+          <div key={panelId} className="hidden">
+            <PanelView panelId={panelId} />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (layoutMode === "split-horizontal" || layoutMode === "split-vertical") {
     const visibleIds = panelIds.slice(0, MAX_SPLIT_PANELS);

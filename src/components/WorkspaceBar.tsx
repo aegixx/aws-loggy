@@ -36,6 +36,7 @@ const LAYOUT_OPTIONS: { mode: LayoutMode; label: string; title: string }[] = [
   { mode: "tabs", label: "Tabs", title: "Tab view" },
   { mode: "split-horizontal", label: "H", title: "Split horizontal" },
   { mode: "split-vertical", label: "V", title: "Split vertical" },
+  { mode: "merged", label: "M", title: "Merged chronological view" },
 ];
 
 export function WorkspaceBar() {

@@ -332,6 +332,16 @@ function App() {
   // Handle keyboard shortcuts (fallback for non-menu shortcuts)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape to clear correlation highlight (when no other dialog is open)
+      if (e.key === "Escape") {
+        const { correlationHighlight, clearCorrelation } =
+          useWorkspaceStore.getState();
+        if (correlationHighlight) {
+          clearCorrelation();
+          // Don't prevent default — let other Escape handlers also fire
+        }
+      }
+
       if (e.metaKey || e.ctrlKey) {
         // CMD-, (or Ctrl-,) to open settings
         if (e.key === ",") {

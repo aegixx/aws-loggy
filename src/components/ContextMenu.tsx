@@ -20,6 +20,12 @@ interface ContextMenuProps {
   requestId: string | null;
   traceId: string | null;
   clientIP: string | null;
+  // Correlation props
+  onCorrelateByRequestId?: () => void;
+  onCorrelateByTraceId?: () => void;
+  onCorrelateByClientIP?: () => void;
+  onClearCorrelation?: () => void;
+  hasActiveCorrelation?: boolean;
 }
 
 const MENU_WIDTH = 220;
@@ -51,9 +57,15 @@ export function ContextMenu({
   requestId,
   traceId,
   clientIP,
+  onCorrelateByRequestId,
+  onCorrelateByTraceId,
+  onCorrelateByClientIP,
+  onClearCorrelation,
+  hasActiveCorrelation,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showFilterSubmenu, setShowFilterSubmenu] = useState(false);
+  const [showCorrelateSubmenu, setShowCorrelateSubmenu] = useState(false);
   const filterItemRef = useRef<HTMLDivElement>(null);
 
   // Calculate position to keep menu within viewport
@@ -211,6 +223,87 @@ export function ContextMenu({
           </div>
         )}
       </div>
+
+      {/* Correlate by with submenu */}
+      {(onCorrelateByRequestId ||
+        onCorrelateByTraceId ||
+        onCorrelateByClientIP) && (
+        <>
+          {(() => {
+            const hasAnyCorrelateOption =
+              !!requestId || !!traceId || !!clientIP;
+            return (
+              <div
+                className={`${menuItemBase} relative ${hasAnyCorrelateOption ? menuItemEnabled : menuItemDisabled}`}
+                onClick={() =>
+                  hasAnyCorrelateOption &&
+                  setShowCorrelateSubmenu((prev) => !prev)
+                }
+                onMouseEnter={() =>
+                  hasAnyCorrelateOption && setShowCorrelateSubmenu(true)
+                }
+                onMouseLeave={() => setShowCorrelateSubmenu(false)}
+              >
+                <span>Correlate by</span>
+                <span className={shortcutClass}>▶</span>
+
+                {showCorrelateSubmenu && hasAnyCorrelateOption && (
+                  <div
+                    className={`absolute z-50 min-w-[180px] py-1 rounded-md shadow-lg border ${
+                      isDark
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-300 shadow-md"
+                    }`}
+                    style={{
+                      top: -4,
+                      left: submenuOnLeft ? -SUBMENU_WIDTH - 4 : "100%",
+                      marginLeft: submenuOnLeft ? 0 : 4,
+                    }}
+                    onMouseEnter={() => setShowCorrelateSubmenu(true)}
+                    onMouseLeave={() => setShowCorrelateSubmenu(false)}
+                  >
+                    {requestId && onCorrelateByRequestId && (
+                      <div
+                        className={`${menuItemBase} ${menuItemEnabled}`}
+                        onClick={() => handleItemClick(onCorrelateByRequestId)}
+                      >
+                        <span>Request ID</span>
+                      </div>
+                    )}
+                    {traceId && onCorrelateByTraceId && (
+                      <div
+                        className={`${menuItemBase} ${menuItemEnabled}`}
+                        onClick={() => handleItemClick(onCorrelateByTraceId)}
+                      >
+                        <span>Trace ID</span>
+                      </div>
+                    )}
+                    {clientIP && onCorrelateByClientIP && (
+                      <div
+                        className={`${menuItemBase} ${menuItemEnabled}`}
+                        onClick={() => handleItemClick(onCorrelateByClientIP)}
+                      >
+                        <span>Client IP</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </>
+      )}
+
+      {/* Clear correlation */}
+      {hasActiveCorrelation && onClearCorrelation && (
+        <div
+          className={`${menuItemBase} ${menuItemEnabled}`}
+          onClick={() => handleItemClick(onClearCorrelation)}
+        >
+          <span>Clear correlation</span>
+          <span className={shortcutClass}>Esc</span>
+        </div>
+      )}
 
       {/* Separator */}
       <div className={`border-t my-1 ${separatorClass}`} />
