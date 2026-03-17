@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
+import { invoke } from "../demo/demoInvoke";
 import type { GroupByMode } from "../types";
 import type {
   LayoutMode,
@@ -220,6 +221,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
       if (panel?.tailManager) {
         panel.tailManager.stop();
       }
+
+      // Cancel any in-flight fetch and clean up backend resources for this panel
+      invoke("cancel_fetch", { panelId }).catch(() => {});
+      invoke("stop_live_tail", { panelId }).catch(() => {});
 
       // Clean up action cache
       panelActionsCache.delete(panelId);

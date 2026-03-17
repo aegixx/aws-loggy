@@ -10,6 +10,7 @@ import {
   DEFAULT_TIME_PRESETS,
   type TimePreset,
 } from "../stores/settingsStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -96,18 +97,31 @@ export function TimeRangePicker() {
     }
   };
 
+  const applyTimeRange = (
+    range: { start: number; end: number | null } | null,
+    preset?: string | null,
+  ) => {
+    const { timeSyncEnabled, setTimeRangeForAll } =
+      useWorkspaceStore.getState();
+    if (timeSyncEnabled) {
+      setTimeRangeForAll(range, preset);
+    } else {
+      setTimeRange(range, preset);
+    }
+  };
+
   const handlePresetClick = (preset: TimePreset) => {
     if (isTailing) stopTail();
     setActivePreset(preset.id);
     setShowCustom(false);
     const now = Date.now();
-    setTimeRange({ start: now - preset.ms, end: null }, preset.label);
+    applyTimeRange({ start: now - preset.ms, end: null }, preset.label);
   };
 
   const handleCustomApply = () => {
     if (isTailing) stopTail();
     setActivePreset("custom");
-    setTimeRange(
+    applyTimeRange(
       { start: customStart.getTime(), end: customEnd.getTime() },
       "custom",
     );

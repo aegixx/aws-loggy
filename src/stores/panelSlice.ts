@@ -3,10 +3,7 @@ import type { LogEvent, ParsedLogEvent, LogLevel, GroupByMode } from "../types";
 import { useSettingsStore } from "./settingsStore";
 import { LiveTailManager, type TransportType } from "./LiveTailManager";
 import { parseLogEvent, mergeFragmentedLogs } from "../utils/logParsing";
-import {
-  FilterCache,
-  getFilteredLogs as moduleGetFilteredLogs,
-} from "../utils/logFiltering";
+import { FilterCache } from "../utils/logFiltering";
 import { isConnectionOrCredentialError } from "../utils/connectionErrors";
 import { useConnectionStore } from "./connectionStore";
 
@@ -242,7 +239,7 @@ export function createPanelActions(
 
         const mergedLogs = mergeFragmentedLogs(rawLogs);
         const parsedLogs = mergedLogs.map(parseLogEvent);
-        const filtered = moduleGetFilteredLogs(
+        const filtered = currentPanel.filterCache.getFilteredLogs(
           parsedLogs,
           currentPanel.filterText,
           currentPanel.disabledLevels,

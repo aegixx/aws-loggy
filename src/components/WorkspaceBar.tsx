@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useWorkspaceStore, usePanelIds } from "../stores/workspaceStore";
 import type { PanelState } from "../stores/panelSlice";
+import type { LayoutMode } from "../types/workspace";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 
 const MAX_PANELS = 10;
@@ -31,6 +32,12 @@ function getTabLabel(panel: PanelState): string {
   return "New Tab";
 }
 
+const LAYOUT_OPTIONS: { mode: LayoutMode; label: string; title: string }[] = [
+  { mode: "tabs", label: "Tabs", title: "Tab view" },
+  { mode: "split-horizontal", label: "H", title: "Split horizontal" },
+  { mode: "split-vertical", label: "V", title: "Split vertical" },
+];
+
 export function WorkspaceBar() {
   const isDark = useSystemTheme();
   const panelIds = usePanelIds();
@@ -40,6 +47,10 @@ export function WorkspaceBar() {
   const removePanel = useWorkspaceStore((s) => s.removePanel);
   const setActivePanel = useWorkspaceStore((s) => s.setActivePanel);
   const reorderPanels = useWorkspaceStore((s) => s.reorderPanels);
+  const layoutMode = useWorkspaceStore((s) => s.layoutMode);
+  const setLayoutMode = useWorkspaceStore((s) => s.setLayoutMode);
+  const timeSyncEnabled = useWorkspaceStore((s) => s.timeSyncEnabled);
+  const setTimeSyncEnabled = useWorkspaceStore((s) => s.setTimeSyncEnabled);
 
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -194,6 +205,52 @@ export function WorkspaceBar() {
         title="New tab"
       >
         +
+      </button>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Layout mode toggle */}
+      <div
+        className={`flex items-center rounded overflow-hidden border ${
+          isDark ? "border-gray-600" : "border-gray-300"
+        }`}
+      >
+        {LAYOUT_OPTIONS.map((opt) => (
+          <button
+            key={opt.mode}
+            onClick={() => setLayoutMode(opt.mode)}
+            className={`px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+              layoutMode === opt.mode
+                ? "bg-blue-600 text-white"
+                : isDark
+                  ? "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-200"
+            }`}
+            title={opt.title}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Time sync toggle */}
+      <button
+        onClick={() => setTimeSyncEnabled(!timeSyncEnabled)}
+        className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors border ${
+          timeSyncEnabled
+            ? "bg-blue-600 text-white border-blue-600"
+            : isDark
+              ? "text-gray-400 hover:text-gray-200 border-gray-600 hover:bg-gray-700"
+              : "text-gray-500 hover:text-gray-800 border-gray-300 hover:bg-gray-200"
+        }`}
+        title={
+          timeSyncEnabled
+            ? "Time sync enabled — time range changes apply to all panels"
+            : "Time sync disabled — each panel has independent time ranges"
+        }
+      >
+        Sync
       </button>
     </div>
   );
