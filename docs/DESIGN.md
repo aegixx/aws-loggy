@@ -40,21 +40,26 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 ## Keyboard Shortcuts
 
-| Shortcut           | Action                                       |
-| ------------------ | -------------------------------------------- |
-| `⌘F` / `Ctrl+F`    | Find text in logs                            |
-| `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
-| `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
-| `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
-| `⌘,` / `Ctrl+,`    | Open Settings                                |
-| `⌘A` / `Ctrl+A`    | Select all visible logs                      |
-| `⌘C` / `Ctrl+C`    | Copy selected messages to clipboard          |
-| `Tab`              | Focus log viewer for keyboard navigation     |
-| `↑` / `↓`          | Navigate between log rows                    |
-| `Page Up` / `Down` | Jump one page at a time                      |
-| `Home` / `End`     | Jump to first / last log                     |
-| `Space` / `Enter`  | Expand / collapse selected log               |
-| `Escape`           | Close dialogs / collapse expanded log        |
+| Shortcut            | Action                                       |
+| ------------------- | -------------------------------------------- |
+| `⌘F` / `Ctrl+F`     | Find text in logs                            |
+| `⌘L` / `Ctrl+L`     | Focus filter input and select all            |
+| `⌘R` / `Ctrl+R`     | Refresh - reconnect to AWS and re-query logs |
+| `⌘K` / `Ctrl+K`     | Clear logs (keep filters, re-fetch)          |
+| `⌘,` / `Ctrl+,`     | Open Settings                                |
+| `⌘A` / `Ctrl+A`     | Select all visible logs                      |
+| `⌘C` / `Ctrl+C`     | Copy selected messages to clipboard          |
+| `Tab`               | Focus log viewer for keyboard navigation     |
+| `↑` / `↓`           | Navigate between log rows                    |
+| `Page Up` / `Down`  | Jump one page at a time                      |
+| `Home` / `End`      | Jump to first / last log                     |
+| `Space` / `Enter`   | Expand / collapse selected log               |
+| `Escape`            | Close dialogs / collapse expanded log        |
+| `⌘T` / `Ctrl+T`     | Open new tab                                 |
+| `⌘W` / `Ctrl+W`     | Close active tab                             |
+| `⌘⇧[` / `Ctrl+⇧[`   | Switch to previous tab                       |
+| `⌘⇧]` / `Ctrl+⇧]`   | Switch to next tab                           |
+| `⌘1-9` / `Ctrl+1-9` | Jump to tab by index                         |
 
 ## Technical Architecture
 
@@ -198,7 +203,7 @@ Default levels: ERROR (red), WARN (yellow), INFO (blue), DEBUG (green), TRACE (p
 aws-loggy/
 ├── src-tauri/              # Rust backend
 │   ├── src/
-│   │   └── lib.rs          # Tauri commands & AWS integration
+│   │   └── lib.rs          # Tauri commands & AWS integration (per-panel)
 │   └── Cargo.toml
 ├── src/                    # React frontend
 │   ├── components/
@@ -206,36 +211,54 @@ aws-loggy/
 │   │   ├── ContextMenu.tsx
 │   │   ├── FilterBar.tsx
 │   │   ├── FindBar.tsx
+│   │   ├── GroupHeader.tsx
 │   │   ├── JsonSyntaxHighlight.tsx
 │   │   ├── LogDetailInline.tsx
 │   │   ├── LogGroupSelector.tsx
 │   │   ├── LogRowDetail.tsx
 │   │   ├── LogViewer.tsx
 │   │   ├── MaximizedLogView.tsx
+│   │   ├── PanelContainer.tsx  # Renders panels (tabs/split layouts)
+│   │   ├── PanelView.tsx       # Per-panel wrapper with PanelContext
 │   │   ├── SettingsDialog.tsx
 │   │   ├── StatusBar.tsx
+│   │   ├── TimePresetEditor.tsx
 │   │   ├── TimeRangePicker.tsx
-│   │   └── UpdateDialog.tsx
+│   │   ├── UpdateDialog.tsx
+│   │   └── WorkspaceBar.tsx    # Tab bar with drag-to-reorder
+│   ├── contexts/
+│   │   └── PanelContext.tsx    # React context for panel ID scoping
 │   ├── stores/
-│   │   ├── logStore.ts        # Zustand log/connection state
-│   │   ├── settingsStore.ts   # Zustand persisted settings
-│   │   ├── LiveTailManager.ts # Stream/poll transport orchestrator
-│   │   ├── TailPoller.ts      # Polling transport (fallback)
-│   │   └── TailTransport.ts   # Transport interface
+│   │   ├── connectionStore.ts  # AWS connection state (shared)
+│   │   ├── workspaceStore.ts   # Panel manager, layout, workspace config
+│   │   ├── panelSlice.ts       # Per-panel state factory
+│   │   ├── settingsStore.ts    # Persisted settings
+│   │   ├── LiveTailManager.ts  # Stream/poll transport orchestrator
+│   │   ├── TailPoller.ts       # Polling transport (fallback)
+│   │   └── TailTransport.ts    # Transport interface
 │   ├── hooks/
 │   │   ├── useDebounce.ts
 │   │   ├── useDragSelection.ts
 │   │   ├── useFindInLog.ts
 │   │   ├── useKeyboardNavigation.ts
-│   │   ├── useSystemTheme.ts
 │   │   ├── useLogGroups.ts
+│   │   ├── useSystemTheme.ts
 │   │   └── useUpdateCheck.ts
 │   ├── utils/
+│   │   ├── connectionErrors.ts   # AWS error detection
 │   │   ├── extractFieldVariants.ts
 │   │   ├── groupLogs.ts
-│   │   └── highlightMatches.ts
+│   │   ├── highlightMatches.ts
+│   │   ├── logFiltering.ts       # Text/level filtering, FilterCache
+│   │   └── logParsing.ts         # Log parsing, JSON detection
 │   ├── types/
-│   │   └── index.ts
+│   │   ├── index.ts
+│   │   └── workspace.ts         # Panel/workspace types
+│   ├── demo/
+│   │   ├── demoStore.ts
+│   │   ├── demoInvoke.ts
+│   │   ├── mockData.ts
+│   │   └── DemoTailTransport.ts
 │   └── App.tsx
 ├── package.json
 ├── docs/DESIGN.md          # This file
@@ -290,4 +313,7 @@ npm run lint       # Lint code (trunk)
 - Saved/favorite queries
 - Export to JSON/CSV
 - CloudWatch Logs Insights integration
-- Multiple log group tabs/panes
+- Merged chronological view across panels
+- Cross-panel request ID correlation
+- Saved workspace configurations
+- Cross-account panels (different AWS profiles per panel)
