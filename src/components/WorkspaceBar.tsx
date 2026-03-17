@@ -3,6 +3,8 @@ import { useWorkspaceStore, usePanelIds } from "../stores/workspaceStore";
 import type { PanelState } from "../stores/panelSlice";
 import type { LayoutMode } from "../types/workspace";
 import { useSystemTheme } from "../hooks/useSystemTheme";
+import { useSettingsStore } from "../stores/settingsStore";
+import { WorkspaceMenu } from "./WorkspaceMenu";
 
 const MAX_PANELS = 10;
 
@@ -114,9 +116,10 @@ export function WorkspaceBar() {
     setDragOverId(null);
   }, []);
 
-  // Only show workspace bar when there are multiple panels
-  // (single panel mode doesn't need tabs)
-  if (panelIds.length <= 1) {
+  const savedWorkspaces = useSettingsStore((s) => s.savedWorkspaces);
+
+  // Show workspace bar when there are multiple panels or saved workspaces
+  if (panelIds.length <= 1 && savedWorkspaces.length === 0) {
     return null;
   }
 
@@ -253,6 +256,9 @@ export function WorkspaceBar() {
       >
         Sync
       </button>
+
+      {/* Workspace save/load menu */}
+      <WorkspaceMenu isDark={isDark} />
     </div>
   );
 }

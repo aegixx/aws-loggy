@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useWorkspaceStore } from "./workspaceStore";
+import { useSettingsStore } from "./settingsStore";
 import type { PanelState } from "./panelSlice";
 import type { ParsedLogEvent, GroupByMode } from "../types";
 
@@ -210,5 +211,125 @@ describe("workspaceStore - groupFilter", () => {
     setActivePanelState({ groupFilter: true });
     getActiveActions().setGroupByMode("stream");
     expect(getActivePanel().groupFilter).toBe(true);
+  });
+});
+
+describe("workspaceStore - panel management", () => {
+  it("should start with one panel", () => {
+    const { panels } = useWorkspaceStore.getState();
+    expect(panels.size).toBe(1);
+  });
+
+  it("should add a panel and set it active", () => {
+    const newId = useWorkspaceStore.getState().addPanel();
+    const { panels, activePanelId } = useWorkspaceStore.getState();
+    expect(panels.size).toBe(2);
+    expect(activePanelId).toBe(newId);
+  });
+
+  it("should remove a panel and auto-create if last", () => {
+    const { activePanelId } = useWorkspaceStore.getState();
+    useWorkspaceStore.getState().removePanel(activePanelId);
+    const { panels } = useWorkspaceStore.getState();
+    // Should auto-create a new panel when last one is removed
+    expect(panels.size).toBe(1);
+  });
+
+  it("should enforce max 10 panels", () => {
+    // Add 9 more to reach 10 total (started with 2 from previous test)
+    const { panels } = useWorkspaceStore.getState();
+    const toAdd = 10 - panels.size;
+    for (let i = 0; i < toAdd; i++) {
+      useWorkspaceStore.getState().addPanel();
+    }
+    expect(useWorkspaceStore.getState().panels.size).toBe(10);
+
+    // 11th should be rejected
+    const rejected = useWorkspaceStore.getState().addPanel();
+    expect(useWorkspaceStore.getState().panels.size).toBe(10);
+    expect(rejected).toBe(useWorkspaceStore.getState().activePanelId);
+  });
+
+  it("should reorder panels", () => {
+    // Start fresh — remove all and add 3
+    const { panels } = useWorkspaceStore.getState();
+    for (const id of [...panels.keys()]) {
+      useWorkspaceStore.getState().removePanel(id);
+    }
+    const id1 = useWorkspaceStore.getState().activePanelId; // auto-created
+    const id2 = useWorkspaceStore.getState().addPanel();
+    const id3 = useWorkspaceStore.getState().addPanel();
+
+    useWorkspaceStore.getState().reorderPanels([id3, id1, id2]);
+    const reorderedIds = [...useWorkspaceStore.getState().panels.keys()];
+    expect(reorderedIds).toEqual([id3, id1, id2]);
+  });
+});
+
+describe("workspaceStore - saveWorkspace", () => {
+  it("should create a workspace config from current state", () => {
+    setActivePanelState({
+      logGroupName: "/aws/lambda/test",
+      filterText: "error",
+      groupByMode: "invocation",
+    });
+
+    const config = useWorkspaceStore.getState().saveWorkspace("Test Workspace");
+    expect(config.name).toBe("Test Workspace");
+    expect(config.panels.length).toBeGreaterThan(0);
+    expect(config.layoutMode).toBe("tabs");
+
+    // Verify panel config captures state
+    const panelConfig = config.panels.find(
+      (p) => p.logGroupName === "/aws/lambda/test",
+    );
+    expect(panelConfig).toBeDefined();
+    expect(panelConfig!.filterText).toBe("error");
+    expect(panelConfig!.groupByMode).toBe("invocation");
+  });
+});
+
+describe("settingsStore - savedWorkspaces", () => {
+  beforeEach(() => {
+    useSettingsStore.setState({ savedWorkspaces: [] });
+  });
+
+  it("should add a saved workspace", () => {
+    const config = useWorkspaceStore.getState().saveWorkspace("My Workspace");
+    useSettingsStore.getState().addSavedWorkspace(config);
+    expect(useSettingsStore.getState().savedWorkspaces).toHaveLength(1);
+    expect(useSettingsStore.getState().savedWorkspaces[0].name).toBe(
+      "My Workspace",
+    );
+  });
+
+  it("should replace workspace with same id", () => {
+    const config = useWorkspaceStore.getState().saveWorkspace("V1");
+    useSettingsStore.getState().addSavedWorkspace(config);
+
+    const updated = { ...config, name: "V2" };
+    useSettingsStore.getState().addSavedWorkspace(updated);
+
+    expect(useSettingsStore.getState().savedWorkspaces).toHaveLength(1);
+    expect(useSettingsStore.getState().savedWorkspaces[0].name).toBe("V2");
+  });
+
+  it("should remove a saved workspace", () => {
+    const config = useWorkspaceStore.getState().saveWorkspace("Delete Me");
+    useSettingsStore.getState().addSavedWorkspace(config);
+    expect(useSettingsStore.getState().savedWorkspaces).toHaveLength(1);
+
+    useSettingsStore.getState().removeSavedWorkspace(config.id);
+    expect(useSettingsStore.getState().savedWorkspaces).toHaveLength(0);
+  });
+
+  it("should rename a saved workspace", () => {
+    const config = useWorkspaceStore.getState().saveWorkspace("Old Name");
+    useSettingsStore.getState().addSavedWorkspace(config);
+
+    useSettingsStore.getState().renameSavedWorkspace(config.id, "New Name");
+    expect(useSettingsStore.getState().savedWorkspaces[0].name).toBe(
+      "New Name",
+    );
   });
 });

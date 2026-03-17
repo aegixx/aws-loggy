@@ -87,6 +87,9 @@ interface SettingsStore {
   // Time presets (null = use defaults)
   timePresets: TimePreset[] | null;
 
+  // Saved workspace configurations
+  savedWorkspaces: import("../types/workspace").WorkspaceConfig[];
+
   // Actions
   setTheme: (theme: Theme) => void;
   setLastSelectedLogGroup: (logGroup: string | null) => void;
@@ -118,6 +121,11 @@ interface SettingsStore {
   updateTimePreset: (index: number, preset: TimePreset) => void;
   moveTimePreset: (index: number, direction: "up" | "down") => void;
   resetTimePresets: () => void;
+  addSavedWorkspace: (
+    config: import("../types/workspace").WorkspaceConfig,
+  ) => void;
+  removeSavedWorkspace: (id: string) => void;
+  renameSavedWorkspace: (id: string, name: string) => void;
 }
 
 const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
@@ -270,6 +278,7 @@ export const useSettingsStore = create<SettingsStore>()(
       isSettingsOpen: false,
       autoUpdateEnabled: true,
       timePresets: null,
+      savedWorkspaces: [],
 
       setTheme: (theme) => set({ theme }),
       setLastSelectedLogGroup: (logGroup) =>
@@ -426,10 +435,39 @@ export const useSettingsStore = create<SettingsStore>()(
       },
 
       resetTimePresets: () => set({ timePresets: null }),
+
+      addSavedWorkspace: (config) => {
+        const { savedWorkspaces } = get();
+        // Replace if same id exists, otherwise append
+        const exists = savedWorkspaces.some((w) => w.id === config.id);
+        if (exists) {
+          set({
+            savedWorkspaces: savedWorkspaces.map((w) =>
+              w.id === config.id ? config : w,
+            ),
+          });
+        } else {
+          set({ savedWorkspaces: [...savedWorkspaces, config] });
+        }
+      },
+
+      removeSavedWorkspace: (id) => {
+        set({
+          savedWorkspaces: get().savedWorkspaces.filter((w) => w.id !== id),
+        });
+      },
+
+      renameSavedWorkspace: (id, name) => {
+        set({
+          savedWorkspaces: get().savedWorkspaces.map((w) =>
+            w.id === id ? { ...w, name, updatedAt: Date.now() } : w,
+          ),
+        });
+      },
     }),
     {
       name: "loggy-settings",
-      version: 15,
+      version: 16,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -443,6 +481,7 @@ export const useSettingsStore = create<SettingsStore>()(
         persistedGroupByMode: state.persistedGroupByMode,
         persistedGroupFilter: state.persistedGroupFilter,
         timePresets: state.timePresets,
+        savedWorkspaces: state.savedWorkspaces,
       }),
       migrate: (persisted, version) => {
         // Use chaining pattern: each migration runs if version <= N, then chains to next
@@ -668,6 +707,17 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 15;
         }
 
+        // v15 -> v16: Add savedWorkspaces
+        if (currentVersion <= 15) {
+          data = {
+            ...data,
+            savedWorkspaces:
+              (data.savedWorkspaces as import("../types/workspace").WorkspaceConfig[]) ??
+              [],
+          };
+          currentVersion = 16;
+        }
+
         return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
@@ -681,6 +731,7 @@ export const useSettingsStore = create<SettingsStore>()(
           persistedGroupByMode: string;
           persistedGroupFilter: boolean;
           timePresets: TimePreset[] | null;
+          savedWorkspaces: import("../types/workspace").WorkspaceConfig[];
         };
       },
     },

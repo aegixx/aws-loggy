@@ -43,6 +43,7 @@ See `docs/DESIGN.md` for full architecture documentation.
 - `src/components/GroupHeader.tsx` - Group header component for stream/invocation headers
 - `src/components/UpdateDialog.tsx` - Auto-update dialog with changelog display and release notes link
 - `src/components/TimePresetEditor.tsx` - Time preset editor for Settings dialog
+- `src/components/WorkspaceMenu.tsx` - Workspace save/load/rename/delete dropdown menu
 
 ### Contexts & Hooks
 

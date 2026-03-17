@@ -385,12 +385,30 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
       // Clear action cache
       panelActionsCache.clear();
 
+      // Check which log groups still exist for stale detection
+      const { logGroups } = useConnectionStore.getState();
+      const existingGroupNames = new Set(logGroups.map((g) => g.name));
+
       // Create new panels from config
       const newPanels = new Map<string, PanelState>();
+      const staleLogGroups: string[] = [];
       for (const panelConfig of config.panels) {
         const id = generatePanelId();
         const panel = createPanelState(id);
-        panel.logGroupName = panelConfig.logGroupName;
+
+        // Check if log group still exists
+        if (
+          panelConfig.logGroupName &&
+          !existingGroupNames.has(panelConfig.logGroupName)
+        ) {
+          staleLogGroups.push(panelConfig.logGroupName);
+          // Set the name but mark an error — don't fetch
+          panel.logGroupName = panelConfig.logGroupName;
+          panel.error = `Log group "${panelConfig.logGroupName}" no longer exists`;
+        } else {
+          panel.logGroupName = panelConfig.logGroupName;
+        }
+
         panel.filterText = panelConfig.filterText;
         panel.disabledLevels = new Set(panelConfig.disabledLevels);
         panel.groupByMode = panelConfig.groupByMode;
@@ -412,10 +430,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
         layoutMode: config.layoutMode,
       });
 
-      // Stagger fetches for panels with log groups
+      // Stagger fetches for panels with valid log groups (skip stale ones)
       let delay = 0;
       for (const [id, panel] of newPanels) {
-        if (panel.logGroupName) {
+        if (panel.logGroupName && !panel.error) {
           const actions = getOrCreateActions(id);
           if (delay === 0) {
             actions.fetchLogs(
@@ -434,6 +452,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
           }
           delay += 500;
         }
+      }
+
+      // Log stale warnings
+      if (staleLogGroups.length > 0) {
+        console.warn(
+          `[Workspace] Stale log groups in loaded workspace: ${staleLogGroups.join(", ")}`,
+        );
       }
     },
   };
