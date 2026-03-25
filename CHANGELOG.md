@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.0](https://github.com/aegixx/aws-loggy/compare/v3.10.0...v3.11.0) (2026-03-25)
+
+
+### Features
+
+* add Copy All context menu option for group headers ([#92](https://github.com/aegixx/aws-loggy/issues/92)) ([aa9bd2f](https://github.com/aegixx/aws-loggy/commit/aa9bd2f361cefc04c95c1c466114cea97347abbf))
+
 ## [3.10.0](https://github.com/aegixx/aws-loggy/compare/v3.9.3...v3.10.0) (2026-03-16)
 
 
