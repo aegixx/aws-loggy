@@ -161,10 +161,14 @@ Add the following after the existing `handleContextCopy` callback (around line 6
 ```typescript
 const handleContextCopyAll = useCallback(() => {
   if (contextMenu?.targetGroup) {
-    const messages = contextMenu.targetGroup.logs
-      .map((log) => log.message)
-      .join("\n");
-    navigator.clipboard.writeText(messages);
+    try {
+      const messages = contextMenu.targetGroup.logs
+        .map((log) => log.message)
+        .join("\n");
+      navigator.clipboard.writeText(messages);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
   }
   setContextMenu(null);
 }, [contextMenu]);
@@ -254,3 +258,14 @@ Toggle Demo Mode from the Loggy menu.
 
 1. Right-click a group header and click "Copy" — verify it copies visible (filtered) logs
 2. Select multiple rows and right-click — verify it copies selected rows
+
+## GSTACK REVIEW REPORT
+
+| Review        | Trigger               | Why                             | Runs | Status | Findings                    |
+| ------------- | --------------------- | ------------------------------- | ---- | ------ | --------------------------- |
+| CEO Review    | `/plan-ceo-review`    | Scope & strategy                | 1    | CLEAR  | HOLD SCOPE, 0 critical gaps |
+| Codex Review  | `/codex review`       | Independent 2nd opinion         | 0    | —      | —                           |
+| Eng Review    | `/plan-eng-review`    | Architecture & tests (required) | 0    | —      | —                           |
+| Design Review | `/plan-design-review` | UI/UX gaps                      | 0    | —      | —                           |
+
+**VERDICT:** CEO CLEARED — eng review required before implementation.
