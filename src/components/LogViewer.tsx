@@ -570,30 +570,36 @@ export function LogViewer() {
   );
 
   // Context menu action handlers
-  const handleContextCopy = useCallback(() => {
-    if (contextMenu?.selectedText) {
-      navigator.clipboard.writeText(contextMenu.selectedText);
-    } else if (selectedLogIndices.size > 0) {
-      // Copy multi-selected rows — use logByIndex for negative (group-filter) indices
-      const messages = [...selectedLogIndices]
-        .sort((a, b) => a - b)
-        .map((i) => {
-          if (i >= 0) {
-            return filteredLogs[i]?.message;
-          } else {
-            return logByIndex.get(i)?.message;
-          }
-        })
-        .filter(Boolean)
-        .join("\n");
-      navigator.clipboard.writeText(messages);
-    } else if (contextMenu?.targetGroup) {
-      // Copy all visible messages for the group header
-      const messages = getVisibleMessages(contextMenu.targetGroup);
-      navigator.clipboard.writeText(messages);
-    } else if (contextMenu?.targetLogIndex != null) {
-      // Copy single targeted row — use stored targetLog for negative indices
-      navigator.clipboard.writeText(contextMenu.targetLog?.message || "");
+  const handleContextCopy = useCallback(async () => {
+    try {
+      if (contextMenu?.selectedText) {
+        await navigator.clipboard.writeText(contextMenu.selectedText);
+      } else if (selectedLogIndices.size > 0) {
+        // Copy multi-selected rows — use logByIndex for negative (group-filter) indices
+        const messages = [...selectedLogIndices]
+          .sort((a, b) => a - b)
+          .map((i) => {
+            if (i >= 0) {
+              return filteredLogs[i]?.message;
+            } else {
+              return logByIndex.get(i)?.message;
+            }
+          })
+          .filter(Boolean)
+          .join("\n");
+        await navigator.clipboard.writeText(messages);
+      } else if (contextMenu?.targetGroup) {
+        // Copy all visible messages for the group header
+        const messages = getVisibleMessages(contextMenu.targetGroup);
+        await navigator.clipboard.writeText(messages);
+      } else if (contextMenu?.targetLogIndex != null) {
+        // Copy single targeted row — use stored targetLog for negative indices
+        await navigator.clipboard.writeText(
+          contextMenu.targetLog?.message || "",
+        );
+      }
+    } catch (err) {
+      console.error("Failed to copy:", err);
     }
     setContextMenu(null);
   }, [
@@ -603,6 +609,20 @@ export function LogViewer() {
     logByIndex,
     getVisibleMessages,
   ]);
+
+  const handleContextCopyAll = useCallback(async () => {
+    if (contextMenu?.targetGroup) {
+      try {
+        const messages = contextMenu.targetGroup.logs
+          .map((log) => log.message)
+          .join("\n");
+        await navigator.clipboard.writeText(messages);
+      } catch (err) {
+        console.error("Failed to copy:", err);
+      }
+    }
+    setContextMenu(null);
+  }, [contextMenu]);
 
   const handleFindBy = useCallback(() => {
     if (contextMenu?.selectedText) {
@@ -928,6 +948,8 @@ export function LogViewer() {
           requestId={contextMenu.requestId}
           traceId={contextMenu.traceId}
           clientIP={contextMenu.clientIP}
+          onCopyAll={contextMenu.targetGroup ? handleContextCopyAll : undefined}
+          copyAllCount={contextMenu.targetGroup?.metadata.logCount}
         />
       )}
 

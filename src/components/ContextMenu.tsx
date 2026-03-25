@@ -7,6 +7,8 @@ interface ContextMenuProps {
   isDark: boolean;
   onCopy: () => void;
   copyDisabled?: boolean;
+  onCopyAll?: () => void;
+  copyAllCount?: number;
   onRefresh: () => void;
   onClear: () => void;
   clearDisabled?: boolean;
@@ -38,6 +40,8 @@ export function ContextMenu({
   isDark,
   onCopy,
   copyDisabled,
+  onCopyAll,
+  copyAllCount,
   onRefresh,
   onClear,
   clearDisabled,
@@ -132,6 +136,16 @@ export function ContextMenu({
         <span>{hasTextSelection ? "Copy selection" : "Copy"}</span>
         <span className={shortcutClass}>Cmd+C</span>
       </div>
+
+      {/* Copy All (group headers only) */}
+      {onCopyAll && (
+        <div
+          className={`${menuItemBase} ${menuItemEnabled}`}
+          onClick={() => handleItemClick(onCopyAll)}
+        >
+          <span>Copy All ({copyAllCount ?? 0})</span>
+        </div>
+      )}
 
       {/* Separator */}
       <div className={`border-t my-1 ${separatorClass}`} />
