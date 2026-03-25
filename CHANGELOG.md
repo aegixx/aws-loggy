@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.11.1](https://github.com/aegixx/aws-loggy/compare/v3.11.0...v3.11.1) (2026-03-25)
+
+
+### Documentation
+
+* add design spec for group header Copy All feature ([beb32b6](https://github.com/aegixx/aws-loggy/commit/beb32b6f1e31f78935436071438eeae73e2fe02c))
+* add implementation plan for group header Copy All feature ([dc8d980](https://github.com/aegixx/aws-loggy/commit/dc8d980e8589146eb38fa0cd1e4814f8ca986c6c))
+
 ## [3.11.0](https://github.com/aegixx/aws-loggy/compare/v3.10.0...v3.11.0) (2026-03-25)
 
 
