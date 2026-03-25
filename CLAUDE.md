@@ -126,6 +126,7 @@ Right-click on any log row to access the context menu with the following options
 | Action         | Description                                                    |
 | -------------- | -------------------------------------------------------------- |
 | Copy/Copy sel. | Copy selection (if text selected), multi-selected rows, or row |
+| Copy All       | Copy all logs in group (ignores filters). Group headers only.  |
 | Find "..."     | Open Find dialog with selected text (requires text selection)  |
 | Filter by      | Submenu with filtering options (see below)                     |
 | Refresh        | Reconnect to AWS and re-query logs                             |
