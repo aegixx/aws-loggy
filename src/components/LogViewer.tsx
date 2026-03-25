@@ -604,6 +604,20 @@ export function LogViewer() {
     getVisibleMessages,
   ]);
 
+  const handleContextCopyAll = useCallback(() => {
+    if (contextMenu?.targetGroup) {
+      try {
+        const messages = contextMenu.targetGroup.logs
+          .map((log) => log.message)
+          .join("\n");
+        navigator.clipboard.writeText(messages);
+      } catch (err) {
+        console.error("Failed to copy:", err);
+      }
+    }
+    setContextMenu(null);
+  }, [contextMenu]);
+
   const handleFindBy = useCallback(() => {
     if (contextMenu?.selectedText) {
       findActions.setSearchTerm(contextMenu.selectedText);
@@ -928,6 +942,8 @@ export function LogViewer() {
           requestId={contextMenu.requestId}
           traceId={contextMenu.traceId}
           clientIP={contextMenu.clientIP}
+          onCopyAll={contextMenu.targetGroup ? handleContextCopyAll : undefined}
+          copyAllCount={contextMenu.targetGroup?.metadata.logCount}
         />
       )}
 
