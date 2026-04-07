@@ -11,7 +11,11 @@ import {
 import { MdArrowDropDown } from "react-icons/md";
 import { List, type ListImperativeAPI } from "react-window";
 import { useSystemTheme } from "../hooks/useSystemTheme";
-import { useLogStore } from "../stores/logStore";
+import { useConnectionStore } from "../stores/connectionStore";
+import {
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import type { LogGroup } from "../types";
 
 const ITEM_HEIGHT = 32;
@@ -70,13 +74,10 @@ const LogGroupRow = memo(function LogGroupRow({
 });
 
 export function LogGroupSelector() {
-  const {
-    logGroups,
-    selectedLogGroup,
-    selectLogGroup,
-    isConnected,
-    connectionError,
-  } = useLogStore();
+  const { logGroups, isConnected, connectionError } = useConnectionStore();
+  const panel = useCurrentPanelState();
+  const { selectLogGroup } = useCurrentPanelActions();
+  const selectedLogGroup = panel.logGroupName;
   const isDark = useSystemTheme();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -86,6 +87,15 @@ export function LogGroupSelector() {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<ListImperativeAPI>(null);
+
+  // Auto-focus the input when this is a new panel (no log group selected)
+  useEffect(() => {
+    if (!selectedLogGroup && inputRef.current) {
+      // Small delay to let the DOM settle after panel creation
+      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
 
   // Fuse instance for fuzzy search
   const fuse = useMemo(() => {

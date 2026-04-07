@@ -15,6 +15,7 @@ export class TailPoller implements TailTransport {
   private isPolling = false;
 
   constructor(
+    private panelId: string,
     private logGroupName: string,
     private onNewLogs: (logs: LogEvent[]) => void,
     private onError: (error: unknown) => void,
@@ -97,6 +98,7 @@ export class TailPoller implements TailTransport {
       console.log("[Backend Activity] Polling from timestamp:", lastTimestamp);
 
       const logs = await invoke<LogEvent[]>("fetch_logs", {
+        panelId: this.panelId,
         logGroupName: this.logGroupName,
         startTime: lastTimestamp,
         endTime: null,

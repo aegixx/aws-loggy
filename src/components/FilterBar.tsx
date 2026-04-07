@@ -6,7 +6,10 @@ import {
   MdUnfoldLess,
   MdLayers,
 } from "react-icons/md";
-import { useLogStore } from "../stores/logStore";
+import {
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { useLogGroups } from "../hooks/useLogGroups";
 import { TimeRangePicker } from "./TimeRangePicker";
@@ -18,25 +21,29 @@ import { useSystemTheme } from "../hooks/useSystemTheme";
 const FILTER_DEBOUNCE_MS = 300;
 
 export function FilterBar() {
+  const panel = useCurrentPanelState();
+  const actions = useCurrentPanelActions();
   const {
     filterText,
-    setFilterText,
     disabledLevels,
-    toggleLevel,
     isTailing,
     activeTransport,
+    logs,
+    groupByMode,
+    collapsedGroups,
+    groupFilter,
+  } = panel;
+  const selectedLogGroup = panel.logGroupName;
+  const {
+    setFilterText,
+    toggleLevel,
     clearLogs,
     resetFilters,
-    logs,
-    selectedLogGroup,
-    groupByMode,
     setGroupByMode,
     expandAllGroups,
     collapseAllGroups,
-    collapsedGroups,
-    groupFilter,
     toggleGroupFilter,
-  } = useLogStore();
+  } = actions;
   const { groups, effectiveMode } = useLogGroups();
   const { logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);

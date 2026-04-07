@@ -21,12 +21,32 @@ export interface ParsedLogEvent extends LogEvent {
 }
 
 export interface LiveTailEventPayload {
+  panel_id: string;
   logs: LogEvent[];
   count: number;
 }
 
 export interface LiveTailErrorPayload {
+  panel_id: string;
   message: string;
+}
+
+export interface LiveTailEndedPayload {
+  panel_id: string;
+}
+
+export interface LogsProgressPayload {
+  panel_id: string;
+  fetch_id: number;
+  count: number;
+  size_bytes: number;
+}
+
+export interface LogsTruncatedPayload {
+  panel_id: string;
+  count: number;
+  size_bytes: number;
+  reason: string;
 }
 
 export type GroupByMode = "none" | "stream" | "invocation";
