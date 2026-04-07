@@ -142,15 +142,11 @@ function ProgressBar({
 }
 
 interface StatusBarProps {
-  isCheckingForUpdates?: boolean;
   /** When provided, aggregate stats across these panels (merged mode) */
   mergedPanelIds?: string[];
 }
 
-export function StatusBar({
-  isCheckingForUpdates,
-  mergedPanelIds,
-}: StatusBarProps) {
+export function StatusBar({ mergedPanelIds }: StatusBarProps) {
   const panel = useCurrentPanelState();
   const allPanels = useWorkspaceStore((s) => s.panels);
   const mergedSourceToggles = useWorkspaceStore((s) => s.mergedSourceToggles);
@@ -313,16 +309,6 @@ export function StatusBar({
 
       {/* Right side - cache usage and update check */}
       <div className="flex items-center gap-3">
-        {isCheckingForUpdates && (
-          <div
-            className="flex items-center gap-1.5"
-            role="status"
-            aria-live="polite"
-          >
-            <Spinner />
-            <span className="text-[10px]">Checking for updates...</span>
-          </div>
-        )}
         <ProgressBar
           value={isLoading ? loadingProgress : totalLogs}
           max={maxCount}

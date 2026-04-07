@@ -126,7 +126,7 @@ export function MergedLogGroupSelector({
   const { selectedNames, sourceColorMap, tags } = useMemo(() => {
     const names = new Set<string>();
     const colorMap = new Map<string, number>();
-    const labels: string[] = [];
+    const tags: { label: string; colorIdx: number }[] = [];
     let idx = 0;
     for (const panelId of panelIds) {
       const panel = panels.get(panelId);
@@ -136,26 +136,12 @@ export function MergedLogGroupSelector({
           names.add(panel.logGroupName);
           colorMap.set(panel.logGroupName, idx);
           const parts = panel.logGroupName.split("/");
-          labels.push(parts[parts.length - 1] || panel.logGroupName);
-        }
-        idx++;
-      }
-    }
-    // Build tag data for collapsed display
-    const tags: { label: string; colorIdx: number }[] = [];
-    let tagIdx = 0;
-    for (const panelId of panelIds) {
-      const p = panels.get(panelId);
-      if (p?.logGroupName) {
-        const vis = mergedSourceToggles.get(panelId) !== false;
-        if (vis) {
-          const parts = p.logGroupName.split("/");
           tags.push({
-            label: parts[parts.length - 1] || p.logGroupName,
-            colorIdx: tagIdx,
+            label: parts[parts.length - 1] || panel.logGroupName,
+            colorIdx: idx,
           });
         }
-        tagIdx++;
+        idx++;
       }
     }
     return {

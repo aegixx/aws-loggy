@@ -1,11 +1,13 @@
 import { useGroupStore } from "../stores/groupStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
+import { useUpdateCheck } from "../hooks/useUpdateCheck";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
 export function WorkspaceBar() {
   const isDark = useSystemTheme();
   const timeSyncEnabled = useGroupStore((s) => s.timeSyncEnabled);
   const setTimeSyncEnabled = useGroupStore((s) => s.setTimeSyncEnabled);
+  const { isChecking: isCheckingForUpdates } = useUpdateCheck();
 
   return (
     <div
@@ -17,6 +19,15 @@ export function WorkspaceBar() {
     >
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Update check indicator */}
+      {isCheckingForUpdates && (
+        <span
+          className={`text-[10px] ${isDark ? "text-gray-500" : "text-gray-400"}`}
+        >
+          Checking for updates...
+        </span>
+      )}
 
       {/* Time sync toggle */}
       <button

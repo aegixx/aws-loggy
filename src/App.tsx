@@ -23,10 +23,6 @@ import { useDemoStore } from "./demo/demoStore";
 import { useSystemTheme } from "./hooks/useSystemTheme";
 import "./App.css";
 
-// Initialize group panels in workspaceStore synchronously before first render.
-// Both stores are loaded by this point; this creates panel state for the default group.
-initializeGroups();
-
 interface ToastProps {
   message: string;
   isDark: boolean;
@@ -57,7 +53,17 @@ function Toast({ message, isDark, onDismiss }: ToastProps) {
   );
 }
 
+// Track whether groups have been initialized (survives re-renders, not HMR)
+let groupsInitialized = false;
+
 function App() {
+  // Initialize group panels in workspaceStore synchronously on first render.
+  // Uses module-level flag so it runs exactly once, even in StrictMode.
+  if (!groupsInitialized) {
+    initializeGroups();
+    groupsInitialized = true;
+  }
+
   const {
     initializeAws,
     refreshConnection,

@@ -60,7 +60,7 @@ function TabItem({
   dropPosition,
   onDragOverTab,
   onDragLeaveTab,
-  onDropOnTab,
+  onDropClearIndicator,
 }: {
   panelId: string;
   groupId: string;
@@ -69,7 +69,7 @@ function TabItem({
   dropPosition: "before" | "after" | null;
   onDragOverTab: (panelId: string, side: "before" | "after") => void;
   onDragLeaveTab: () => void;
-  onDropOnTab: (targetPanelId: string) => void;
+  onDropClearIndicator: (targetPanelId: string) => void;
 }) {
   const panel = usePanelState(panelId);
   const setActiveGroupPanel = useGroupStore((s) => s.setActiveGroupPanel);
@@ -123,7 +123,7 @@ function TabItem({
       onDragLeave={onDragLeaveTab}
       onDrop={(e) => {
         e.preventDefault();
-        onDropOnTab(panelId);
+        onDropClearIndicator(panelId);
       }}
       className={`relative flex items-center gap-1.5 px-2.5 h-7 text-xs cursor-pointer transition-colors max-w-48 min-w-0 border-t-2 ${
         isActive
@@ -309,10 +309,11 @@ export function EditorGroupView({
     setDropTarget(null);
   }, []);
 
-  const handleDropOnTab = useCallback((_targetPanelId: string) => {
+  // Clears the visual drop indicator on the tab. The actual drop logic
+  // is in handleTabBarDrop (which fires on the tab bar container and has
+  // access to the drag data via the event).
+  const handleDropClearIndicator = useCallback((_targetPanelId: string) => {
     setDropTarget(null);
-    // Actual drop logic uses the last known dropTarget
-    // (handled in the tab bar's onDrop since we need the drag data)
   }, []);
 
   // Handle the actual tab bar drop (fires on the tab bar container)
@@ -450,7 +451,7 @@ export function EditorGroupView({
               }
               onDragOverTab={handleDragOverTab}
               onDragLeaveTab={handleDragLeaveTab}
-              onDropOnTab={handleDropOnTab}
+              onDropClearIndicator={handleDropClearIndicator}
             />
           ))}
 
