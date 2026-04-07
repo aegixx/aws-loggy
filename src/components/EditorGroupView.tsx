@@ -1,9 +1,12 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useGroupStore } from "../stores/groupStore";
-import { usePanelState } from "../stores/workspaceStore";
-import { GroupContext } from "../contexts/PanelContext";
+import { usePanelState, useWorkspaceStore } from "../stores/workspaceStore";
+import { GroupContext, PanelContext } from "../contexts/PanelContext";
 import { PanelView } from "./PanelView";
 import { MergedPanelView } from "./MergedPanelView";
+import { MergedLogGroupSelector } from "./MergedLogGroupSelector";
+import { StatusBar } from "./StatusBar";
+import { FilterBar } from "./FilterBar";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import type { PanelState } from "../stores/panelSlice";
 import type { LeafNode } from "../types/workspace";
@@ -78,7 +81,12 @@ function TabItem({
   const label = getTabLabel(panel);
 
   const handleClick = useCallback(() => {
-    setActiveGroupPanel(groupId, panelId);
+    // When merged, don't switch active panel (all tabs are active,
+    // and the active panel owns the shared filter state)
+    const leaf = useGroupStore.getState().getLeaf(groupId);
+    if (!leaf?.merged) {
+      setActiveGroupPanel(groupId, panelId);
+    }
     setActiveGroup(groupId);
   }, [groupId, panelId, setActiveGroupPanel, setActiveGroup]);
 
@@ -205,6 +213,31 @@ function detectPaneEdge(e: React.DragEvent, rect: DOMRect): PaneDropEdge {
   if (relY > 1 - edgeThreshold) return "bottom";
 
   return null; // Center area = drop into tab bar (move to group)
+}
+
+// ─── Merged Filter Sync ─────────────────────────────────────────────────────
+// When merged, sync the active panel's filter text and disabled levels to all
+// other panels in the group so the merged view reflects a single unified filter.
+
+function MergedFilterSync({
+  activePanelId,
+  panelIds,
+}: {
+  activePanelId: string;
+  panelIds: string[];
+}) {
+  const activePanel = usePanelState(activePanelId);
+  const { filterText } = activePanel;
+
+  useEffect(() => {
+    const store = useWorkspaceStore.getState();
+    for (const panelId of panelIds) {
+      if (panelId === activePanelId) continue;
+      store.panelAction(panelId).setFilterText(filterText);
+    }
+  }, [activePanelId, panelIds, filterText]);
+
+  return null;
 }
 
 // ─── Editor Group View ──────────────────────────────────────────────────────
@@ -407,7 +440,7 @@ export function EditorGroupView({
               key={panelId}
               panelId={panelId}
               groupId={groupId}
-              isActive={panelId === group.activePanelId}
+              isActive={group.merged || panelId === group.activePanelId}
               isDark={isDark}
               dropPosition={
                 dropTarget?.panelId === panelId ? dropTarget.side : null
@@ -562,9 +595,36 @@ export function EditorGroupView({
           onDrop={handlePaneDrop}
         >
           {group.merged ? (
-            /* Merged mode: chronological view of all tabs in this group */
-            <div className="absolute inset-0">
-              <MergedPanelView scopedPanelIds={group.panelIds} />
+            /* Merged mode: source toggles + filter bar + merged log list */
+            <div className="absolute inset-0 flex flex-col">
+              {/* Sync filter text from active panel to all others */}
+              <MergedFilterSync
+                activePanelId={group.activePanelId}
+                panelIds={group.panelIds}
+              />
+              {/* Multi-select log group typeahead (replaces LogGroupSelector) */}
+              <MergedLogGroupSelector panelIds={group.panelIds} />
+              {/* Filter bar from active panel (text filter, levels, time range) */}
+              <PanelContext.Provider value={group.activePanelId}>
+                <FilterBar hideGroupBy />
+              </PanelContext.Provider>
+              {/* Merged log list */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <MergedPanelView
+                  scopedPanelIds={group.panelIds}
+                  hideFilterBar
+                />
+              </div>
+              {/* Status bar with aggregated stats */}
+              <PanelContext.Provider value={group.activePanelId}>
+                <StatusBar mergedPanelIds={group.panelIds} />
+              </PanelContext.Provider>
+              {/* Keep all panel views mounted (hidden) for state preservation */}
+              {group.panelIds.map((panelId) => (
+                <div key={panelId} className="hidden">
+                  <PanelView panelId={panelId} />
+                </div>
+              ))}
             </div>
           ) : (
             /* Normal mode: show active tab, hide others for state preservation */

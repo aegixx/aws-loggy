@@ -21,20 +21,27 @@ function getShortLabel(logGroupName: string): string {
   return parts[parts.length - 1] || logGroupName;
 }
 
-export function MergedFilterBar() {
+interface MergedFilterBarProps {
+  /** When provided, only show sources from these panels */
+  scopedPanelIds?: string[];
+}
+
+export function MergedFilterBar({ scopedPanelIds }: MergedFilterBarProps = {}) {
   const isDark = useSystemTheme();
-  const panels = useWorkspaceStore((s) => s.panels);
+  const allPanels = useWorkspaceStore((s) => s.panels);
   const mergedSourceToggles = useWorkspaceStore((s) => s.mergedSourceToggles);
   const setMergedSourceToggle = useWorkspaceStore(
     (s) => s.setMergedSourceToggle,
   );
 
-  // Build list of panels with log groups
+  // Build list of panels with log groups (scoped if provided)
   const sources: { panelId: string; logGroupName: string; index: number }[] =
     [];
   let idx = 0;
-  for (const [panelId, panel] of panels) {
-    if (panel.logGroupName) {
+  const panelIds = scopedPanelIds ?? [...allPanels.keys()];
+  for (const panelId of panelIds) {
+    const panel = allPanels.get(panelId);
+    if (panel?.logGroupName) {
       sources.push({ panelId, logGroupName: panel.logGroupName, index: idx });
       idx++;
     }

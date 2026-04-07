@@ -214,9 +214,14 @@ function getNestedFieldValue(
 interface MergedPanelViewProps {
   /** When provided, only merge logs from these panels. Otherwise merge all. */
   scopedPanelIds?: string[];
+  /** When true, skip rendering the MergedFilterBar (caller provides it externally) */
+  hideFilterBar?: boolean;
 }
 
-export function MergedPanelView({ scopedPanelIds }: MergedPanelViewProps) {
+export function MergedPanelView({
+  scopedPanelIds,
+  hideFilterBar,
+}: MergedPanelViewProps) {
   const isDark = useSystemTheme();
   const allPanels = useWorkspaceStore((s) => s.panels);
   const panels = useMemo(() => {
@@ -238,6 +243,7 @@ export function MergedPanelView({ scopedPanelIds }: MergedPanelViewProps) {
   const recomputeGlobalMergedLogs = useWorkspaceStore(
     (s) => s.recomputeMergedLogs,
   );
+  const mergedSourceToggles = useWorkspaceStore((s) => s.mergedSourceToggles);
   const correlationHighlight = useWorkspaceStore((s) => s.correlationHighlight);
 
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -266,14 +272,15 @@ export function MergedPanelView({ scopedPanelIds }: MergedPanelViewProps) {
     if (!scopedPanelIds) return null;
     const panelLogs = new Map<string, ParsedLogEvent[]>();
     for (const [panelId, panel] of panels) {
-      if (panel.logGroupName) {
-        panelLogs.set(panelId, panel.filteredLogs);
-      }
+      if (!panel.logGroupName) continue;
+      // Respect source toggles
+      if (mergedSourceToggles.get(panelId) === false) continue;
+      panelLogs.set(panelId, panel.filteredLogs);
     }
     const refs = mergePanelLogs(panelLogs);
     const keyMap = buildEventKeyMap(panelLogs);
     return { refs, keyMap };
-  }, [scopedPanelIds, panels]);
+  }, [scopedPanelIds, panels, mergedSourceToggles]);
 
   const mergedLogRefs = localMerged?.refs ?? globalMergedLogRefs;
   const mergedEventKeyMap = localMerged?.keyMap ?? globalMergedEventKeyMap;
@@ -365,7 +372,7 @@ export function MergedPanelView({ scopedPanelIds }: MergedPanelViewProps) {
   if (!hasAnyPanelsWithLogGroups) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <MergedFilterBar />
+        {!hideFilterBar && <MergedFilterBar />}
         <div
           className={`flex-1 flex items-center justify-center ${
             isDark ? "text-gray-500" : "text-gray-600"
@@ -380,7 +387,7 @@ export function MergedPanelView({ scopedPanelIds }: MergedPanelViewProps) {
   if (isAnyLoading && !hasAnyLogs) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <MergedFilterBar />
+        {!hideFilterBar && <MergedFilterBar />}
         <div
           className={`flex-1 flex items-center justify-center ${
             isDark ? "text-gray-500" : "text-gray-600"
@@ -413,7 +420,7 @@ export function MergedPanelView({ scopedPanelIds }: MergedPanelViewProps) {
   if (!hasAnyLogs) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <MergedFilterBar />
+        {!hideFilterBar && <MergedFilterBar />}
         <div
           className={`flex-1 flex items-center justify-center ${
             isDark ? "text-gray-500" : "text-gray-600"
@@ -426,8 +433,8 @@ export function MergedPanelView({ scopedPanelIds }: MergedPanelViewProps) {
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <MergedFilterBar />
+    <div className="flex flex-col h-full min-h-0">
+      {!hideFilterBar && <MergedFilterBar />}
       <div
         ref={containerRef}
         className="flex-1 overflow-hidden focus:outline-none relative"

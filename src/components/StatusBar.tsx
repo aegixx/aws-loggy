@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useCurrentPanelState } from "../contexts/PanelContext";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 import {
   useSettingsStore,
   DEFAULT_CACHE_LIMITS,
@@ -142,32 +143,78 @@ function ProgressBar({
 
 interface StatusBarProps {
   isCheckingForUpdates?: boolean;
+  /** When provided, aggregate stats across these panels (merged mode) */
+  mergedPanelIds?: string[];
 }
 
-export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
+export function StatusBar({
+  isCheckingForUpdates,
+  mergedPanelIds,
+}: StatusBarProps) {
   const panel = useCurrentPanelState();
-  const {
-    logs,
-    filteredLogs,
-    isLoading,
-    loadingProgress,
-    loadingSizeBytes,
-    totalSizeBytes,
-    isTailing,
-    isFollowing,
-  } = panel;
-  const selectedLogGroup = panel.logGroupName;
+  const allPanels = useWorkspaceStore((s) => s.panels);
+  const mergedSourceToggles = useWorkspaceStore((s) => s.mergedSourceToggles);
   const { cacheLimits } = useSettingsStore();
   const { isDemoMode } = useDemoStore();
   const isDark = useSystemTheme();
   const { groups, effectiveMode } = useLogGroups();
 
-  if (!selectedLogGroup) {
+  // Aggregate stats across merged panels, or use single panel
+  let totalLogs: number;
+  let shownLogs: number;
+  let isLoading: boolean;
+  let loadingProgress: number;
+  let loadingSizeBytes: number;
+  let totalSizeBytes: number;
+  let isTailing: boolean;
+  let isFollowing: boolean;
+  let hasLogGroup: boolean;
+  let mergedSourceCount = 0;
+
+  if (mergedPanelIds) {
+    totalLogs = 0;
+    shownLogs = 0;
+    isLoading = false;
+    loadingProgress = 0;
+    loadingSizeBytes = 0;
+    totalSizeBytes = 0;
+    isTailing = false;
+    isFollowing = false;
+    hasLogGroup = false;
+
+    for (const panelId of mergedPanelIds) {
+      const p = allPanels.get(panelId);
+      if (!p?.logGroupName) continue;
+      if (mergedSourceToggles.get(panelId) === false) continue;
+      hasLogGroup = true;
+      mergedSourceCount++;
+      totalLogs += p.logs.length;
+      shownLogs += p.filteredLogs.length;
+      totalSizeBytes += p.totalSizeBytes;
+      if (p.isLoading) {
+        isLoading = true;
+        loadingProgress += p.loadingProgress;
+        loadingSizeBytes += p.loadingSizeBytes;
+      }
+      if (p.isTailing) isTailing = true;
+      if (p.isFollowing) isFollowing = true;
+    }
+  } else {
+    totalLogs = panel.logs.length;
+    shownLogs = panel.filteredLogs.length;
+    isLoading = panel.isLoading;
+    loadingProgress = panel.loadingProgress;
+    loadingSizeBytes = panel.loadingSizeBytes;
+    totalSizeBytes = panel.totalSizeBytes;
+    isTailing = panel.isTailing;
+    isFollowing = panel.isFollowing;
+    hasLogGroup = !!panel.logGroupName;
+  }
+
+  if (!hasLogGroup) {
     return null;
   }
 
-  const totalLogs = logs.length;
-  const shownLogs = filteredLogs.length;
   const isFiltered = shownLogs !== totalLogs;
 
   const maxCount = cacheLimits?.maxLogCount ?? DEFAULT_CACHE_LIMITS.maxLogCount;
@@ -238,7 +285,7 @@ export function StatusBar({ isCheckingForUpdates }: StatusBarProps) {
             )}
           </span>
         )}
-        {effectiveMode !== "none" && groups.length > 0 && (
+        {!mergedPanelIds && effectiveMode !== "none" && groups.length > 0 && (
           <span className={isDark ? "text-gray-500" : "text-gray-500"}>
             ({groups.length}{" "}
             {effectiveMode === "invocation" ? "invocations" : "streams"})
