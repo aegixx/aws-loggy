@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.1](https://github.com/aegixx/aws-loggy/compare/v3.12.0...v3.12.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* force polling for live tail until backend supports panel_id ([#97](https://github.com/aegixx/aws-loggy/issues/97)) ([c8d5925](https://github.com/aegixx/aws-loggy/commit/c8d5925eb60c62cffccdc8cbbaaf644b2908ba79))
+
 ## [3.12.0](https://github.com/aegixx/aws-loggy/compare/v3.11.1...v3.12.0) (2026-04-08)
 
 
