@@ -31,12 +31,14 @@ interface LogGroupRowProps {
   onSelect: (name: string) => void;
   onHighlight: (index: number) => void;
   isDark: boolean;
+  optionIdPrefix: string;
 }
 
 const LogGroupRow = memo(function LogGroupRow({
   index,
   style,
   groups,
+  optionIdPrefix,
   highlightedIndex,
   selectedLogGroup,
   onSelect,
@@ -50,7 +52,7 @@ const LogGroupRow = memo(function LogGroupRow({
   return (
     <div
       role="option"
-      id={`log-group-option-${index}`}
+      id={`${optionIdPrefix}-${index}`}
       aria-selected={isSelected}
       style={style}
       className={`px-3 py-1.5 text-sm cursor-pointer truncate flex items-center ${
@@ -82,7 +84,7 @@ export function LogGroupSelector() {
   const selectedLogGroup = panel.logGroupName;
   const isDark = useSystemTheme();
 
-  // Stable per-panel IDs so duplicate panels don't share DOM IDs.
+  // Stable per-panel IDs so duplicate panels don't share DOM IDs
   const inputId = panelId ? `log-group-search-${panelId}` : "log-group-search";
   const listboxId = panelId
     ? `log-group-listbox-${panelId}`
@@ -95,25 +97,6 @@ export function LogGroupSelector() {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<ListImperativeAPI>(null);
-
-  // Auto-focus the input when this is a new panel (no log group selected).
-  // Guard: only steal focus if no other input already has it, so two empty
-  // panels don't fight each other when they both mount simultaneously.
-  useEffect(() => {
-    if (!selectedLogGroup && inputRef.current) {
-      const timer = setTimeout(() => {
-        const active = document.activeElement;
-        const nothingFocused =
-          !active ||
-          active === document.body ||
-          active === document.documentElement;
-        if (nothingFocused) {
-          inputRef.current?.focus();
-        }
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
 
   // Fuse instance for fuzzy search
   const fuse = useMemo(() => {
@@ -258,7 +241,7 @@ export function LogGroupSelector() {
           aria-autocomplete="list"
           aria-activedescendant={
             isOpen && filteredGroups[highlightedIndex]
-              ? `log-group-option-${highlightedIndex}`
+              ? `${inputId}-option-${highlightedIndex}`
               : undefined
           }
           value={isOpen ? searchValue : selectedLogGroup || ""}
@@ -271,6 +254,15 @@ export function LogGroupSelector() {
             setSearchValue("");
             // Defer select() to next tick so React flushes the setSearchValue("") update first
             setTimeout(() => inputRef.current?.select(), 0);
+          }}
+          onBlur={(e) => {
+            // Close dropdown when focus leaves this selector entirely
+            // (but not when clicking an option inside our own dropdown)
+            const related = e.relatedTarget as HTMLElement | null;
+            if (!containerRef.current?.contains(related)) {
+              setIsOpen(false);
+              setSearchValue(selectedLogGroup || "");
+            }
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholderText}
@@ -291,6 +283,8 @@ export function LogGroupSelector() {
           <div
             id={listboxId}
             role="listbox"
+            // Prevent mousedown from blurring the input before the click event fires
+            onMouseDown={(e) => e.preventDefault()}
             className={`absolute top-full left-0 right-0 mt-1 z-50 rounded border shadow-lg overflow-hidden ${
               isDark
                 ? "bg-gray-800 border-gray-700"
@@ -313,6 +307,7 @@ export function LogGroupSelector() {
                 onSelect: handleSelect,
                 onHighlight: handleHighlight,
                 isDark,
+                optionIdPrefix: `${inputId}-option`,
               }}
             />
           </div>
@@ -320,6 +315,7 @@ export function LogGroupSelector() {
 
         {isOpen && filteredGroups.length === 0 && searchValue && (
           <div
+            onMouseDown={(e) => e.preventDefault()}
             className={`absolute top-full left-0 right-0 mt-1 z-50 rounded border shadow-lg px-3 py-2 text-sm ${
               isDark
                 ? "bg-gray-800 border-gray-700 text-gray-400"
