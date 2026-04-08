@@ -227,19 +227,24 @@ function MergedFilterSync({
   panelIds: string[];
 }) {
   const activePanel = usePanelState(activePanelId);
-  const { filterText } = activePanel;
+  const { filterText, disabledLevels } = activePanel;
   // Keep a ref to panelIds so the effect always reads the latest list
   // without re-firing when the array reference changes on store updates.
   const panelIdsRef = useRef(panelIds);
   panelIdsRef.current = panelIds;
+  // Stable key for disabledLevels set to avoid effect churn
+  const levelsKey = [...disabledLevels].sort().join(",");
 
   useEffect(() => {
     const store = useWorkspaceStore.getState();
+    const levels = new Set(levelsKey.split(",").filter(Boolean));
     for (const panelId of panelIdsRef.current) {
       if (panelId === activePanelId) continue;
-      store.panelAction(panelId).setFilterText(filterText);
+      const actions = store.panelAction(panelId);
+      actions.setFilterText(filterText);
+      actions.setDisabledLevels(levels as Set<import("../types").LogLevel>);
     }
-  }, [activePanelId, filterText]);
+  }, [activePanelId, filterText, levelsKey]);
 
   return null;
 }
@@ -273,8 +278,6 @@ export function EditorGroupView({
   // Pane content drag state
   const [paneDropEdge, setPaneDropEdge] = useState<PaneDropEdge>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-
-  if (!group) return null;
 
   const handleAddTab = useCallback(() => {
     addPanelToGroup(groupId);
@@ -413,6 +416,8 @@ export function EditorGroupView({
     },
     [groupId, paneDropEdge],
   );
+
+  if (!group) return null;
 
   return (
     <GroupContext.Provider value={groupId}>

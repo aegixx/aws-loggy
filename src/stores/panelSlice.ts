@@ -58,6 +58,7 @@ export interface PanelActions {
   fetchLogs: (startTime?: number, endTime?: number) => Promise<void>;
   setFilterText: (text: string) => void;
   toggleLevel: (level: LogLevel) => void;
+  setDisabledLevels: (levels: Set<LogLevel>) => void;
   setExpandedLogIndex: (index: number | null) => void;
   setSelectedLogIndex: (index: number | null) => void;
   setSelectedLogIndices: (indices: Set<number>) => void;
@@ -274,7 +275,6 @@ export function createPanelActions(
     },
 
     setFilterText: (text: string) => {
-      console.log(`[Panel ${panelId}] Set filter text:`, text || "(empty)");
       const panel = safeGet();
       const filtered = panel.filterCache.getFilteredLogs(
         panel.logs,
@@ -296,10 +296,8 @@ export function createPanelActions(
       const newDisabled = new Set(panel.disabledLevels);
       if (newDisabled.has(level)) {
         newDisabled.delete(level);
-        console.log(`[Panel ${panelId}] Enable level:`, level);
       } else {
         newDisabled.add(level);
-        console.log(`[Panel ${panelId}] Disable level:`, level);
       }
       const filtered = panel.filterCache.getFilteredLogs(
         panel.logs,
@@ -314,6 +312,22 @@ export function createPanelActions(
         selectedLogIndices: new Set(),
       });
       setPersistedDisabledLevels(newDisabled);
+    },
+
+    setDisabledLevels: (levels: Set<LogLevel>) => {
+      const panel = safeGet();
+      const filtered = panel.filterCache.getFilteredLogs(
+        panel.logs,
+        panel.filterText,
+        levels,
+      );
+      setPanel({
+        disabledLevels: levels,
+        filteredLogs: filtered,
+        expandedLogIndex: null,
+        selectedLogIndex: null,
+        selectedLogIndices: new Set(),
+      });
     },
 
     setExpandedLogIndex: (index: number | null) => {
@@ -337,18 +351,6 @@ export function createPanelActions(
       preset?: string | null,
     ) => {
       const { setPersistedTimeRange } = useSettingsStore.getState();
-      if (range) {
-        const startDate = new Date(range.start).toISOString();
-        const endDate = range.end ? new Date(range.end).toISOString() : "now";
-        console.log(
-          `[Panel ${panelId}] Set time range:`,
-          startDate,
-          "to",
-          endDate,
-        );
-      } else {
-        console.log(`[Panel ${panelId}] Clear time range`);
-      }
       setPanel({ timeRange: range });
       setPersistedTimeRange(range, preset);
       if (range) {
@@ -483,7 +485,6 @@ export function createPanelActions(
     },
 
     clearLogs: () => {
-      console.log(`[Panel ${panelId}] Clear logs`);
       const panel = safeGet();
 
       if (panel.isTailing && panel.tailManager) {
@@ -508,7 +509,6 @@ export function createPanelActions(
     },
 
     resetFilters: () => {
-      console.log(`[Panel ${panelId}] Reset filters`);
       const panel = safeGet();
       const {
         getDefaultDisabledLevels,
