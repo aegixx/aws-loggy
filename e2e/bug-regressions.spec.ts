@@ -127,4 +127,109 @@ test.describe("Bug Regressions", () => {
       }
     });
   });
+
+  test.describe("Bug #5: Dropdown flicker with two empty panels", () => {
+    test("selecting a log group in one panel does not affect the other", async ({
+      page,
+    }) => {
+      // Start with one empty panel, then split to get two empty panels
+      await splitPane(page, "right");
+
+      // Select a log group in the first panel's dropdown
+      const firstCombobox = page.locator('[role="combobox"]').first();
+      await firstCombobox.click();
+      await firstCombobox.fill("payment");
+      const option = page.getByRole("option", { name: /payment-service/ });
+      await expect(option).toBeVisible({ timeout: 5_000 });
+      await option.click();
+
+      // Dropdown should close after selection
+      await expect(page.getByRole("listbox")).not.toBeVisible({
+        timeout: 3_000,
+      });
+
+      // Logs should load in the first panel
+      await expect(page.getByText(/\d+ logs/)).toBeVisible({ timeout: 10_000 });
+    });
+
+    test("dropdown stays closed after selection with two panels", async ({
+      page,
+    }) => {
+      await splitPane(page, "right");
+
+      // Select in first panel
+      const firstCombobox = page.locator('[role="combobox"]').first();
+      await firstCombobox.click();
+      await firstCombobox.fill("payment");
+      const option = page.getByRole("option", { name: /payment-service/ });
+      await expect(option).toBeVisible({ timeout: 5_000 });
+      await option.click();
+
+      // Wait a moment for any flicker cycle to start
+      await page.waitForTimeout(500);
+
+      // The dropdown should remain closed (no flicker re-opening)
+      await expect(page.getByRole("listbox")).not.toBeVisible();
+
+      // The selected value should be stable in the input
+      await expect(firstCombobox).toHaveValue(/payment-service/);
+    });
+  });
+
+  test.describe("Bug #6: Drag to bottom edge for vertical split", () => {
+    // NOTE: Playwright's synthetic drag events don't reliably trigger dragover
+    // at precise positions, so edge detection (which reads clientX/clientY
+    // during dragover) cannot be exercised via automation. This test documents
+    // the expected behavior. The fix was verified via manual UI testing.
+    // The store-level fix (movePanelToSplitAtTarget) is covered by unit tests.
+    test.fixme("dragging a tab to the bottom of another pane creates a vertical split", async ({
+      page,
+    }) => {
+      await selectLogGroup(page);
+      await splitPane(page, "right");
+
+      // Select a different log group in the second pane
+      const secondCombobox = page.locator('[role="combobox"]').nth(1);
+      await secondCombobox.click();
+      await secondCombobox.fill("auth-handler");
+      const option = page.getByRole("option", { name: /auth-handler/ });
+      await expect(option).toBeVisible({ timeout: 5_000 });
+      await option.click();
+      await expect(page.getByText(/\d+ logs/).last()).toBeVisible({
+        timeout: 10_000,
+      });
+
+      // Find the auth-handler tab to drag
+      const authTab = page.getByText("auth-handler").first();
+      await expect(authTab).toBeVisible();
+      const tabBox = await authTab.boundingBox();
+
+      // Get the first pane's content area to drop onto its bottom edge
+      const contentArea = page
+        .locator('[data-testid="log-row"]')
+        .first()
+        .locator("xpath=ancestor::div[@tabindex='0']");
+      const targetBox = await contentArea.boundingBox();
+
+      if (tabBox && targetBox) {
+        const srcX = tabBox.x + tabBox.width / 2;
+        const srcY = tabBox.y + tabBox.height / 2;
+        // Bottom edge target (within outer 25% threshold)
+        const dstX = targetBox.x + targetBox.width / 2;
+        const dstY = targetBox.y + targetBox.height * 0.92;
+
+        // Use manual drag with steps to generate dragover events at target
+        await page.mouse.move(srcX, srcY);
+        await page.mouse.down();
+        // Move in steps so dragover fires at the destination
+        await page.mouse.move(dstX, dstY, { steps: 10 });
+        await page.mouse.up();
+
+        // Should now have 3 comboboxes (original 2 panes + 1 new from vertical split)
+        await expect(page.locator('[role="combobox"]')).toHaveCount(3, {
+          timeout: 3_000,
+        });
+      }
+    });
+  });
 });

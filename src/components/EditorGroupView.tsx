@@ -415,11 +415,21 @@ export function EditorGroupView({
       const store = useGroupStore.getState();
 
       if (edge) {
-        // Drop on an edge = split panel into new group in that direction
+        // Drop on an edge = split THIS (target) pane and place the dragged tab
+        // adjacent to it in the given direction.
+        // "left"/"top" → dragged panel appears before; "right"/"bottom" → after.
         const splitDir =
           edge === "left" || edge === "right" ? "horizontal" : "vertical";
+        const position: "before" | "after" =
+          edge === "left" || edge === "top" ? "before" : "after";
 
-        store.splitPanelToNewGroup(data.panelId, data.groupId, splitDir);
+        store.movePanelToSplitAtTarget(
+          data.panelId,
+          data.groupId,
+          groupId,
+          splitDir,
+          position,
+        );
       } else {
         // Drop in center = move tab to this group
         if (data.groupId !== groupId) {

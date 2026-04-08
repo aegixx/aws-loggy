@@ -15,6 +15,7 @@ import { useConnectionStore } from "../stores/connectionStore";
 import {
   useCurrentPanelState,
   useCurrentPanelActions,
+  usePanelId,
 } from "../contexts/PanelContext";
 import type { LogGroup } from "../types";
 
@@ -76,9 +77,16 @@ const LogGroupRow = memo(function LogGroupRow({
 export function LogGroupSelector() {
   const { logGroups, isConnected, connectionError } = useConnectionStore();
   const panel = useCurrentPanelState();
+  const panelId = usePanelId();
   const { selectLogGroup } = useCurrentPanelActions();
   const selectedLogGroup = panel.logGroupName;
   const isDark = useSystemTheme();
+
+  // Stable per-panel IDs so duplicate panels don't share DOM IDs.
+  const inputId = panelId ? `log-group-search-${panelId}` : "log-group-search";
+  const listboxId = panelId
+    ? `log-group-listbox-${panelId}`
+    : "log-group-listbox";
 
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState(selectedLogGroup ?? "");
@@ -88,11 +96,21 @@ export function LogGroupSelector() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<ListImperativeAPI>(null);
 
-  // Auto-focus the input when this is a new panel (no log group selected)
+  // Auto-focus the input when this is a new panel (no log group selected).
+  // Guard: only steal focus if no other input already has it, so two empty
+  // panels don't fight each other when they both mount simultaneously.
   useEffect(() => {
     if (!selectedLogGroup && inputRef.current) {
-      // Small delay to let the DOM settle after panel creation
-      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      const timer = setTimeout(() => {
+        const active = document.activeElement;
+        const nothingFocused =
+          !active ||
+          active === document.body ||
+          active === document.documentElement;
+        if (nothingFocused) {
+          inputRef.current?.focus();
+        }
+      }, 50);
       return () => clearTimeout(timer);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
@@ -224,7 +242,7 @@ export function LogGroupSelector() {
   return (
     <div ref={containerRef} className="flex items-center gap-2 relative">
       <label
-        htmlFor="log-group-search"
+        htmlFor={inputId}
         className={`text-sm whitespace-nowrap ${isDark ? "text-gray-400" : "text-gray-600"}`}
       >
         Log Group:
@@ -232,11 +250,11 @@ export function LogGroupSelector() {
       <div className="relative flex-1">
         <input
           ref={inputRef}
-          id="log-group-search"
+          id={inputId}
           type="text"
           role="combobox"
           aria-expanded={isOpen}
-          aria-controls="log-group-listbox"
+          aria-controls={listboxId}
           aria-autocomplete="list"
           aria-activedescendant={
             isOpen && filteredGroups[highlightedIndex]
@@ -271,7 +289,7 @@ export function LogGroupSelector() {
 
         {isOpen && filteredGroups.length > 0 && (
           <div
-            id="log-group-listbox"
+            id={listboxId}
             role="listbox"
             className={`absolute top-full left-0 right-0 mt-1 z-50 rounded border shadow-lg overflow-hidden ${
               isDark

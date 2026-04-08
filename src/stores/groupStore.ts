@@ -159,6 +159,13 @@ export interface GroupStore {
     fromGroupId: string,
     direction: SplitDirection,
   ) => void;
+  movePanelToSplitAtTarget: (
+    panelId: string,
+    fromGroupId: string,
+    targetGroupId: string,
+    direction: SplitDirection,
+    position: "before" | "after",
+  ) => void;
 
   // Resize
   resizeSplit: (splitId: string, sizes: number[]) => void;
@@ -484,6 +491,72 @@ export const useGroupStore = create<GroupStore>()(
             };
 
             newRoot = replaceNode(newRoot, fromGroupId, splitNode);
+          }
+
+          set({ root: newRoot, activeGroupId: newLeaf.id });
+        },
+
+        movePanelToSplitAtTarget: (
+          panelId: string,
+          fromGroupId: string,
+          targetGroupId: string,
+          direction: SplitDirection,
+          position: "before" | "after",
+        ) => {
+          const state = get();
+          const totalLeaves = collectLeaves(state.root).length;
+          if (totalLeaves >= MAX_LEAVES) return;
+
+          const fromLeaf = findLeaf(state.root, fromGroupId);
+          const targetLeaf = findLeaf(state.root, targetGroupId);
+          if (!fromLeaf || !targetLeaf) return;
+
+          // Remove panel from source group
+          const newFromPanelIds = fromLeaf.panelIds.filter(
+            (id) => id !== panelId,
+          );
+
+          // Create new leaf at target position with the dragged panel
+          const newLeaf: LeafNode = {
+            type: "leaf",
+            id: generateId("leaf"),
+            panelIds: [panelId],
+            activePanelId: panelId,
+            merged: false,
+          };
+
+          // Split the target leaf: dragged panel goes before or after target
+          const splitChildren: [LeafNode, LeafNode] =
+            position === "after"
+              ? [targetLeaf, newLeaf]
+              : [newLeaf, targetLeaf];
+
+          const splitNode: SplitNode = {
+            type: "split",
+            id: generateId("split"),
+            direction,
+            children: splitChildren,
+            sizes: [0.5, 0.5],
+          };
+
+          let newRoot = state.root;
+
+          // Replace target leaf with the new split node
+          newRoot = replaceNode(newRoot, targetGroupId, splitNode);
+
+          // Update or remove source leaf
+          if (newFromPanelIds.length === 0) {
+            newRoot = removeNode(newRoot, fromGroupId) ?? newRoot;
+          } else {
+            const newFromActive =
+              panelId === fromLeaf.activePanelId
+                ? newFromPanelIds[0]
+                : fromLeaf.activePanelId;
+            newRoot = updateLeaf(newRoot, fromGroupId, (l) => ({
+              ...l,
+              panelIds: newFromPanelIds,
+              activePanelId: newFromActive,
+            }));
           }
 
           set({ root: newRoot, activeGroupId: newLeaf.id });
