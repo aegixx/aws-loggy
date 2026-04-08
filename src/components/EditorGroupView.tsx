@@ -228,17 +228,18 @@ function MergedFilterSync({
 }) {
   const activePanel = usePanelState(activePanelId);
   const { filterText } = activePanel;
-  // Stable key for panelIds to avoid effect re-firing on every store update
-  const panelIdsKey = panelIds.join(",");
+  // Keep a ref to panelIds so the effect always reads the latest list
+  // without re-firing when the array reference changes on store updates.
+  const panelIdsRef = useRef(panelIds);
+  panelIdsRef.current = panelIds;
 
   useEffect(() => {
-    const ids = panelIdsKey.split(",");
     const store = useWorkspaceStore.getState();
-    for (const panelId of ids) {
+    for (const panelId of panelIdsRef.current) {
       if (panelId === activePanelId) continue;
       store.panelAction(panelId).setFilterText(filterText);
     }
-  }, [activePanelId, panelIdsKey, filterText]);
+  }, [activePanelId, filterText]);
 
   return null;
 }

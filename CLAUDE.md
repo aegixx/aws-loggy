@@ -15,8 +15,11 @@ See `docs/DESIGN.md` for full architecture documentation.
 ## Key Files
 
 - `src-tauri/src/lib.rs` - Rust backend with AWS CloudWatch integration
-- `src/stores/logStore.ts` - Zustand store with log/connection state
-- `src/stores/settingsStore.ts` - Zustand store with persisted settings (colors, patterns, time presets)
+- `src/stores/groupStore.ts` - Editor group layout tree, split/merge operations (zustand/persist)
+- `src/stores/workspaceStore.ts` - Panel state, merged view computation, correlation
+- `src/stores/panelSlice.ts` - Per-panel state factory (logs, filters, tail, grouping)
+- `src/stores/connectionStore.ts` - AWS connection state, log groups
+- `src/stores/settingsStore.ts` - Persisted settings (colors, patterns, time presets)
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/LogGroupSelector.tsx` - Fuzzy search log group selector (Fuse.js + virtualized dropdown)
 - `src/components/FilterBar.tsx` - Filter input and level toggles
@@ -80,7 +83,7 @@ npm run test:watch # Run in watch mode
 
 ### Modifying log parsing
 
-- Edit `parseLogLevel()` in `src/stores/logStore.ts`
+- Edit `parseLogLevel()` in `src/utils/logParsing.ts`
 - Default log levels: `error`, `warn`, `info`, `debug`, `trace`, `system`, `unknown`
 - Log levels are configurable in Settings (colors, keywords, default visibility)
 

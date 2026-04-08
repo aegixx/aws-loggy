@@ -192,14 +192,18 @@ export function MergedLogGroupSelector({
   }, [isOpen]);
 
   // Toggle a log group: find the panel with this name and toggle its source visibility
+  // Toggle all panels with this log group name (handles duplicate log groups)
   const handleToggle = useCallback(
     (logGroupName: string) => {
+      // Determine new visibility from the first matching panel
+      let newVisible: boolean | null = null;
       for (const panelId of panelIds) {
         const panel = panels.get(panelId);
         if (panel?.logGroupName === logGroupName) {
-          const isVisible = mergedSourceToggles.get(panelId) !== false;
-          setMergedSourceToggle(panelId, !isVisible);
-          break;
+          if (newVisible === null) {
+            newVisible = mergedSourceToggles.get(panelId) === false;
+          }
+          setMergedSourceToggle(panelId, newVisible);
         }
       }
     },
