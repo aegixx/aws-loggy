@@ -1,5 +1,29 @@
 # Changelog
 
+## [3.12.0](https://github.com/aegixx/aws-loggy/compare/v3.11.1...v3.12.0) (2026-04-07)
+
+
+### Features
+
+* VS Code-style editor groups with recursive split layout
+* Per-group tab bar with drag-to-reorder and cross-group tab moves
+* Split panes horizontally (Cmd+D) or vertically (Cmd+Shift+D) in place
+* Resizable split panes with draggable dividers (200px minimum)
+* Drag tab to pane edges to create new splits with visual drop zones
+* Per-group merged view combining tabs into chronological timeline
+* Multi-select log group typeahead dropdown with color-coded tags in merged mode
+* Unified filter in merged mode (single filter applies to all merged sources)
+* New menu items: New Tab, Close Tab, Next/Previous Tab, Split Right/Down, Merge Tabs, Toggle Time Sync
+* Auto-focus log group selector on new tab or split
+* SVG toolbar icons replacing text labels
+
+### Architecture
+
+* Decomposed monolithic logStore into groupStore + workspaceStore + panelSlice + connectionStore
+* Recursive LayoutNode tree (LeafNode | SplitNode) replaces flat panel ordering
+* groupStore owns layout tree and group operations with zustand/persist
+* workspaceStore slimmed to panel state, merged view computation, and correlation
+
 ## [3.11.1](https://github.com/aegixx/aws-loggy/compare/v3.11.0...v3.11.1) (2026-03-25)
 
 

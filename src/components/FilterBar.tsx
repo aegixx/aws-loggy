@@ -6,7 +6,10 @@ import {
   MdUnfoldLess,
   MdLayers,
 } from "react-icons/md";
-import { useLogStore } from "../stores/logStore";
+import {
+  useCurrentPanelState,
+  useCurrentPanelActions,
+} from "../contexts/PanelContext";
 import { useSettingsStore, getSortedLogLevels } from "../stores/settingsStore";
 import { useLogGroups } from "../hooks/useLogGroups";
 import { TimeRangePicker } from "./TimeRangePicker";
@@ -17,26 +20,30 @@ import { useSystemTheme } from "../hooks/useSystemTheme";
 /** Delay in ms before filter text changes trigger log filtering */
 const FILTER_DEBOUNCE_MS = 300;
 
-export function FilterBar() {
+export function FilterBar({ hideGroupBy }: { hideGroupBy?: boolean } = {}) {
+  const panel = useCurrentPanelState();
+  const actions = useCurrentPanelActions();
   const {
     filterText,
-    setFilterText,
     disabledLevels,
-    toggleLevel,
     isTailing,
     activeTransport,
+    logs,
+    groupByMode,
+    collapsedGroups,
+    groupFilter,
+  } = panel;
+  const selectedLogGroup = panel.logGroupName;
+  const {
+    setFilterText,
+    toggleLevel,
     clearLogs,
     resetFilters,
-    logs,
-    selectedLogGroup,
-    groupByMode,
     setGroupByMode,
     expandAllGroups,
     collapseAllGroups,
-    collapsedGroups,
-    groupFilter,
     toggleGroupFilter,
-  } = useLogStore();
+  } = actions;
   const { groups, effectiveMode } = useLogGroups();
   const { logLevels } = useSettingsStore();
   const sortedLevels = getSortedLogLevels(logLevels);
@@ -235,50 +242,54 @@ export function FilterBar() {
           );
         })}
 
-        {/* Group by dropdown */}
-        <span
-          className={`text-xs mr-1 ml-2 ${isDark ? "text-gray-500" : "text-gray-600"}`}
-        >
-          Group by:
-        </span>
-        <select
-          value={groupByMode}
-          onChange={(e) =>
-            setGroupByMode(e.target.value as GroupByMode | "auto")
-          }
-          title="Group by"
-          className={`px-2 py-1 rounded text-sm border cursor-pointer ${
-            isDark
-              ? "bg-gray-700 border-gray-600 text-gray-300"
-              : "bg-gray-200 border-gray-300 text-gray-700"
-          }`}
-        >
-          <option value="none">None</option>
-          <option value="stream">Stream</option>
-          {selectedLogGroup?.startsWith("/aws/lambda/") && (
-            <option value="invocation">Invocation</option>
-          )}
-        </select>
-
-        {/* Expand/Collapse all buttons (only when grouping is active) */}
-        {effectiveMode !== "none" && groups.length > 0 && (
+        {/* Group by dropdown (hidden in merged mode) */}
+        {!hideGroupBy && (
           <>
-            <button
-              onClick={expandAllGroups}
-              disabled={collapsedGroups.size === 0}
-              className={`p-1 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
-              title="Expand all groups"
+            <span
+              className={`text-xs mr-1 ml-2 ${isDark ? "text-gray-500" : "text-gray-600"}`}
             >
-              <MdUnfoldMore className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => collapseAllGroups(groups.map((g) => g.id))}
-              disabled={collapsedGroups.size === groups.length}
-              className={`p-1 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
-              title="Collapse all groups"
+              Group by:
+            </span>
+            <select
+              value={groupByMode}
+              onChange={(e) =>
+                setGroupByMode(e.target.value as GroupByMode | "auto")
+              }
+              title="Group by"
+              className={`px-2 py-1 rounded text-sm border cursor-pointer ${
+                isDark
+                  ? "bg-gray-700 border-gray-600 text-gray-300"
+                  : "bg-gray-200 border-gray-300 text-gray-700"
+              }`}
             >
-              <MdUnfoldLess className="w-4 h-4" />
-            </button>
+              <option value="none">None</option>
+              <option value="stream">Stream</option>
+              {selectedLogGroup?.startsWith("/aws/lambda/") && (
+                <option value="invocation">Invocation</option>
+              )}
+            </select>
+
+            {/* Expand/Collapse all buttons (only when grouping is active) */}
+            {effectiveMode !== "none" && groups.length > 0 && (
+              <>
+                <button
+                  onClick={expandAllGroups}
+                  disabled={collapsedGroups.size === 0}
+                  className={`p-1 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
+                  title="Expand all groups"
+                >
+                  <MdUnfoldMore className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => collapseAllGroups(groups.map((g) => g.id))}
+                  disabled={collapsedGroups.size === groups.length}
+                  className={`p-1 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
+                  title="Collapse all groups"
+                >
+                  <MdUnfoldLess className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </>
         )}
 

@@ -1,5 +1,4 @@
 import { invoke } from "../demo/demoInvoke";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { TailPoller } from "./TailPoller";
 import { DemoTailTransport } from "../demo/DemoTailTransport";
 import { getDemoMode } from "../demo/demoStore";
@@ -18,7 +17,7 @@ export class LiveTailManager {
   private transport: TailTransport | null = null;
   private transportType: TransportType | null = null;
   private lastCleanTimestamp: number | null = null;
-  private unlisteners: UnlistenFn[] = [];
+  private panelId: string;
   private logGroupName: string;
   private logGroupArn: string | null;
   private onNewLogs: (logs: LogEvent[]) => void;
@@ -28,6 +27,7 @@ export class LiveTailManager {
   private getLastLogTimestamp: () => number | null;
 
   constructor(options: {
+    panelId: string;
     logGroupName: string;
     logGroupArn: string | null;
     onNewLogs: (logs: LogEvent[]) => void;
@@ -36,6 +36,7 @@ export class LiveTailManager {
     onToast: (message: string) => void;
     getLastLogTimestamp: () => number | null;
   }) {
+    this.panelId = options.panelId;
     this.logGroupName = options.logGroupName;
     this.logGroupArn = options.logGroupArn;
     this.onNewLogs = options.onNewLogs;
@@ -74,7 +75,7 @@ export class LiveTailManager {
 
   stop(): void {
     if (this.transportType === "stream") {
-      invoke("stop_live_tail").catch((e) =>
+      invoke("stop_live_tail", { panelId: this.panelId }).catch((e) =>
         console.debug("[LiveTailManager] stop_live_tail:", e),
       );
     }
@@ -82,6 +83,11 @@ export class LiveTailManager {
       this.transport.stop();
     }
     this.cleanup();
+  }
+
+  /** Get the panel ID this manager is associated with */
+  getPanelId(): string {
+    return this.panelId;
   }
 
   isActive(): boolean {
@@ -96,55 +102,50 @@ export class LiveTailManager {
     this.transport?.resetStartTimestamp();
   }
 
+  /**
+   * Handle a live tail event dispatched from App.tsx's global listener.
+   * Called instead of per-instance listen() to support multi-panel routing.
+   */
+  onTailEvent(payload: LiveTailEventPayload): void {
+    const { logs, count } = payload;
+
+    // Sampling detection: if we receive exactly 500 events, sampling is likely
+    if (count >= SAMPLING_THRESHOLD) {
+      console.log(
+        "[LiveTailManager] Sampling detected (count:",
+        count,
+        "), switching to polling",
+      );
+      this.switchToPolling();
+      return;
+    }
+
+    // Track last clean timestamp for sampling fallback
+    if (logs.length > 0) {
+      this.lastCleanTimestamp = Math.max(...logs.map((l) => l.timestamp));
+    }
+
+    if (logs.length > 0) {
+      this.onNewLogs(logs);
+    }
+  }
+
+  /** Handle a live tail error dispatched from App.tsx's global listener. */
+  onTailError(payload: LiveTailErrorPayload): void {
+    console.error("[LiveTailManager] Stream error:", payload.message);
+    this.handleStreamError(payload.message);
+  }
+
+  /** Handle a live tail ended event dispatched from App.tsx's global listener. */
+  onTailEnded(): void {
+    console.log("[LiveTailManager] Stream ended (timeout), reconnecting");
+    this.handleStreamEnded();
+  }
+
   private async startStream(): Promise<void> {
-    // Set up event listeners before starting the stream
-    const unlistenEvent = await listen<LiveTailEventPayload>(
-      "live-tail-event",
-      (event) => {
-        const { logs, count } = event.payload;
-
-        // Sampling detection: if we receive exactly 500 events, sampling is likely
-        if (count >= SAMPLING_THRESHOLD) {
-          console.log(
-            "[LiveTailManager] Sampling detected (count:",
-            count,
-            "), switching to polling",
-          );
-          this.switchToPolling();
-          return;
-        }
-
-        // Track last clean timestamp for sampling fallback
-        if (logs.length > 0) {
-          this.lastCleanTimestamp = Math.max(...logs.map((l) => l.timestamp));
-        }
-
-        if (logs.length > 0) {
-          this.onNewLogs(logs);
-        }
-      },
-    );
-
-    const unlistenError = await listen<LiveTailErrorPayload>(
-      "live-tail-error",
-      (event) => {
-        console.error("[LiveTailManager] Stream error:", event.payload.message);
-        this.handleStreamError(event.payload.message);
-      },
-    );
-
-    const unlistenEnded = await listen<Record<string, never>>(
-      "live-tail-ended",
-      () => {
-        console.log("[LiveTailManager] Stream ended (timeout), reconnecting");
-        this.handleStreamEnded();
-      },
-    );
-
-    this.unlisteners = [unlistenEvent, unlistenError, unlistenEnded];
-
     // Start the stream on the backend (uses ARN — required by StartLiveTail API)
     await invoke("start_live_tail", {
+      panelId: this.panelId,
       logGroupArn: this.logGroupArn,
       filterPattern: null,
     });
@@ -161,9 +162,6 @@ export class LiveTailManager {
   }
 
   private startPolling(fromTimestamp: number | null): void {
-    // Clean up any existing stream listeners
-    this.cleanupListeners();
-
     const getTimestamp = fromTimestamp
       ? (() => {
           let used = false;
@@ -178,6 +176,7 @@ export class LiveTailManager {
       : this.getLastLogTimestamp;
 
     const poller = new TailPoller(
+      this.panelId,
       this.logGroupName,
       this.onNewLogs,
       this.onError,
@@ -192,7 +191,7 @@ export class LiveTailManager {
 
   private async switchToPolling(): Promise<void> {
     // Stop the stream
-    invoke("stop_live_tail").catch((e) =>
+    invoke("stop_live_tail", { panelId: this.panelId }).catch((e) =>
       console.debug("[LiveTailManager] stop_live_tail:", e),
     );
 
@@ -208,9 +207,6 @@ export class LiveTailManager {
   }
 
   private handleStreamError(message: string): void {
-    // Clean up listeners first to prevent re-entrant error handling
-    this.cleanupListeners();
-
     const lower = message.toLowerCase();
     const isConnectionOrCredentialError =
       lower.includes("expired") ||
@@ -239,7 +235,6 @@ export class LiveTailManager {
 
   private async handleStreamEnded(): Promise<void> {
     // 3-hour timeout — auto-reconnect
-    this.cleanupListeners();
     try {
       await this.startStream();
       this.onToast("Live stream reconnected");
@@ -249,15 +244,7 @@ export class LiveTailManager {
     }
   }
 
-  private cleanupListeners(): void {
-    for (const unlisten of this.unlisteners) {
-      unlisten();
-    }
-    this.unlisteners = [];
-  }
-
   private cleanup(): void {
-    this.cleanupListeners();
     this.transport = null;
     this.transportType = null;
     this.lastCleanTimestamp = null;

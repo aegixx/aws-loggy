@@ -1463,6 +1463,46 @@ pub fn run() {
                 .checked(false)
                 .build(app)?;
 
+            // Tab & pane management items
+            let new_tab_item = MenuItemBuilder::new("New Tab")
+                .id("new-tab")
+                .accelerator("CmdOrCtrl+T")
+                .build(app)?;
+
+            let close_tab_item = MenuItemBuilder::new("Close Tab")
+                .id("close-tab")
+                .accelerator("CmdOrCtrl+W")
+                .build(app)?;
+
+            let next_tab_item = MenuItemBuilder::new("Next Tab")
+                .id("next-tab")
+                .accelerator("CmdOrCtrl+Shift+]")
+                .build(app)?;
+
+            let prev_tab_item = MenuItemBuilder::new("Previous Tab")
+                .id("prev-tab")
+                .accelerator("CmdOrCtrl+Shift+[")
+                .build(app)?;
+
+            let split_right_item = MenuItemBuilder::new("Split Right")
+                .id("split-right")
+                .accelerator("CmdOrCtrl+D")
+                .build(app)?;
+
+            let split_down_item = MenuItemBuilder::new("Split Down")
+                .id("split-down")
+                .accelerator("CmdOrCtrl+Shift+D")
+                .build(app)?;
+
+            let merge_tabs_item = MenuItemBuilder::new("Merge Tabs")
+                .id("merge-tabs")
+                .accelerator("CmdOrCtrl+Shift+M")
+                .build(app)?;
+
+            let toggle_time_sync_item = MenuItemBuilder::new("Toggle Time Sync")
+                .id("toggle-time-sync")
+                .build(app)?;
+
             // App submenu (macOS application menu)
             let app_submenu = SubmenuBuilder::new(app, "Loggy")
                 .item(&about_item)
@@ -1498,6 +1538,16 @@ pub fn run() {
                 .item(&refresh_item)
                 .item(&clear_item)
                 .item(&focus_filter_item)
+                .separator()
+                .item(&new_tab_item)
+                .item(&close_tab_item)
+                .item(&next_tab_item)
+                .item(&prev_tab_item)
+                .separator()
+                .item(&split_right_item)
+                .item(&split_down_item)
+                .item(&merge_tabs_item)
+                .item(&toggle_time_sync_item)
                 .separator()
                 .item(&theme_submenu)
                 .separator()
@@ -1584,6 +1634,14 @@ pub fn run() {
             let theme_dark_id = theme_dark_item.id().clone();
             let theme_light_id = theme_light_item.id().clone();
             let theme_system_id = theme_system_item.id().clone();
+            let new_tab_id = new_tab_item.id().clone();
+            let close_tab_id = close_tab_item.id().clone();
+            let next_tab_id = next_tab_item.id().clone();
+            let prev_tab_id = prev_tab_item.id().clone();
+            let split_right_id = split_right_item.id().clone();
+            let split_down_id = split_down_item.id().clone();
+            let merge_tabs_id = merge_tabs_item.id().clone();
+            let toggle_time_sync_id = toggle_time_sync_item.id().clone();
 
             // Clone CheckMenuItems for direct access in event handler
             // (menu.get() doesn't search submenus)
@@ -1627,6 +1685,22 @@ pub fn run() {
                 } else if *event.id() == demo_mode_id {
                     let is_checked = demo_mode.is_checked().unwrap_or(false);
                     app_handle.emit("toggle-demo-mode", is_checked).ok();
+                } else if *event.id() == new_tab_id {
+                    app_handle.emit("new-tab", ()).ok();
+                } else if *event.id() == close_tab_id {
+                    app_handle.emit("close-tab", ()).ok();
+                } else if *event.id() == next_tab_id {
+                    app_handle.emit("next-tab", ()).ok();
+                } else if *event.id() == prev_tab_id {
+                    app_handle.emit("prev-tab", ()).ok();
+                } else if *event.id() == split_right_id {
+                    app_handle.emit("split-right", ()).ok();
+                } else if *event.id() == split_down_id {
+                    app_handle.emit("split-down", ()).ok();
+                } else if *event.id() == merge_tabs_id {
+                    app_handle.emit("merge-tabs", ()).ok();
+                } else if *event.id() == toggle_time_sync_id {
+                    app_handle.emit("toggle-time-sync", ()).ok();
                 }
             });
 
