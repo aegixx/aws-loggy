@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.0](https://github.com/aegixx/aws-loggy/compare/v3.11.1...v3.12.0) (2026-04-08)
+
+
+### Features
+
+* VS Code-style editor groups with recursive split layout ([#95](https://github.com/aegixx/aws-loggy/issues/95)) ([36ab296](https://github.com/aegixx/aws-loggy/commit/36ab2961df8cc95ba52bc7566d929db9b4987563))
+
 ## [3.12.0](https://github.com/aegixx/aws-loggy/compare/v3.11.1...v3.12.0) (2026-04-07)
 
 
