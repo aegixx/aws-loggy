@@ -3,7 +3,7 @@ import {
   useWorkspaceStore,
   usePanelState as _usePanelState,
 } from "../stores/workspaceStore";
-import { useGroupStore } from "../stores/groupStore";
+import { useGroupStore, findLeaf as findLeafById } from "../stores/groupStore";
 import type { PanelState, PanelActions } from "../stores/panelSlice";
 
 /**
@@ -34,9 +34,11 @@ export function useGroupId(): string {
  */
 export function useCurrentPanelId(): string {
   const contextId = usePanelId();
-  const activeId = useGroupStore((s) => {
-    return s.getActivePanelId();
-  });
+  // Inline the leaf traversal so Zustand can detect changes to activePanelId
+  // (calling a derived method like getActivePanelId() inside a selector is opaque)
+  const activeId = useGroupStore(
+    (s) => findLeafById(s.root, s.activeGroupId)?.activePanelId ?? "",
+  );
   return contextId || activeId;
 }
 

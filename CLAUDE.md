@@ -20,6 +20,9 @@ See `docs/DESIGN.md` for full architecture documentation.
 - `src/stores/panelSlice.ts` - Per-panel state factory (logs, filters, tail, grouping)
 - `src/stores/connectionStore.ts` - AWS connection state, log groups
 - `src/stores/settingsStore.ts` - Persisted settings (colors, patterns, time presets)
+- `src/types/workspace.ts` - Layout tree types (LayoutNode, LeafNode, SplitNode, WorkspaceConfig)
+- `src/components/EditorGroupView.tsx` - Per-group tab bar, drag-drop, split buttons, merged view
+- `src/components/PanelContainer.tsx` - Recursive layout tree renderer with resize handles
 - `src/components/LogViewer.tsx` - Virtualized log list
 - `src/components/LogGroupSelector.tsx` - Fuzzy search log group selector (Fuse.js + virtualized dropdown)
 - `src/components/FilterBar.tsx` - Filter input and level toggles

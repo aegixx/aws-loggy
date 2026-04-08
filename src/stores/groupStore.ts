@@ -22,7 +22,7 @@ function generateId(prefix: string): string {
 // ─── Tree Utilities ─────────────────────────────────────────────────────────
 
 /** Find a leaf node by ID */
-function findLeaf(node: LayoutNode, leafId: string): LeafNode | null {
+export function findLeaf(node: LayoutNode, leafId: string): LeafNode | null {
   if (node.type === "leaf") {
     return node.id === leafId ? node : null;
   }
