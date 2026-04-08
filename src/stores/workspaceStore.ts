@@ -218,7 +218,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
         if (delay === 0) {
           actions.setTimeRange(range, preset);
         } else {
-          setTimeout(() => actions.setTimeRange(range, preset), delay);
+          setTimeout(() => {
+            actions.stopTail();
+            actions.setTimeRange(range, preset);
+          }, delay);
         }
         delay += 500;
       }

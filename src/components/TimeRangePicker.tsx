@@ -59,12 +59,25 @@ export function TimeRangePicker() {
   const customRef = useRef<HTMLDivElement>(null);
   const isDark = useSystemTheme();
 
-  // Sync activePreset with store's timeRange (e.g., when Clear resets timeRange to null)
+  // Sync activePreset with store's timeRange (e.g., when Clear resets timeRange to null,
+  // or when setTimeRangeForAll updates timeRange from another panel)
   useEffect(() => {
-    if (timeRange === null && !isTailing) {
-      const { timePresets: currentPresets } = useSettingsStore.getState();
-      const active = currentPresets ?? DEFAULT_TIME_PRESETS;
+    if (isTailing) return;
+    const { timePresets: currentPresets } = useSettingsStore.getState();
+    const active = currentPresets ?? DEFAULT_TIME_PRESETS;
+    if (timeRange === null) {
       setActivePreset(active[0]?.id ?? "preset-15m");
+    } else {
+      const elapsed = Date.now() - timeRange.start;
+      const TOLERANCE_MS = 5_000;
+      const matched = active.find(
+        (p) => Math.abs(elapsed - p.ms) < TOLERANCE_MS,
+      );
+      if (matched) {
+        setActivePreset(matched.id);
+      } else {
+        setActivePreset("custom");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange, isTailing]);

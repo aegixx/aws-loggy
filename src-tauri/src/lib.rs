@@ -284,6 +284,7 @@ async fn poll_for_credentials_and_refresh(
                     Some(&app),
                     "✓ Credentials are now valid! Refreshing connection...",
                 );
+                SSO_LOGIN_IN_PROGRESS.store(false, Ordering::SeqCst);
                 // Emit event to trigger frontend refresh
                 app.emit("aws-session-refreshed", ()).ok();
                 return;
@@ -295,6 +296,9 @@ async fn poll_for_credentials_and_refresh(
             }
         }
     }
+
+    // Clear the in-progress flag on timeout
+    SSO_LOGIN_IN_PROGRESS.store(false, Ordering::SeqCst);
 
     // Timeout - provide helpful message based on last error
     let timeout_msg = if let Some(err) = last_error {
@@ -361,7 +365,8 @@ async fn spawn_aws_cli_with_timeout(args: Vec<&str>, timeout_secs: u64) -> Resul
 }
 
 /// Cooldown so we don't open the SSO browser twice when init is called twice (e.g. React Strict Mode)
-const SSO_OPEN_COOLDOWN_SECS: u64 = 10;
+const SSO_OPEN_COOLDOWN_SECS: u64 = 120;
+static SSO_LOGIN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static LAST_SSO_OPEN: OnceLock<std::sync::Mutex<Option<(Option<String>, Instant)>>> =
     OnceLock::new();
 
@@ -374,6 +379,12 @@ fn last_sso_open_guard() -> &'static std::sync::Mutex<Option<(Option<String>, In
 /// After opening, it polls for successful authentication and triggers a refresh
 async fn open_sso_login_url(app: AppHandle, profile: Option<&String>) -> Result<(), String> {
     log::debug!("=== Attempting to open SSO URL for profile ===");
+
+    // If an SSO login is already in progress, skip entirely
+    if SSO_LOGIN_IN_PROGRESS.load(Ordering::SeqCst) {
+        log::info!("SSO login already in progress, skipping");
+        return Ok(());
+    }
 
     // Validate profile if provided
     if let Some(p) = &profile {
@@ -417,6 +428,9 @@ async fn open_sso_login_url(app: AppHandle, profile: Option<&String>) -> Result<
         log::info!("No profile specified, using default");
     }
 
+    // Mark SSO login as in-progress before spawning
+    SSO_LOGIN_IN_PROGRESS.store(true, Ordering::SeqCst);
+
     // Spawn the command - it will open the browser automatically
     match cmd.spawn() {
         Ok(_) => {
@@ -431,6 +445,7 @@ async fn open_sso_login_url(app: AppHandle, profile: Option<&String>) -> Result<
             Ok(())
         }
         Err(e) => {
+            SSO_LOGIN_IN_PROGRESS.store(false, Ordering::SeqCst);
             let error_msg = format!("{}", e);
             log::error!("Failed to start AWS SSO login: {}", error_msg);
 

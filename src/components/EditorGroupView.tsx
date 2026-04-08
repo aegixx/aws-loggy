@@ -278,6 +278,9 @@ export function EditorGroupView({
   // Pane content drag state
   const [paneDropEdge, setPaneDropEdge] = useState<PaneDropEdge>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Counts nested dragenter/dragleave pairs so child-element dragleave events
+  // don't falsely clear the drop overlay while the drag is still in the pane.
+  const paneDragDepth = useRef(0);
 
   const handleAddTab = useCallback(() => {
     addPanelToGroup(groupId);
@@ -377,6 +380,11 @@ export function EditorGroupView({
   );
 
   // Pane content drop handlers
+  const handlePaneDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    paneDragDepth.current += 1;
+  }, []);
+
   const handlePaneDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -387,12 +395,17 @@ export function EditorGroupView({
   }, []);
 
   const handlePaneDragLeave = useCallback(() => {
-    setPaneDropEdge(null);
+    paneDragDepth.current -= 1;
+    if (paneDragDepth.current <= 0) {
+      paneDragDepth.current = 0;
+      setPaneDropEdge(null);
+    }
   }, []);
 
   const handlePaneDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      paneDragDepth.current = 0;
       const data = parseDragData(e);
       const edge = paneDropEdge;
       setPaneDropEdge(null);
@@ -600,6 +613,7 @@ export function EditorGroupView({
         <div
           ref={contentRef}
           className="flex-1 min-h-0 relative"
+          onDragEnter={handlePaneDragEnter}
           onDragOver={handlePaneDragOver}
           onDragLeave={handlePaneDragLeave}
           onDrop={handlePaneDrop}

@@ -542,10 +542,19 @@ export const useGroupStore = create<GroupStore>()(
     },
     {
       name: "loggy-groups",
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         timeSyncEnabled: state.timeSyncEnabled,
+        root: state.root,
+        activeGroupId: state.activeGroupId,
       }),
+      migrate: (persisted: unknown, version: number) => {
+        if (version === 1) {
+          // v1 had no root/activeGroupId — just return what we have, defaults kick in
+          return persisted;
+        }
+        return persisted;
+      },
     },
   ),
 );
