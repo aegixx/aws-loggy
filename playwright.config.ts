@@ -6,6 +6,7 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:1420",
     headless: true,
+    screenshot: "only-on-failure",
     viewport: { width: 1280, height: 720 },
     actionTimeout: 10_000,
   },

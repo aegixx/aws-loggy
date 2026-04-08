@@ -78,6 +78,7 @@ export function GroupHeader({
 
   return (
     <div
+      data-testid="group-header"
       style={style}
       onClick={onToggle}
       onContextMenu={onContextMenu}

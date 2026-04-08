@@ -142,6 +142,7 @@ export function ContextMenu({
     >
       {/* Copy */}
       <div
+        data-testid="ctx-copy"
         className={`${menuItemBase} ${copyDisabled ? menuItemDisabled : menuItemEnabled}`}
         onClick={() => handleItemClick(onCopy, copyDisabled)}
       >
@@ -174,6 +175,7 @@ export function ContextMenu({
 
       {/* Filter by with submenu */}
       <div
+        data-testid="ctx-filter-by"
         ref={filterItemRef}
         className={`${menuItemBase} relative ${hasAnyFilterOption ? menuItemEnabled : menuItemDisabled}`}
         onClick={() =>
@@ -248,6 +250,7 @@ export function ContextMenu({
               !!requestId || !!traceId || !!clientIP;
             return (
               <div
+                data-testid="ctx-correlate-by"
                 className={`${menuItemBase} relative ${hasAnyCorrelateOption ? menuItemEnabled : menuItemDisabled}`}
                 onClick={() =>
                   hasAnyCorrelateOption &&
@@ -324,6 +327,7 @@ export function ContextMenu({
 
       {/* Refresh */}
       <div
+        data-testid="ctx-refresh"
         className={`${menuItemBase} ${menuItemEnabled}`}
         onClick={() => handleItemClick(onRefresh)}
       >
@@ -333,6 +337,7 @@ export function ContextMenu({
 
       {/* Clear */}
       <div
+        data-testid="ctx-clear"
         className={`${menuItemBase} ${clearDisabled ? menuItemDisabled : menuItemEnabled}`}
         onClick={() => handleItemClick(onClear, clearDisabled)}
       >
