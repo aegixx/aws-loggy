@@ -57,20 +57,11 @@ export class LiveTailManager {
       return;
     }
 
-    // Streaming requires an ARN — fall back to polling if unavailable
-    if (!this.logGroupArn) {
-      console.log("[LiveTailManager] No ARN available, using polling");
-      this.startPolling(null);
-    } else {
-      try {
-        await this.startStream();
-      } catch {
-        console.log(
-          "[LiveTailManager] Streaming unavailable, falling back to polling",
-        );
-        this.startPolling(null);
-      }
-    }
+    // Always use polling until backend event routing supports panel_id.
+    // Streaming events (live-tail-event, live-tail-error, live-tail-ended)
+    // are emitted without panel_id, so App.tsx cannot route them to the
+    // correct panel and they are silently dropped.
+    this.startPolling(null);
   }
 
   stop(): void {
