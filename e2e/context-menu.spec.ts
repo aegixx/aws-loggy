@@ -52,7 +52,8 @@ test.describe("Context Menu", () => {
     );
 
     const isDisabled =
-      (classes?.includes("cursor-not-allowed") ?? false) || opacity < "1";
+      (classes?.includes("cursor-not-allowed") ?? false) ||
+      parseFloat(opacity ?? "1") < 1;
     expect(isDisabled).toBe(true);
   });
 

@@ -402,6 +402,14 @@ export function EditorGroupView({
     }
   }, []);
 
+  // Reset depth counter when a drag is canceled (Escape, dropped outside window).
+  // Without this, the counter stays non-zero and the drop overlay sticks on the
+  // next drag over the same pane.
+  const handlePaneDragEnd = useCallback(() => {
+    paneDragDepth.current = 0;
+    setPaneDropEdge(null);
+  }, []);
+
   const handlePaneDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -626,6 +634,7 @@ export function EditorGroupView({
           onDragEnter={handlePaneDragEnter}
           onDragOver={handlePaneDragOver}
           onDragLeave={handlePaneDragLeave}
+          onDragEnd={handlePaneDragEnd}
           onDrop={handlePaneDrop}
         >
           {group.merged ? (
