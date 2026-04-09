@@ -55,6 +55,15 @@ export const DEFAULT_TIME_PRESETS: TimePreset[] = [
 
 export const MAX_TIME_PRESETS = 5;
 
+export interface PanelPersistedConfig {
+  logGroupName: string | null;
+  groupByMode: string; // "none" | "stream" | "invocation" | "auto"
+  groupFilter: boolean;
+  timePreset: string | null; // "15m", "1h", "6h", "24h", "7d", "live", "custom", or null
+  timeRange: { start: number; end: number | null } | null;
+  disabledLevels: string[]; // stored as array for JSON serialization
+}
+
 interface SettingsStore {
   // Theme
   theme: Theme;
@@ -64,6 +73,9 @@ interface SettingsStore {
 
   // Last selected log group (persisted)
   lastSelectedLogGroup: string | null;
+
+  // Per-panel persisted config (keyed by panel ID)
+  panelPersistedConfigs: Record<string, PanelPersistedConfig>;
 
   // Cache limits
   cacheLimits: CacheLimits;
@@ -93,6 +105,11 @@ interface SettingsStore {
   // Actions
   setTheme: (theme: Theme) => void;
   setLastSelectedLogGroup: (logGroup: string | null) => void;
+  setPanelPersistedConfig: (
+    panelId: string,
+    config: Partial<PanelPersistedConfig>,
+  ) => void;
+  clearPanelPersistedConfig: (panelId: string) => void;
   setCacheLimits: (limits: Partial<CacheLimits>) => void;
   setAwsProfile: (profile: string | null) => void;
   setLogLevelStyle: (id: string, style: Partial<LogLevelStyle>) => void;
@@ -268,6 +285,7 @@ export const useSettingsStore = create<SettingsStore>()(
       theme: "system" as Theme,
       logLevels: DEFAULT_LOG_LEVELS,
       lastSelectedLogGroup: null,
+      panelPersistedConfigs: {},
       cacheLimits: DEFAULT_CACHE_LIMITS,
       awsProfile: null,
       persistedDisabledLevels: [],
@@ -283,6 +301,33 @@ export const useSettingsStore = create<SettingsStore>()(
       setTheme: (theme) => set({ theme }),
       setLastSelectedLogGroup: (logGroup) =>
         set({ lastSelectedLogGroup: logGroup }),
+      setPanelPersistedConfig: (panelId, config) =>
+        set((state) => {
+          const defaults: PanelPersistedConfig = {
+            logGroupName: null,
+            groupByMode: "none",
+            groupFilter: true,
+            timePreset: null,
+            timeRange: null,
+            disabledLevels: [],
+          };
+          return {
+            panelPersistedConfigs: {
+              ...state.panelPersistedConfigs,
+              [panelId]: {
+                ...defaults,
+                ...(state.panelPersistedConfigs[panelId] ?? {}),
+                ...config,
+              },
+            },
+          };
+        }),
+      clearPanelPersistedConfig: (panelId) =>
+        set((state) => {
+          const updated = { ...state.panelPersistedConfigs };
+          delete updated[panelId];
+          return { panelPersistedConfigs: updated };
+        }),
       setCacheLimits: (limits) =>
         set((state) => ({
           cacheLimits: { ...state.cacheLimits, ...limits },
@@ -467,11 +512,12 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 16,
+      version: 17,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
         lastSelectedLogGroup: state.lastSelectedLogGroup,
+        panelPersistedConfigs: state.panelPersistedConfigs,
         cacheLimits: state.cacheLimits,
         awsProfile: state.awsProfile,
         persistedDisabledLevels: state.persistedDisabledLevels,
@@ -718,10 +764,41 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 16;
         }
 
+        // v16 -> v17: Add panelPersistedConfigs (replaces lastSelectedLogGroupPerPanel)
+        if (currentVersion <= 16) {
+          // Migrate old lastSelectedLogGroupPerPanel if present
+          const oldPerPanel = data.lastSelectedLogGroupPerPanel as
+            | Record<string, string | null>
+            | undefined;
+          const migrated: Record<string, PanelPersistedConfig> = {};
+          if (oldPerPanel) {
+            for (const [panelId, logGroupName] of Object.entries(oldPerPanel)) {
+              migrated[panelId] = {
+                logGroupName: logGroupName ?? null,
+                groupByMode: "none",
+                groupFilter: true,
+                timePreset: null,
+                timeRange: null,
+                disabledLevels: [],
+              };
+            }
+          }
+          data = {
+            ...data,
+            panelPersistedConfigs:
+              (data.panelPersistedConfigs as Record<
+                string,
+                PanelPersistedConfig
+              >) ?? migrated,
+          };
+          currentVersion = 17;
+        }
+
         return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
           lastSelectedLogGroup: string | null;
+          panelPersistedConfigs: Record<string, PanelPersistedConfig>;
           cacheLimits: CacheLimits;
           awsProfile: string | null;
           persistedDisabledLevels: string[];

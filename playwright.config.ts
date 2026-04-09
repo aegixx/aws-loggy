@@ -6,8 +6,12 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:1420",
     headless: true,
+    screenshot: "only-on-failure",
     viewport: { width: 1280, height: 720 },
     actionTimeout: 10_000,
+    launchOptions: {
+      slowMo: process.env.SLOWMO ? Number(process.env.SLOWMO) : undefined,
+    },
   },
   webServer: {
     command: "npm run dev",

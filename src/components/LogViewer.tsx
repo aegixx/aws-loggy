@@ -319,6 +319,8 @@ const LogRow = memo(function LogRow({
             ? undefined
             : levelStyle.backgroundColor,
       }}
+      data-testid="log-row"
+      data-row-index={actualLogIndex}
       onMouseDown={(e) => onRowMouseDown(actualLogIndex, e)}
       onMouseEnter={() => onRowMouseEnter(actualLogIndex)}
       onContextMenu={(e) => onContextMenu(actualLogIndex, e, false)}

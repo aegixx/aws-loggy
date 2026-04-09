@@ -278,6 +278,9 @@ export function EditorGroupView({
   // Pane content drag state
   const [paneDropEdge, setPaneDropEdge] = useState<PaneDropEdge>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Counts nested dragenter/dragleave pairs so child-element dragleave events
+  // don't falsely clear the drop overlay while the drag is still in the pane.
+  const paneDragDepth = useRef(0);
 
   const handleAddTab = useCallback(() => {
     addPanelToGroup(groupId);
@@ -377,6 +380,11 @@ export function EditorGroupView({
   );
 
   // Pane content drop handlers
+  const handlePaneDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    paneDragDepth.current += 1;
+  }, []);
+
   const handlePaneDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -387,12 +395,25 @@ export function EditorGroupView({
   }, []);
 
   const handlePaneDragLeave = useCallback(() => {
+    paneDragDepth.current -= 1;
+    if (paneDragDepth.current <= 0) {
+      paneDragDepth.current = 0;
+      setPaneDropEdge(null);
+    }
+  }, []);
+
+  // Reset depth counter when a drag is canceled (Escape, dropped outside window).
+  // Without this, the counter stays non-zero and the drop overlay sticks on the
+  // next drag over the same pane.
+  const handlePaneDragEnd = useCallback(() => {
+    paneDragDepth.current = 0;
     setPaneDropEdge(null);
   }, []);
 
   const handlePaneDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      paneDragDepth.current = 0;
       const data = parseDragData(e);
       const edge = paneDropEdge;
       setPaneDropEdge(null);
@@ -402,11 +423,21 @@ export function EditorGroupView({
       const store = useGroupStore.getState();
 
       if (edge) {
-        // Drop on an edge = split panel into new group in that direction
+        // Drop on an edge = split THIS (target) pane and place the dragged tab
+        // adjacent to it in the given direction.
+        // "left"/"top" → dragged panel appears before; "right"/"bottom" → after.
         const splitDir =
           edge === "left" || edge === "right" ? "horizontal" : "vertical";
+        const position: "before" | "after" =
+          edge === "left" || edge === "top" ? "before" : "after";
 
-        store.splitPanelToNewGroup(data.panelId, data.groupId, splitDir);
+        store.movePanelToSplitAtTarget(
+          data.panelId,
+          data.groupId,
+          groupId,
+          splitDir,
+          position,
+        );
       } else {
         // Drop in center = move tab to this group
         if (data.groupId !== groupId) {
@@ -600,8 +631,10 @@ export function EditorGroupView({
         <div
           ref={contentRef}
           className="flex-1 min-h-0 relative"
+          onDragEnter={handlePaneDragEnter}
           onDragOver={handlePaneDragOver}
           onDragLeave={handlePaneDragLeave}
+          onDragEnd={handlePaneDragEnd}
           onDrop={handlePaneDrop}
         >
           {group.merged ? (

@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.12.2] - 2026-04-08
+
+### Fixed
+
+* Multi-panel layouts now restore each panel's log group, time preset, group-by mode, disabled levels, and filters independently on reload
+* Live tail in one panel no longer bleeds into other panels' time preset on restart
+* Empty panels no longer inherit the first panel's settings after reload
+* Level toggle buttons update immediately in newly split panels
+* SSO login loop prevented with in-progress flag and extended cooldown
+* Cross-group drag-to-split now drops relative to the target pane instead of the source
+* Log group dropdown no longer flickers closed when clicking options
+
+### Added
+
+* Per-panel state persistence system (panelPersistedConfigs in settingsStore)
+* 13 Playwright E2E tests for multi-panel persistence across reload
+* 3 E2E tests for level toggle styling in split panels
+* 1 E2E test for workspace-level restore
+* SLOWMO env var support in playwright.config.ts for interactive debugging
+
 ## [3.12.1](https://github.com/aegixx/aws-loggy/compare/v3.12.0...v3.12.1) (2026-04-08)
 
 
