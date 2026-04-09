@@ -11,17 +11,10 @@ Create a GitHub Actions workflow that runs `npm run test:e2e` on PRs.
 
 **Depends on:** Playwright E2E test suite (this branch)
 
-## Expand E2E coverage to remaining features
+## Completed
 
-Add E2E test specs for features beyond the initial 4 baseline flows:
+### Expand E2E coverage to remaining features
 
-- Find-in-log (CMD-F): open find bar, search text, navigate matches
-- Context menu: right-click actions (copy, filter by selection/requestId/traceId)
-- Keyboard shortcuts: CMD-L (focus filter), CMD-K (clear), CMD-R (refresh), arrow nav
-- Group by (stream/invocation): group headers, expand/collapse, metadata display
-- Settings dialog (CMD-,): log level colors, cache limits, time presets
-- About dialog: version display, GitHub link
+**Completed:** v3.12.2 (2026-04-08)
 
-The `?demo=true` fixture makes adding new specs straightforward — just create a new `.spec.ts` file that imports from `e2e/fixtures/demo.ts`. Each feature can be a separate PR.
-
-**Depends on:** Playwright E2E test suite (this branch)
+All listed features now have E2E coverage: find-in-log, context menu, keyboard shortcuts, group by, settings dialog, plus multi-panel persistence, level toggle styling, and workspace restore tests. Total: 107 Playwright tests.
