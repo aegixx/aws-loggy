@@ -17,7 +17,7 @@ import {
   type PanelState,
   type PanelActions,
 } from "./panelSlice";
-import { useSettingsStore } from "./settingsStore";
+import { useSettingsStore, DEFAULT_TIME_PRESETS } from "./settingsStore";
 import {
   useConnectionStore,
   setOnConnectionEstablished,
@@ -69,11 +69,14 @@ type WorkspaceStore = PanelSlice &
 // ─── Persisted State Restoration ────────────────────────────────────────────
 
 function restorePersistedStateForPanel(
+  panelId: string,
   setPanel: (partial: Partial<PanelState>) => void,
   actions: PanelActions,
+  useGlobalFallback: boolean,
 ): void {
   const {
     lastSelectedLogGroup,
+    panelPersistedConfigs,
     getPersistedDisabledLevelsAsSet,
     persistedTimeRange,
     persistedTimePreset,
@@ -82,50 +85,116 @@ function restorePersistedStateForPanel(
     getDefaultDisabledLevels,
   } = useSettingsStore.getState();
 
+  const rawConfig = panelPersistedConfigs[panelId];
   const persistedLevels = getPersistedDisabledLevelsAsSet();
 
-  const presetToMs: Record<string, number> = {
-    "15m": 15 * 60 * 1000,
-    "1h": 60 * 60 * 1000,
-    "6h": 6 * 60 * 60 * 1000,
-    "24h": 24 * 60 * 60 * 1000,
-    "7d": 7 * 24 * 60 * 60 * 1000,
+  // Per-panel configs may have been created before new fields were added
+  // (e.g. disabledLevels, timePreset). Check each field explicitly with
+  // "in" operator to distinguish "field is null" (explicitly set) from
+  // "field is undefined" (missing, should fall back to global).
+  const hasField = (field: string) => rawConfig != null && field in rawConfig;
+
+  // When useGlobalFallback is false (multi-panel), panels without per-panel
+  // config stay with defaults — no global bleed from other panels' settings.
+  const fallback = <T>(perPanel: T | undefined, global: T, dflt: T): T => {
+    if (perPanel !== undefined) return perPanel;
+    if (useGlobalFallback) return global;
+    return dflt;
   };
 
-  let restoredTimeRange: { start: number; end: number | null } | null = null;
-  if (persistedTimePreset && presetToMs[persistedTimePreset]) {
-    const now = Date.now();
-    restoredTimeRange = {
-      start: now - presetToMs[persistedTimePreset],
-      end: null,
-    };
-  } else if (persistedTimePreset === "custom" && persistedTimeRange) {
-    restoredTimeRange = persistedTimeRange;
+  // Resolve time preset: per-panel if the field exists, else global (single panel) or null (multi)
+  const effectiveTimePreset = hasField("timePreset")
+    ? rawConfig!.timePreset
+    : fallback(undefined, persistedTimePreset, null);
+  const effectiveTimeRange = hasField("timeRange")
+    ? rawConfig!.timeRange
+    : fallback(undefined, persistedTimeRange, null);
+
+  // Build from user-configurable presets (not hardcoded labels)
+  const { timePresets } = useSettingsStore.getState();
+  const presetToMs: Record<string, number> = {};
+  for (const p of timePresets ?? DEFAULT_TIME_PRESETS) {
+    presetToMs[p.label] = p.ms;
   }
 
+  let restoredTimeRange: { start: number; end: number | null } | null = null;
+  if (effectiveTimePreset && presetToMs[effectiveTimePreset]) {
+    const now = Date.now();
+    restoredTimeRange = {
+      start: now - presetToMs[effectiveTimePreset],
+      end: null,
+    };
+  } else if (effectiveTimePreset === "custom" && effectiveTimeRange) {
+    restoredTimeRange = effectiveTimeRange;
+  }
+
+  // Resolve groupByMode: per-panel if field exists, else global/default
+  const effectiveGroupByModeRaw = hasField("groupByMode")
+    ? rawConfig!.groupByMode
+    : fallback(undefined, persistedGroupByMode, "none");
   const restoredGroupByMode = (
-    ["none", "stream", "invocation"].includes(persistedGroupByMode)
-      ? persistedGroupByMode
+    ["none", "stream", "invocation", "auto"].includes(effectiveGroupByModeRaw)
+      ? effectiveGroupByModeRaw
       : "none"
   ) as GroupByMode;
 
+  // Resolve groupFilter: per-panel if field exists, else global/default
+  const restoredGroupFilter = hasField("groupFilter")
+    ? rawConfig!.groupFilter
+    : fallback(undefined, persistedGroupFilter, true);
+
+  // Resolve disabledLevels: per-panel if field exists, else global/default.
+  // An empty array means "all levels enabled" (explicitly set).
+  // A missing field means "inherit global" (config created before field was added).
+  let restoredDisabledLevels: Set<string>;
+  if (hasField("disabledLevels") && Array.isArray(rawConfig!.disabledLevels)) {
+    restoredDisabledLevels = new Set(rawConfig!.disabledLevels);
+  } else if (useGlobalFallback) {
+    restoredDisabledLevels =
+      persistedLevels.size > 0 ? persistedLevels : getDefaultDisabledLevels();
+  } else {
+    restoredDisabledLevels = getDefaultDisabledLevels();
+  }
+
   setPanel({
-    disabledLevels:
-      persistedLevels.size > 0 ? persistedLevels : getDefaultDisabledLevels(),
+    disabledLevels: restoredDisabledLevels,
     timeRange: restoredTimeRange,
     groupByMode: restoredGroupByMode,
     effectiveGroupByMode: restoredGroupByMode,
-    groupFilter: restoredGroupByMode === "none" ? false : persistedGroupFilter,
+    groupFilter: restoredGroupByMode === "none" ? false : restoredGroupFilter,
   });
 
   const { logGroups } = useConnectionStore.getState();
-  if (
-    lastSelectedLogGroup &&
-    logGroups.some((g) => g.name === lastSelectedLogGroup)
-  ) {
-    actions.selectLogGroup(lastSelectedLogGroup);
 
-    if (persistedTimePreset === "live") {
+  // Use per-panel log group if available, fall back to global only for single panel
+  const effectiveLogGroup =
+    rawConfig != null
+      ? rawConfig.logGroupName
+      : fallback(undefined, lastSelectedLogGroup, null);
+
+  // Defer write-back to avoid cross-store render tearing.
+  // The workspaceStore setPanel above is the authoritative state change.
+  if (effectiveLogGroup) {
+    setTimeout(() => {
+      const { setPanelPersistedConfig } = useSettingsStore.getState();
+      setPanelPersistedConfig(panelId, {
+        logGroupName: effectiveLogGroup,
+        timePreset: effectiveTimePreset,
+        timeRange: effectiveTimePreset === "custom" ? effectiveTimeRange : null,
+        groupByMode: restoredGroupByMode,
+        groupFilter: restoredGroupFilter,
+        disabledLevels: [...restoredDisabledLevels],
+      });
+    }, 0);
+  }
+
+  if (
+    effectiveLogGroup &&
+    logGroups.some((g) => g.name === effectiveLogGroup)
+  ) {
+    actions.selectLogGroup(effectiveLogGroup);
+
+    if (effectiveTimePreset === "live") {
       actions.startTail();
     }
   }
@@ -393,22 +462,50 @@ export function usePanelState(panelId: string): PanelState {
 
 // ─── Connection Callbacks ───────────────────────────────────────────────────
 
-// Register post-connection callback to restore persisted state into the active panel
+// Register post-connection callback to restore persisted state into all panels
 setOnConnectionEstablished(() => {
-  const activePanelId = useGroupStore.getState().getActivePanelId();
-  if (!activePanelId) return;
+  const allPanelIds = useGroupStore.getState().getAllPanelIds();
+  if (allPanelIds.length === 0) return;
 
-  const setPanelFn = (partial: Partial<PanelState>) => {
-    const { panels } = useWorkspaceStore.getState();
-    const existing = panels.get(activePanelId);
-    if (!existing) return;
-    const updated = new Map(panels);
-    updated.set(activePanelId, { ...existing, ...partial });
-    useWorkspaceStore.setState({ panels: updated });
-  };
+  // Only use global fallback (lastSelectedLogGroup, persistedTimePreset, etc.)
+  // for single-panel layouts. Multi-panel: each panel uses its own per-panel
+  // config or stays empty — prevents panel 1's settings from bleeding into
+  // unconfigured panels.
+  const useGlobalFallback = allPanelIds.length === 1;
 
-  const actions = useWorkspaceStore.getState().panelAction(activePanelId);
-  restorePersistedStateForPanel(setPanelFn, actions);
+  allPanelIds.forEach((panelId, index) => {
+    const setPanelFn = (partial: Partial<PanelState>) => {
+      const { panels } = useWorkspaceStore.getState();
+      const existing = panels.get(panelId);
+      if (!existing) return;
+      const updated = new Map(panels);
+      updated.set(panelId, { ...existing, ...partial });
+      useWorkspaceStore.setState({ panels: updated });
+    };
+
+    const actions = useWorkspaceStore.getState().panelAction(panelId);
+
+    if (index === 0) {
+      restorePersistedStateForPanel(
+        panelId,
+        setPanelFn,
+        actions,
+        useGlobalFallback,
+      );
+    } else {
+      // Stagger secondary panel fetches to avoid hammering AWS
+      setTimeout(
+        () =>
+          restorePersistedStateForPanel(
+            panelId,
+            setPanelFn,
+            actions,
+            useGlobalFallback,
+          ),
+        index * 500,
+      );
+    }
+  });
 });
 
 // Register post-refresh callback to re-fetch all panels

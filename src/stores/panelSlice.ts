@@ -155,7 +155,6 @@ export function createPanelActions(
     selectLogGroup: (name: string) => {
       console.log(`[Panel ${panelId}] Select log group:`, name);
       const panel = safeGet();
-      const { setLastSelectedLogGroup } = useSettingsStore.getState();
 
       // Stop any active tail
       if (panel.tailManager) {
@@ -176,8 +175,13 @@ export function createPanelActions(
         effectiveGroupByMode: effectiveMode,
       });
 
-      // Persist selection to settings
-      setLastSelectedLogGroup(name);
+      // Defer settings persistence to avoid cross-store render tearing
+      setTimeout(() => {
+        const { setLastSelectedLogGroup, setPanelPersistedConfig } =
+          useSettingsStore.getState();
+        setLastSelectedLogGroup(name);
+        setPanelPersistedConfig(panelId, { logGroupName: name });
+      }, 0);
 
       // Auto-fetch with current time range
       if (name) {
@@ -292,7 +296,6 @@ export function createPanelActions(
 
     toggleLevel: (level: LogLevel) => {
       const panel = safeGet();
-      const { setPersistedDisabledLevels } = useSettingsStore.getState();
       const newDisabled = new Set(panel.disabledLevels);
       if (newDisabled.has(level)) {
         newDisabled.delete(level);
@@ -311,7 +314,17 @@ export function createPanelActions(
         selectedLogIndex: null,
         selectedLogIndices: new Set(),
       });
-      setPersistedDisabledLevels(newDisabled);
+      // Defer settings persistence to avoid cross-store render tearing.
+      // The workspaceStore update above is the authoritative state change;
+      // settingsStore writes are only for localStorage persistence.
+      setTimeout(() => {
+        const { setPersistedDisabledLevels, setPanelPersistedConfig } =
+          useSettingsStore.getState();
+        setPersistedDisabledLevels(newDisabled);
+        setPanelPersistedConfig(panelId, {
+          disabledLevels: [...newDisabled],
+        });
+      }, 0);
     },
 
     setDisabledLevels: (levels: Set<LogLevel>) => {
@@ -350,9 +363,16 @@ export function createPanelActions(
       range: { start: number; end: number | null } | null,
       preset?: string | null,
     ) => {
-      const { setPersistedTimeRange } = useSettingsStore.getState();
       setPanel({ timeRange: range });
-      setPersistedTimeRange(range, preset);
+      setTimeout(() => {
+        const { setPersistedTimeRange, setPanelPersistedConfig } =
+          useSettingsStore.getState();
+        setPersistedTimeRange(range, preset);
+        setPanelPersistedConfig(panelId, {
+          timePreset: preset ?? null,
+          timeRange: range,
+        });
+      }, 0);
       if (range) {
         actions.fetchLogs(range.start, range.end ?? undefined);
       }
@@ -458,9 +478,16 @@ export function createPanelActions(
 
       setPanel({ isTailing: true, tailManager: manager });
 
-      // Persist "live" so it restores on next launch
-      const { setPersistedTimeRange } = useSettingsStore.getState();
-      setPersistedTimeRange(null, "live");
+      // Defer settings persistence to avoid cross-store render tearing
+      setTimeout(() => {
+        const { setPersistedTimeRange, setPanelPersistedConfig } =
+          useSettingsStore.getState();
+        setPersistedTimeRange(null, "live");
+        setPanelPersistedConfig(panelId, {
+          timePreset: "live",
+          timeRange: null,
+        });
+      }, 0);
     },
 
     stopTail: () => {
@@ -510,11 +537,7 @@ export function createPanelActions(
 
     resetFilters: () => {
       const panel = safeGet();
-      const {
-        getDefaultDisabledLevels,
-        setPersistedDisabledLevels,
-        setPersistedTimeRange,
-      } = useSettingsStore.getState();
+      const { getDefaultDisabledLevels } = useSettingsStore.getState();
 
       // Stop any active tail
       actions.stopTail();
@@ -532,8 +555,20 @@ export function createPanelActions(
         selectedLogIndices: new Set(),
       });
 
-      setPersistedDisabledLevels(defaultDisabled);
-      setPersistedTimeRange(null);
+      setTimeout(() => {
+        const {
+          setPersistedDisabledLevels,
+          setPersistedTimeRange,
+          setPanelPersistedConfig,
+        } = useSettingsStore.getState();
+        setPersistedDisabledLevels(defaultDisabled);
+        setPersistedTimeRange(null);
+        setPanelPersistedConfig(panelId, {
+          disabledLevels: [...defaultDisabled],
+          timePreset: null,
+          timeRange: null,
+        });
+      }, 0);
 
       if (panel.logGroupName) {
         actions.fetchLogs();
@@ -541,10 +576,7 @@ export function createPanelActions(
     },
 
     resetState: () => {
-      const { setLastSelectedLogGroup } = useSettingsStore.getState();
-
       actions.stopTail();
-      setLastSelectedLogGroup(null);
 
       setPanel({
         logGroupName: null,
@@ -559,6 +591,13 @@ export function createPanelActions(
         loadingSizeBytes: 0,
         totalSizeBytes: 0,
       });
+
+      setTimeout(() => {
+        const { setLastSelectedLogGroup, clearPanelPersistedConfig } =
+          useSettingsStore.getState();
+        setLastSelectedLogGroup(null);
+        clearPanelPersistedConfig(panelId);
+      }, 0);
     },
 
     setLoadingProgress: (count: number, sizeBytes: number) => {
@@ -567,15 +606,18 @@ export function createPanelActions(
 
     toggleGroupFilter: () => {
       const panel = safeGet();
-      const { setPersistedGroupFilter } = useSettingsStore.getState();
       const next = !panel.groupFilter;
       setPanel({ groupFilter: next });
-      setPersistedGroupFilter(next);
+      setTimeout(() => {
+        const { setPersistedGroupFilter, setPanelPersistedConfig } =
+          useSettingsStore.getState();
+        setPersistedGroupFilter(next);
+        setPanelPersistedConfig(panelId, { groupFilter: next });
+      }, 0);
     },
 
     setGroupByMode: (mode: GroupByMode | "auto") => {
       const panel = safeGet();
-      const { setPersistedGroupByMode } = useSettingsStore.getState();
       const effectiveMode = resolveGroupByMode(mode, panel.logGroupName);
       setPanel({
         groupByMode: mode,
@@ -583,7 +625,12 @@ export function createPanelActions(
         effectiveGroupByMode: effectiveMode,
         groupFilter: effectiveMode === "none" ? false : panel.groupFilter,
       });
-      setPersistedGroupByMode(mode);
+      setTimeout(() => {
+        const { setPersistedGroupByMode, setPanelPersistedConfig } =
+          useSettingsStore.getState();
+        setPersistedGroupByMode(mode);
+        setPanelPersistedConfig(panelId, { groupByMode: mode });
+      }, 0);
     },
 
     toggleGroupCollapsed: (groupId: string) => {
