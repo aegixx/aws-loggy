@@ -21,8 +21,22 @@ export function TimeRangePicker() {
   const { isTailing, timeRange } = panel;
   const selectedLogGroup = panel.logGroupName;
   const { startTail, stopTail, clearLogs, setTimeRange } = actions;
-  const { persistedTimePreset, persistedTimeRange, timePresets } =
-    useSettingsStore();
+  const globalTimePreset = useSettingsStore((s) => s.persistedTimePreset);
+  const globalTimeRange = useSettingsStore((s) => s.persistedTimeRange);
+  const timePresets = useSettingsStore((s) => s.timePresets);
+  // Select only this panel's config to avoid re-renders from other panels' writes
+  const panelConfig = useSettingsStore(
+    (s) => s.panelPersistedConfigs[panel.id],
+  );
+  // Per-panel time preset takes precedence over global
+  const persistedTimePreset =
+    panelConfig != null && "timePreset" in panelConfig
+      ? panelConfig.timePreset
+      : globalTimePreset;
+  const persistedTimeRange =
+    panelConfig != null && "timeRange" in panelConfig
+      ? panelConfig.timeRange
+      : globalTimeRange;
   const presets: TimePreset[] = timePresets ?? DEFAULT_TIME_PRESETS;
   const [showCustom, setShowCustom] = useState(false);
   // Initialize activePreset from persisted value, falling back to first preset

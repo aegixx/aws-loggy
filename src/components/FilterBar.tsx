@@ -45,7 +45,7 @@ export function FilterBar({ hideGroupBy }: { hideGroupBy?: boolean } = {}) {
     toggleGroupFilter,
   } = actions;
   const { groups, effectiveMode } = useLogGroups();
-  const { logLevels } = useSettingsStore();
+  const logLevels = useSettingsStore((s) => s.logLevels);
   const sortedLevels = getSortedLogLevels(logLevels);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const isDark = useSystemTheme();
@@ -205,7 +205,7 @@ export function FilterBar({ hideGroupBy }: { hideGroupBy?: boolean } = {}) {
             <button
               key={levelConfig.id}
               onClick={() => toggleLevel(levelConfig.id)}
-              className="px-2 py-0.5 text-xs rounded border transition-all cursor-pointer"
+              className="px-2 py-0.5 text-xs rounded border cursor-pointer"
               style={
                 isEnabled
                   ? {

@@ -150,7 +150,7 @@ export function StatusBar({ mergedPanelIds }: StatusBarProps) {
   const panel = useCurrentPanelState();
   const allPanels = useWorkspaceStore((s) => s.panels);
   const mergedSourceToggles = useWorkspaceStore((s) => s.mergedSourceToggles);
-  const { cacheLimits } = useSettingsStore();
+  const cacheLimits = useSettingsStore((s) => s.cacheLimits);
   const { isDemoMode } = useDemoStore();
   const isDark = useSystemTheme();
   const { groups, effectiveMode } = useLogGroups();
