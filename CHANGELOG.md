@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.2](https://github.com/aegixx/aws-loggy/compare/v3.12.1...v3.12.2) (2026-04-09)
+
+
+### Bug Fixes
+
+* per-panel state persistence and E2E test expansion ([#99](https://github.com/aegixx/aws-loggy/issues/99)) ([2df56bf](https://github.com/aegixx/aws-loggy/commit/2df56bfcef0679f5856b28613f5360bda25be695))
+
 ## [3.12.2] - 2026-04-08
 
 ### Fixed
