@@ -11,6 +11,55 @@ Create a GitHub Actions workflow that runs `npm run test:e2e` on PRs.
 
 **Depends on:** Playwright E2E test suite (this branch)
 
+## Multi-Process: Recent Workspaces quick-launcher
+
+Add a "Recent Workspaces" submenu under `Loggy → New Window with Workspace →` that shows the last 5 workspaces the user opened, regardless of whether they're saved. Complement to the existing saved-workspace submenu — faster path to "give me another `dev` window."
+
+**Priority:** P3 (polish)
+**Deferred from:** `feat/multi-process` plan
+
+## Multi-Process: cross-window trace correlation
+
+When the user clicks a trace ID in window A (dev), surface any matching events in other open windows (e.g., prod) via a cross-process IPC signal or a shared file. Enables end-to-end debugging across environment boundaries.
+
+**Priority:** P3
+**Deferred from:** `feat/multi-process` plan. Significant new feature, not a polish item.
+
+## Multi-Process: per-window bounds persistence
+
+Remember each Loggy window's size and position independently so ⌘N reopens land in the same place they closed. Currently all windows share the Tauri-managed default bounds.
+
+**Priority:** P3
+**Deferred from:** `feat/multi-process` plan
+
+## Multi-Process: concurrent settings edit conflict detection
+
+If two windows both have the Settings dialog open and edit the same color/pattern within the same debounce window, last writer wins silently. Add a diff-on-hydrate check that toasts the user when a concurrent edit was overwritten.
+
+**Priority:** P4 (rare in practice for a single-user desktop app)
+**Deferred from:** `feat/multi-process` plan
+
+## Multi-Process: Playwright multi-window E2E harness
+
+Investigate whether Tauri + Playwright can launch two app instances in one test run so multi-window scenarios (cross-window settings sync, primary-crash-recovery, spawn-with-workspace) can be covered in CI. Currently manual QA only.
+
+**Priority:** P2 (regression risk without it)
+**Deferred from:** `feat/multi-process` plan
+
+## Multi-Process: savedWorkspaces size limit
+
+Enforce a soft cap on `savedWorkspaces.length` (e.g., 50) with a Settings warning when the user approaches it, and hard rejection of new saves past a higher ceiling. Prevents `settings.json` growing unbounded.
+
+**Priority:** P4
+**Deferred from:** `feat/multi-process` plan
+
+## Multi-Process: child-process crash-on-boot detection
+
+If `open_new_window` spawns a child that crashes before its window is visible, the parent has no feedback. Add a handshake: child emits a `child-booted` event within 5s of spawn, otherwise the parent surfaces a toast. Currently a silent failure mode.
+
+**Priority:** P3
+**Deferred from:** `feat/multi-process` plan
+
 ## Completed
 
 ### Expand E2E coverage to remaining features

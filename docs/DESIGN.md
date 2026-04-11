@@ -192,6 +192,93 @@ Log level colors are theme-adaptive, automatically adjusting for dark and light 
 
 Default levels: ERROR (red), WARN (yellow), INFO (blue), DEBUG (green), TRACE (purple), SYSTEM (gray)
 
+## Multi-Process Architecture
+
+Loggy supports running multiple windows simultaneously, each as an independent OS process. This enables the common SRE workflow of monitoring `dev` and `prod` at the same time without switching profiles.
+
+### Process model
+
+Each Loggy process has its own `AppState` (AWS client, live tail handles, cancellation flags), so AWS isolation is free. What needs coordination is frontend state:
+
+- **Shared UI preferences** — theme, log levels, cache limits, time presets, auto-update setting, and the saved-workspaces catalog. Edited in one window, reflected in all others.
+- **Per-window workspace state** — the AWS profile this window is connected to, the layout tree, per-panel configs (filters, time range, grouping), and the ID of any loaded saved-workspace. Completely independent across windows.
+
+### Instance role
+
+The first process to launch acquires an advisory `fs2` file lock at `<app-data>/loggy.lock` and becomes the **primary**. Subsequent processes become **secondaries**. Role is decided at boot (`src-tauri/src/instance.rs`) and never changes for the lifetime of the process. Dropping the lock handle (via RAII) or process exit (via the OS) releases the lock.
+
+Primaries own persisted workspace state in localStorage (`loggy-groups` and the workspace slice of `loggy-workspace`). Secondaries run that state entirely in memory and discard it on close.
+
+> ⚠️ Do not add `tauri-plugin-single-instance`. It would break the multi-process launch flow.
+
+### Shared settings file
+
+Shared UI prefs live in `<app-data>/settings.json` (`src-tauri/src/settings_store.rs`):
+
+- Writes are atomic: serialize → write to `settings.json.tmp` → fsync → rename.
+- Reads tolerate corruption: malformed JSON is renamed to `settings.json.corrupt.<unix_ts>` and defaults are returned, so the user retains a recovery option.
+- Schema versioning: `schema_version` field; a reader that sees a version higher than it supports falls back to defaults and logs a warning.
+- A `notify` watcher emits a `settings-changed` Tauri event when the file changes. Self-writes are suppressed for 500ms (monotonic `Instant::now`) to avoid feedback loops.
+
+### Frontend split storage
+
+`src/stores/settingsStore.ts` uses a custom zustand `PersistStorage` that routes fields between destinations:
+
+- **Shared fields** (`theme`, `logLevels`, `cacheLimits`, `autoUpdateEnabled`, `timePresets`, `savedWorkspaces`) → `set_settings` / `get_settings` Tauri commands → `settings.json`. Writes debounce at 300ms.
+- **Workspace fields** (`awsProfile`, `lastSelectedLogGroup`, `panelPersistedConfigs`, legacy global filter state) → `localStorage["loggy-workspace"]` on primaries, no-op on secondaries.
+
+`src/stores/groupStore.ts` (layout tree) uses a similar role-aware `StateStorage` — localStorage on primaries, no-op on secondaries.
+
+The v17 → v18 migration reads any legacy single-blob `loggy-settings` localStorage key, splits its fields between the two destinations, and removes the legacy key.
+
+### ASCII diagram
+
+```text
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                        macOS / Linux / Windows                       │
+  │                                                                      │
+  │   ┌──────────────────────┐             ┌──────────────────────┐      │
+  │   │   Process A (prim)   │             │   Process B (sec)    │      │
+  │   │  ┌────────────────┐  │             │  ┌────────────────┐  │      │
+  │   │  │  Tauri webview │  │             │  │  Tauri webview │  │      │
+  │   │  │   React UI     │  │             │  │   React UI     │  │      │
+  │   │  │  settingsStore │◀─┼─ get/set ───┼─▶│  settingsStore │  │      │
+  │   │  │  (split adapt) │  │             │  │  (split adapt) │  │      │
+  │   │  │  groupStore    │  │             │  │  groupStore    │  │      │
+  │   │  │  (localStorage)│  │             │  │  (in-memory)   │  │      │
+  │   │  └────────┬───────┘  │             │  └────────┬───────┘  │      │
+  │   │           │ Tauri cmds             │           │          │      │
+  │   │  ┌────────▼───────┐  │             │  ┌────────▼───────┐  │      │
+  │   │  │  Rust AppState │  │             │  │  Rust AppState │  │      │
+  │   │  │  AWS client    │  │             │  │  AWS client    │  │      │
+  │   │  │  LOCK (held)   │  │             │  │  LOCK (none)   │  │      │
+  │   │  │  notify watch  │  │             │  │  notify watch  │  │      │
+  │   │  └────────┬───────┘  │             │  └────────┬───────┘  │      │
+  │   └───────────┼──────────┘             └───────────┼──────────┘      │
+  │               │                                    │                 │
+  │               ▼                                    ▼                 │
+  │   ┌──────────────────────────────────────────────────────┐           │
+  │   │             <app-data>/                              │           │
+  │   │   loggy.lock     (fs2 advisory, held by Proc A)      │           │
+  │   │   settings.json  (atomic rename, read by all)        │           │
+  │   └──────────────────────────────────────────────────────┘           │
+  └──────────────────────────────────────────────────────────────────────┘
+```
+
+### Launch flow
+
+`Loggy → New Window` (⌘N) emits `new-window-requested`. The frontend listener calls the `open_new_window` Tauri command. On macOS, the command shells out to `open -n -a <path-to-Loggy.app>` (where the path is derived from `std::env::current_exe()` walked up to the `.app` bundle). On Linux/Windows, it spawns `current_exe()` detached. The child inherits `LOGGY_SECONDARY=1` and optionally `LOGGY_LOAD_WORKSPACE=<id>`.
+
+On boot, the child calls `get_boot_workspace` to read `LOGGY_LOAD_WORKSPACE` and, if present, loads that saved workspace via `workspaceStore.loadWorkspace`.
+
+### Close flow
+
+`tauri://close-requested`:
+
+1. `workspaceStore.autoSaveLoadedWorkspace()` writes the current layout back to `savedWorkspaces` if the window was opened with a workspace ID.
+2. `flushPendingSettingsWrites()` flushes any debounced settings writes that would otherwise be lost.
+3. The OS releases the instance lock on exit.
+
 ## Project Structure
 
 ```text
