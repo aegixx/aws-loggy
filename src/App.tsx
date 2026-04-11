@@ -143,13 +143,19 @@ function App() {
     };
   }, []);
 
-  // Multi-process: flush pending settings writes before the window closes so
-  // edits in the last ~300ms survive quit.
+  // Multi-process: block the window close long enough to flush pending
+  // debounced settings writes and auto-save the bound workspace. We must
+  // use `onCloseRequested` (not the generic `listen` API) because that's
+  // the only path that lets us `preventDefault()` and call `win.close()`
+  // explicitly after the async work finishes. Using `listen` here races
+  // the close and silently drops writes made in the last ~300ms.
   useEffect(() => {
     const win = getCurrentWindow();
-    const unlistenPromise = win.listen("tauri://close-requested", async () => {
-      // Auto-save the bound workspace first, then flush any settings writes
-      // that captured that save.
+    let closing = false;
+    const unlistenPromise = win.onCloseRequested(async (event) => {
+      if (closing) return; // our own `win.close()` below re-fires the event
+      closing = true;
+      event.preventDefault();
       try {
         useWorkspaceStore.getState().autoSaveLoadedWorkspace();
       } catch (e) {
@@ -159,6 +165,11 @@ function App() {
         await flushPendingSettingsWrites();
       } catch (e) {
         console.warn("close: flushPendingSettingsWrites failed:", e);
+      }
+      try {
+        await win.close();
+      } catch (e) {
+        console.warn("close: win.close() failed:", e);
       }
     });
     return () => {

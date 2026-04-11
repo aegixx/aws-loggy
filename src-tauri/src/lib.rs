@@ -1447,15 +1447,18 @@ fn get_settings(state: State<'_, MultiProcessState>) -> serde_json::Value {
     settings_store::load_settings(&state.settings_path)
 }
 
-/// Writes `settings.json` atomically. Marks the write so our own file watcher
-/// drops the event this write will trigger.
+/// Writes `settings.json` atomically. On success, marks the write so our own
+/// file watcher drops the event this write will trigger. We stamp AFTER the
+/// write succeeds so a failed write does not leave a stale 500ms suppression
+/// window that would silently swallow a legitimate sibling-process event.
 #[tauri::command]
 fn set_settings(
     state: State<'_, MultiProcessState>,
     value: serde_json::Value,
 ) -> Result<(), String> {
+    settings_store::save_settings(&state.settings_path, value)?;
     state.watch_state.mark_self_write();
-    settings_store::save_settings(&state.settings_path, value)
+    Ok(())
 }
 
 /// Returns the saved-workspace ID the child process should load at boot, if any.
@@ -1472,13 +1475,14 @@ fn get_boot_workspace() -> Option<String> {
 ///
 /// On macOS, uses `open -n -a <path-to-.app>` so Launch Services creates a
 /// separate Dock entry. In dev builds where `current_exe()` is not inside an
-/// `.app` bundle, falls back to spawning the binary directly — which may work
-/// or may yield a confusing UX. An error message guides the developer to use a
-/// packaged build for true multi-process testing.
+/// `.app` bundle, returns an error with guidance for the developer.
 ///
-/// On Linux and Windows, spawns the current binary detached.
+/// On Linux and Windows, spawns the current binary detached (stdio → null
+/// so the child doesn't inherit the parent's handles).
 ///
-/// `workspace_id`, if provided, is passed to the child via `LOGGY_LOAD_WORKSPACE`.
+/// Role (primary vs secondary) is determined by the file lock in
+/// `instance.rs`, not by any env var. `workspace_id`, if provided, is
+/// passed to the child via `LOGGY_LOAD_WORKSPACE`.
 #[tauri::command]
 fn open_new_window(workspace_id: Option<String>) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {}", e))?;
@@ -1500,7 +1504,6 @@ fn open_new_window(workspace_id: Option<String>) -> Result<(), String> {
             Some(bundle_path) => {
                 let mut cmd = std::process::Command::new("open");
                 cmd.arg("-n").arg("-a").arg(&bundle_path);
-                cmd.env("LOGGY_SECONDARY", "1");
                 if let Some(ref id) = workspace_id {
                     cmd.env("LOGGY_LOAD_WORKSPACE", id);
                 }
@@ -1520,8 +1523,11 @@ fn open_new_window(workspace_id: Option<String>) -> Result<(), String> {
 
     #[cfg(not(target_os = "macos"))]
     {
+        use std::process::Stdio;
         let mut cmd = std::process::Command::new(&exe);
-        cmd.env("LOGGY_SECONDARY", "1");
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         if let Some(ref id) = workspace_id {
             cmd.env("LOGGY_LOAD_WORKSPACE", id);
         }

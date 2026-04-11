@@ -108,11 +108,18 @@ export function profileColor(name: string): ProfileColor {
   const whiteContrast = contrastRatio(lum, 1);
   const blackContrast = contrastRatio(lum, 0);
 
-  // Prefer white unless black gives meaningfully better contrast.
-  const fg =
-    whiteContrast >= 4.5 || whiteContrast >= blackContrast
-      ? "#ffffff"
-      : "#000000";
+  // Prefer white (matches the rest of the status bar text) if it meets AA.
+  // Otherwise prefer black if IT meets AA. If neither clears AA (shouldn't
+  // happen at our fixed s=65%/l=45%, but explicit is better than implicit),
+  // fall back to whichever has the better ratio and accept the shortfall.
+  let fg: string;
+  if (whiteContrast >= 4.5) {
+    fg = "#ffffff";
+  } else if (blackContrast >= 4.5) {
+    fg = "#000000";
+  } else {
+    fg = whiteContrast >= blackContrast ? "#ffffff" : "#000000";
+  }
 
   return { bg, fg };
 }
