@@ -5,9 +5,30 @@ import {
   useSettingsStore,
   DEFAULT_CACHE_LIMITS,
 } from "../stores/settingsStore";
+import { useConnectionStore } from "../stores/connectionStore";
 import { useDemoStore } from "../demo/demoStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
 import { useLogGroups } from "../hooks/useLogGroups";
+import { profileColor } from "../utils/profileColor";
+
+/**
+ * Small badge in the status bar showing which AWS profile this window is
+ * connected to. Background color is deterministically hashed from the profile
+ * name so when multiple Loggy windows are open (each on a different env) the
+ * user can tell them apart at a glance.
+ */
+function ProfileBadge({ profile }: { profile: string }) {
+  const { bg, fg } = profileColor(profile);
+  return (
+    <span
+      className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide"
+      style={{ backgroundColor: bg, color: fg }}
+      title={`AWS profile: ${profile}`}
+    >
+      {profile}
+    </span>
+  );
+}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -151,6 +172,7 @@ export function StatusBar({ mergedPanelIds }: StatusBarProps) {
   const allPanels = useWorkspaceStore((s) => s.panels);
   const mergedSourceToggles = useWorkspaceStore((s) => s.mergedSourceToggles);
   const cacheLimits = useSettingsStore((s) => s.cacheLimits);
+  const awsInfo = useConnectionStore((s) => s.awsInfo);
   const { isDemoMode } = useDemoStore();
   const isDark = useSystemTheme();
   const { groups, effectiveMode } = useLogGroups();
@@ -231,6 +253,9 @@ export function StatusBar({ mergedPanelIds }: StatusBarProps) {
           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-orange-500 text-white">
             DEMO
           </span>
+        )}
+        {!isDemoMode && awsInfo?.profile && (
+          <ProfileBadge profile={awsInfo.profile} />
         )}
         {isLoading ? (
           <div className="flex items-center gap-2">

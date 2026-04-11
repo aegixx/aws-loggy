@@ -1,3 +1,6 @@
+mod instance;
+mod settings_store;
+
 use aws_config::BehaviorVersion;
 use aws_credential_types::provider::ProvideCredentials;
 use aws_sdk_cloudwatchlogs::{types::FilteredLogEvent, Client as CloudWatchClient};
@@ -7,13 +10,16 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tauri::{
     menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-    AppHandle, Emitter, Manager, State,
+    AppHandle, Emitter, Manager, State, WindowEvent,
 };
 use tokio::sync::Mutex;
+
+use crate::instance::{InstanceLock, InstanceRole};
+use crate::settings_store::{SettingsWatchState, SCHEMA_VERSION};
 
 /// Represents a log event returned to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1401,6 +1407,131 @@ async fn stop_live_tail(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+// -----------------------------------------------------------------------------
+// Multi-process support
+// -----------------------------------------------------------------------------
+
+/// Tauri-managed state for multi-process support. Holds the instance lock for
+/// the lifetime of the process and the watcher handle.
+pub struct MultiProcessState {
+    pub role: InstanceRole,
+    pub settings_path: PathBuf,
+    pub watch_state: SettingsWatchState,
+    /// Set once in `run()`; kept alive so the advisory lock isn't dropped.
+    _lock: std::sync::Mutex<Option<InstanceLock>>,
+    /// Kept alive so `notify` keeps watching.
+    _watcher: std::sync::Mutex<Option<notify::RecommendedWatcher>>,
+}
+
+impl MultiProcessState {
+    fn new(role: InstanceRole, settings_path: PathBuf, lock: InstanceLock) -> Self {
+        Self {
+            role,
+            settings_path,
+            watch_state: SettingsWatchState::default(),
+            _lock: std::sync::Mutex::new(Some(lock)),
+            _watcher: std::sync::Mutex::new(None),
+        }
+    }
+}
+
+/// Returns "Primary" or "Secondary". Called once at boot from the frontend.
+#[tauri::command]
+fn get_instance_role(state: State<'_, MultiProcessState>) -> String {
+    state.role.as_str().to_string()
+}
+
+/// Returns the current contents of `settings.json` (or `{}` if missing).
+#[tauri::command]
+fn get_settings(state: State<'_, MultiProcessState>) -> serde_json::Value {
+    settings_store::load_settings(&state.settings_path)
+}
+
+/// Writes `settings.json` atomically. Marks the write so our own file watcher
+/// drops the event this write will trigger.
+#[tauri::command]
+fn set_settings(
+    state: State<'_, MultiProcessState>,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    state.watch_state.mark_self_write();
+    settings_store::save_settings(&state.settings_path, value)
+}
+
+/// Returns the saved-workspace ID the child process should load at boot, if any.
+/// Reads `LOGGY_LOAD_WORKSPACE` from the environment (set by the parent when it
+/// spawns us).
+#[tauri::command]
+fn get_boot_workspace() -> Option<String> {
+    std::env::var("LOGGY_LOAD_WORKSPACE")
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// Spawn a new Loggy window as a child process.
+///
+/// On macOS, uses `open -n -a <path-to-.app>` so Launch Services creates a
+/// separate Dock entry. In dev builds where `current_exe()` is not inside an
+/// `.app` bundle, falls back to spawning the binary directly — which may work
+/// or may yield a confusing UX. An error message guides the developer to use a
+/// packaged build for true multi-process testing.
+///
+/// On Linux and Windows, spawns the current binary detached.
+///
+/// `workspace_id`, if provided, is passed to the child via `LOGGY_LOAD_WORKSPACE`.
+#[tauri::command]
+fn open_new_window(workspace_id: Option<String>) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {}", e))?;
+
+    // Walk up to find a .app bundle on macOS.
+    #[cfg(target_os = "macos")]
+    {
+        let mut app_bundle: Option<PathBuf> = None;
+        for ancestor in exe.ancestors() {
+            if let Some(ext) = ancestor.extension() {
+                if ext == "app" {
+                    app_bundle = Some(ancestor.to_path_buf());
+                    break;
+                }
+            }
+        }
+
+        match app_bundle {
+            Some(bundle_path) => {
+                let mut cmd = std::process::Command::new("open");
+                cmd.arg("-n").arg("-a").arg(&bundle_path);
+                cmd.env("LOGGY_SECONDARY", "1");
+                if let Some(ref id) = workspace_id {
+                    cmd.env("LOGGY_LOAD_WORKSPACE", id);
+                }
+                cmd.spawn()
+                    .map_err(|e| format!("spawn `open -n -a {}`: {}", bundle_path.display(), e))?;
+                log::info!("open_new_window: spawned {}", bundle_path.display());
+                Ok(())
+            }
+            None => Err(format!(
+                "Could not open new window: running as a development build (no .app bundle at {}). \
+                 Run `npm run app:build` to produce a packaged build, then use `open -n -a \
+                 /Applications/Loggy.app` to test multi-process.",
+                exe.display()
+            )),
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.env("LOGGY_SECONDARY", "1");
+        if let Some(ref id) = workspace_id {
+            cmd.env("LOGGY_LOAD_WORKSPACE", id);
+        }
+        cmd.spawn()
+            .map_err(|e| format!("spawn {}: {}", exe.display(), e))?;
+        log::info!("open_new_window: spawned {}", exe.display());
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging
@@ -1412,6 +1543,50 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
         .setup(|app| {
+            // --- Multi-process setup ---------------------------------------
+            // Acquire the instance lock before touching any persistent state.
+            // The first process to boot becomes Primary; any subsequent one
+            // becomes Secondary. The role is used on the frontend to swap in a
+            // no-op storage adapter for workspace state in secondaries.
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| format!("app_data_dir: {}", e))?;
+            let lock_path = app_data_dir.join("loggy.lock");
+            let lock = InstanceLock::acquire(&lock_path);
+            let role = lock.role;
+            log::info!("instance role: {}", role.as_str());
+
+            let settings_path = settings_store::settings_path(&app_data_dir);
+            let mp_state = MultiProcessState::new(role, settings_path.clone(), lock);
+
+            // Start the settings file watcher so cross-process edits propagate.
+            match settings_store::start_watcher(
+                app.handle().clone(),
+                settings_path.clone(),
+                mp_state.watch_state.clone(),
+            ) {
+                Ok(watcher) => {
+                    if let Ok(mut guard) = mp_state._watcher.try_lock() {
+                        *guard = Some(watcher);
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "settings: could not start watcher ({}). Cross-process sync disabled.",
+                        e
+                    );
+                }
+            }
+
+            app.manage(mp_state);
+            log::info!(
+                "multi-process: schema_version={} settings={}",
+                SCHEMA_VERSION,
+                settings_path.display()
+            );
+
+            // --- Menu ------------------------------------------------------
             // Create menu items
             let about_item = MenuItemBuilder::new("About Loggy").id("about").build(app)?;
 
@@ -1478,6 +1653,14 @@ pub fn run() {
                 .checked(false)
                 .build(app)?;
 
+            // New Window menu item (spawns a fresh Loggy process).
+            // The frontend receives the menu event and invokes `open_new_window`
+            // so it can optionally pass a saved-workspace ID from a submenu.
+            let new_window_item = MenuItemBuilder::new("New Window")
+                .id("new-window")
+                .accelerator("CmdOrCtrl+N")
+                .build(app)?;
+
             // Tab & pane management items
             let new_tab_item = MenuItemBuilder::new("New Tab")
                 .id("new-tab")
@@ -1525,6 +1708,8 @@ pub fn run() {
                 .separator()
                 .item(&preferences_item)
                 .item(&demo_mode_item)
+                .separator()
+                .item(&new_window_item)
                 .separator()
                 .services()
                 .separator()
@@ -1657,6 +1842,7 @@ pub fn run() {
             let split_down_id = split_down_item.id().clone();
             let merge_tabs_id = merge_tabs_item.id().clone();
             let toggle_time_sync_id = toggle_time_sync_item.id().clone();
+            let new_window_id = new_window_item.id().clone();
 
             // Clone CheckMenuItems for direct access in event handler
             // (menu.get() doesn't search submenus)
@@ -1716,8 +1902,25 @@ pub fn run() {
                     app_handle.emit("merge-tabs", ()).ok();
                 } else if *event.id() == toggle_time_sync_id {
                     app_handle.emit("toggle-time-sync", ()).ok();
+                } else if *event.id() == new_window_id {
+                    // Let the frontend decide whether to pass a workspace_id
+                    // (based on savedWorkspaces) before calling open_new_window.
+                    app_handle.emit("new-window-requested", ()).ok();
                 }
             });
+
+            // Focus-gained safety net: re-read settings when a window regains
+            // focus, covering the (rare) case where the notify watcher missed
+            // an FSEvents coalesced event from a sibling process.
+            let focus_handle = app.handle().clone();
+            if let Some(win) = app.webview_windows().values().next() {
+                let h = focus_handle.clone();
+                win.on_window_event(move |event| {
+                    if let WindowEvent::Focused(true) = event {
+                        h.emit("settings-changed", ()).ok();
+                    }
+                });
+            }
 
             Ok(())
         })
@@ -1735,6 +1938,11 @@ pub fn run() {
             sync_theme_menu,
             start_live_tail,
             stop_live_tail,
+            get_instance_role,
+            get_settings,
+            set_settings,
+            open_new_window,
+            get_boot_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

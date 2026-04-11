@@ -48,5 +48,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn(() => ({
     startDragging: vi.fn(),
+    listen: vi.fn(() => Promise.resolve(() => {})),
+    setTitle: vi.fn(() => Promise.resolve()),
   })),
 }));

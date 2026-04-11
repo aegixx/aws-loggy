@@ -57,8 +57,21 @@ interface CorrelationSlice {
 }
 
 interface WorkspaceConfigSlice {
+  /**
+   * ID of the saved workspace currently bound to this window, if any.
+   * Non-null when the user opened a window with `Loggy → New Window with
+   * Workspace → <name>` or loaded a saved workspace manually. Used to decide
+   * whether to auto-save the current state back on window close.
+   */
+  loadedWorkspaceId: string | null;
   saveWorkspace: (name: string) => WorkspaceConfig;
   loadWorkspace: (config: WorkspaceConfig) => void;
+  /**
+   * Persist the currently loaded workspace back to the saved-workspaces
+   * catalog. Called from App.tsx on `tauri://close-requested` when
+   * `loadedWorkspaceId` is non-null.
+   */
+  autoSaveLoadedWorkspace: () => void;
 }
 
 type WorkspaceStore = PanelSlice &
@@ -336,6 +349,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
     },
 
     // ─── Workspace Config Slice ─────────────────────────────────────
+    loadedWorkspaceId: null,
+
     saveWorkspace: (name: string): WorkspaceConfig => {
       const { panels } = get();
       const { awsProfile } = useSettingsStore.getState();
@@ -412,7 +427,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
         newPanels.set(panelConfig.id, panel);
       }
 
-      set({ panels: newPanels });
+      set({ panels: newPanels, loadedWorkspaceId: config.id });
 
       // Load group layout
       useGroupStore.getState().loadGroupLayout(config.layout);
@@ -449,6 +464,35 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
           `[Workspace] Stale log groups in loaded workspace: ${staleLogGroups.join(", ")}`,
         );
       }
+    },
+
+    autoSaveLoadedWorkspace: () => {
+      const { loadedWorkspaceId } = get();
+      if (!loadedWorkspaceId) return;
+
+      const settings = useSettingsStore.getState();
+      const existing = settings.savedWorkspaces.find(
+        (w) => w.id === loadedWorkspaceId,
+      );
+      if (!existing) {
+        console.warn(
+          `[Workspace] autoSaveLoadedWorkspace: id ${loadedWorkspaceId} no longer in catalog, skipping`,
+        );
+        return;
+      }
+
+      // Build an updated config preserving the id + name but refreshing the
+      // layout, panels, and profile to whatever the user ended with.
+      const fresh = get().saveWorkspace(existing.name);
+      settings.addSavedWorkspace({
+        ...fresh,
+        id: existing.id,
+        createdAt: existing.createdAt,
+        updatedAt: Date.now(),
+      });
+      console.info(
+        `[Workspace] auto-saved workspace ${existing.name} (${existing.id}) on close`,
+      );
     },
   };
 });

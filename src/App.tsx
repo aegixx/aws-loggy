@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
+import { invoke as directInvoke } from "@tauri-apps/api/core";
 import { invoke } from "./demo/demoInvoke";
 import { WorkspaceBar } from "./components/WorkspaceBar";
 import { PanelContainer } from "./components/PanelContainer";
@@ -10,6 +11,11 @@ import { UpdateDialog, UpdateInfo } from "./components/UpdateDialog";
 import { useConnectionStore } from "./stores/connectionStore";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useGroupStore, initializeGroups } from "./stores/groupStore";
+import type { WorkspaceConfig } from "./types/workspace";
+import {
+  subscribeSettingsChanged,
+  flushPendingSettingsWrites,
+} from "./stores/settingsStore";
 import type {
   LiveTailEventPayload,
   LiveTailErrorPayload,
@@ -125,6 +131,81 @@ function App() {
       .then((profiles) => setAvailableProfiles(profiles))
       .catch((err) => console.error("Failed to load profiles:", err));
   }, [initializeAws]);
+
+  // Multi-process: subscribe to cross-process settings changes.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    subscribeSettingsChanged().then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // Multi-process: flush pending settings writes before the window closes so
+  // edits in the last ~300ms survive quit.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    const unlistenPromise = win.listen("tauri://close-requested", async () => {
+      // Auto-save the bound workspace first, then flush any settings writes
+      // that captured that save.
+      try {
+        useWorkspaceStore.getState().autoSaveLoadedWorkspace();
+      } catch (e) {
+        console.warn("close: autoSaveLoadedWorkspace failed:", e);
+      }
+      try {
+        await flushPendingSettingsWrites();
+      } catch (e) {
+        console.warn("close: flushPendingSettingsWrites failed:", e);
+      }
+    });
+    return () => {
+      unlistenPromise.then((fn) => fn());
+    };
+  }, []);
+
+  // Multi-process: update the window title when the active AWS profile
+  // changes so multiple Loggy windows are distinguishable in cmd-tab / dock.
+  useEffect(() => {
+    const profile = awsInfo?.profile;
+    const title = profile ? `Loggy — ${profile}` : "Loggy";
+    getCurrentWindow()
+      .setTitle(title)
+      .catch((e) => console.warn("setTitle failed:", e));
+  }, [awsInfo?.profile]);
+
+  // Multi-process: if this process was spawned with LOGGY_LOAD_WORKSPACE, load
+  // that saved workspace once AWS is connected.
+  const [bootWorkspaceLoaded, setBootWorkspaceLoaded] = useState(false);
+  useEffect(() => {
+    if (bootWorkspaceLoaded || !isConnected) return;
+    directInvoke<string | null>("get_boot_workspace")
+      .then((id) => {
+        if (typeof id !== "string" || id.length === 0) {
+          setBootWorkspaceLoaded(true);
+          return;
+        }
+        const { savedWorkspaces } = useSettingsStore.getState();
+        const config = savedWorkspaces.find((w) => w.id === id) as
+          | WorkspaceConfig
+          | undefined;
+        if (config) {
+          useWorkspaceStore.getState().loadWorkspace(config);
+          console.info(`[boot] loaded workspace ${config.name} (${id})`);
+        } else {
+          console.warn(
+            `[boot] LOGGY_LOAD_WORKSPACE=${id} but no matching saved workspace`,
+          );
+        }
+        setBootWorkspaceLoaded(true);
+      })
+      .catch((e) => {
+        console.warn("get_boot_workspace failed:", e);
+        setBootWorkspaceLoaded(true);
+      });
+  }, [isConnected, bootWorkspaceLoaded]);
 
   // Sync theme menu checkmarks with persisted theme on startup and when theme changes
   useEffect(() => {
@@ -370,6 +451,16 @@ function App() {
       const store = useGroupStore.getState();
       store.setTimeSyncEnabled(!store.timeSyncEnabled);
     });
+    const unlistenNewWindow = listen("new-window-requested", () => {
+      directInvoke("open_new_window", { workspaceId: null }).catch(
+        (err: unknown) => {
+          console.error("open_new_window failed:", err);
+          // Surface the error as a tail-style toast so the user sees why.
+          const msg = typeof err === "string" ? err : String(err);
+          alert(`Could not open new window:\n\n${msg}`);
+        },
+      );
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
@@ -396,6 +487,7 @@ function App() {
       unlistenSplitDown.then((fn) => fn());
       unlistenMergeTabs.then((fn) => fn());
       unlistenToggleTimeSync.then((fn) => fn());
+      unlistenNewWindow.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand store actions are stable refs; register listeners once to prevent race conditions on re-render
   }, []);
