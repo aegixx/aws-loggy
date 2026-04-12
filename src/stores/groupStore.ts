@@ -11,7 +11,7 @@ import type {
   SplitDirection,
   GroupLayoutConfig,
 } from "../types/workspace";
-import { initInstanceRole, isPrimary } from "./instanceRole";
+import { isPrimary } from "./instanceRole";
 
 // Circular import: groupStore <-> workspaceStore
 // Safe because cross-store calls only happen inside actions (after both modules load).
@@ -21,15 +21,20 @@ import { useWorkspaceStore } from "./workspaceStore";
  * Multi-process storage: primary windows persist the layout tree to
  * localStorage as before; secondary windows discard writes and read nothing.
  *
- * `getItem` awaits `initInstanceRole()` so the role is resolved before the
- * first read, avoiding a race where a secondary window briefly hydrates from
- * the primary's localStorage. `setItem` is synchronous but only runs after
- * the first `getItem` has resolved, so by the time it fires the role is
- * cached.
+ * `getItem` is SYNCHRONOUS so zustand hydrates the store before the first
+ * React render completes. This avoids a race where `initializeGroups()`
+ * creates panels for fresh default IDs, then async hydration later replaces
+ * the root with old persisted panel IDs that workspaceStore doesn't know
+ * about (resulting in a blank screen).
+ *
+ * `isPrimary()` defaults to `true` when the role hasn't been resolved yet
+ * (via `initInstanceRole()` in main.tsx). This means a secondary window may
+ * briefly hydrate from the primary's localStorage — that's harmless because
+ * `setItem` blocks secondary writes, so the data is never persisted back.
+ * The secondary just gets a reasonable starting layout for its session.
  */
 const roleAwareStateStorage: StateStorage = {
-  async getItem(name) {
-    await initInstanceRole();
+  getItem(name) {
     if (!isPrimary()) return null;
     return localStorage.getItem(name);
   },

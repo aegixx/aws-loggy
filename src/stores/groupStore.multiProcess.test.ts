@@ -38,4 +38,46 @@ describe("groupStore role-aware persistence", () => {
     // The role-aware adapter short-circuits setItem for secondaries.
     expect(localStorage.getItem("loggy-groups")).toBeNull();
   });
+
+  it("hydration is synchronous so initializeGroups sees persisted panel IDs", () => {
+    // Regression test: when groupStore used async storage, initializeGroups()
+    // ran before hydration completed, creating panels for fresh default IDs.
+    // After hydration replaced the root with persisted panel IDs, workspaceStore
+    // had no record of them — resulting in a blank screen.
+    __setInstanceRoleForTests("Primary");
+
+    // Seed localStorage with a known layout containing a specific panel ID.
+    const seededPanelId = "panel-regression-test";
+    const seededLeaf = {
+      type: "leaf",
+      id: "leaf-regression-test",
+      panelIds: [seededPanelId],
+      activePanelId: seededPanelId,
+      merged: false,
+    };
+    localStorage.setItem(
+      "loggy-groups",
+      JSON.stringify({
+        state: {
+          root: seededLeaf,
+          activeGroupId: seededLeaf.id,
+          timeSyncEnabled: false,
+        },
+        version: 2,
+      }),
+    );
+
+    // Force zustand to re-read from storage by replacing its state.
+    // In the real app, this happens on module load. Here we simulate by
+    // calling rehydrate (zustand persist exposes this).
+    useGroupStore.persist.rehydrate();
+
+    // The root should now have the seeded panel ID — synchronously, before
+    // any async tick. This is what initializeGroups() reads at startup.
+    const panelIds =
+      useGroupStore.getState().root.type === "leaf"
+        ? (useGroupStore.getState().root as { panelIds: string[] }).panelIds
+        : [];
+    expect(panelIds).toContain(seededPanelId);
+  });
 });
