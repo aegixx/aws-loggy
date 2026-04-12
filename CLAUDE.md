@@ -104,6 +104,7 @@ npm run test:watch # Run in watch mode
 | `⌘L` / `Ctrl+L`    | Focus filter input and select all            |
 | `⌘R` / `Ctrl+R`    | Refresh - reconnect to AWS and re-query logs |
 | `⌘K` / `Ctrl+K`    | Clear logs (keep filters, re-fetch)          |
+| `⌘N` / `Ctrl+N`    | Open a new Loggy window (new process)        |
 | `⌘,` / `Ctrl+,`    | Open Settings                                |
 | `⌘A` / `Ctrl+A`    | Select all visible logs                      |
 | `⌘C` / `Ctrl+C`    | Copy selected messages to clipboard          |
@@ -124,6 +125,7 @@ The Loggy application menu includes:
 | Check for Updates... | Manually check for updates (shows result in status bar and dialog) |
 | Preferences... (⌘,)  | Open settings                                                      |
 | Demo Mode            | Toggle demo mode with mock Lambda data (no AWS required)           |
+| New Window (⌘N)      | Spawn a new Loggy window as a separate OS process                  |
 
 ## Context Menu
 
@@ -220,3 +222,15 @@ The filter bar time quickfilter buttons are customizable in Settings (CMD-,):
 - StatusBar shows orange "DEMO" badge; profile dropdown shows "demo" and is disabled
 - Toggling off reconnects to real AWS automatically
 - Demo state is not persisted — always starts in normal mode
+
+## Multi-Process
+
+Multiple Loggy windows can run simultaneously, each as a separate OS process with its own AWS client and live tail. Good for monitoring `dev` and `prod` at the same time without switching profiles.
+
+- **Launch:** `Loggy → New Window` (⌘N) in the running app spawns a fresh process. On macOS, this shells out to `open -n -a <path-to-Loggy.app>`. On Linux/Windows, it spawns the current binary detached.
+- **CLI:** `open -n -a /Applications/Loggy.app` on macOS works as a side effect of the storage split — no single-instance lock blocks a second launch.
+- **Primary vs Secondary:** The first process to start acquires an advisory file lock at `<app-data>/loggy.lock` and becomes the **primary**. Subsequent processes become **secondaries**. Role is set at boot and never changes. Primary owns per-window workspace state (layout, AWS profile, per-panel configs) in `localStorage`; secondaries run that state in memory only and discard it on close.
+- **Shared settings:** UI preferences (theme, log levels, cache limits, auto-update, time presets, saved workspaces) live in `<app-data>/settings.json` and sync across all windows via a `notify` file watcher. Changing a color in one window updates the others within ~400ms.
+- **Identification:** Window title becomes `Loggy — <profile>`. Status bar shows a colored profile badge (djb2-hashed HSL, orange excluded to avoid clashing with DEMO).
+- **Incompatible plugin:** Do NOT add `tauri-plugin-single-instance`; it would break the multi-process launch flow. See `src-tauri/src/instance.rs` for the design rationale.
+- **Testing in dev:** `npm start` launches a single Tauri dev process; a second `npm start` just focuses the first. To test multi-process behavior, run `npm run app:build` then `open -n -a src-tauri/target/release/bundle/macos/Loggy.app` from a terminal.

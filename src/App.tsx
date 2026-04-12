@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
+import { invoke as directInvoke } from "@tauri-apps/api/core";
 import { invoke } from "./demo/demoInvoke";
 import { WorkspaceBar } from "./components/WorkspaceBar";
 import { PanelContainer } from "./components/PanelContainer";
@@ -10,6 +11,11 @@ import { UpdateDialog, UpdateInfo } from "./components/UpdateDialog";
 import { useConnectionStore } from "./stores/connectionStore";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useGroupStore, initializeGroups } from "./stores/groupStore";
+import type { WorkspaceConfig } from "./types/workspace";
+import {
+  subscribeSettingsChanged,
+  flushPendingSettingsWrites,
+} from "./stores/settingsStore";
 import type {
   LiveTailEventPayload,
   LiveTailErrorPayload,
@@ -125,6 +131,96 @@ function App() {
       .then((profiles) => setAvailableProfiles(profiles))
       .catch((err) => console.error("Failed to load profiles:", err));
   }, [initializeAws]);
+
+  // Multi-process: subscribe to cross-process settings changes.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    subscribeSettingsChanged().then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  // Multi-process: block the window close long enough to flush pending
+  // debounced settings writes and auto-save the bound workspace. We must
+  // use `onCloseRequested` (not the generic `listen` API) because that's
+  // the only path that lets us `preventDefault()` and call `win.close()`
+  // explicitly after the async work finishes. Using `listen` here races
+  // the close and silently drops writes made in the last ~300ms.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let closing = false;
+    const unlistenPromise = win.onCloseRequested(async (event) => {
+      if (closing) return; // our own `win.close()` below re-fires the event
+      closing = true;
+      event.preventDefault();
+      try {
+        useWorkspaceStore.getState().autoSaveLoadedWorkspace();
+      } catch (e) {
+        console.warn("close: autoSaveLoadedWorkspace failed:", e);
+      }
+      try {
+        await flushPendingSettingsWrites();
+      } catch (e) {
+        console.warn("close: flushPendingSettingsWrites failed:", e);
+      }
+      try {
+        await win.close();
+      } catch (e) {
+        console.warn("close: win.close() failed:", e);
+      }
+    });
+    return () => {
+      unlistenPromise.then((fn) => fn());
+    };
+  }, []);
+
+  // Multi-process: update the window title when the active AWS profile
+  // changes so multiple Loggy windows are distinguishable in cmd-tab / dock.
+  useEffect(() => {
+    const profile = awsInfo?.profile;
+    const title = profile ? `Loggy — ${profile}` : "Loggy";
+    getCurrentWindow()
+      .setTitle(title)
+      .catch((e) => console.warn("setTitle failed:", e));
+  }, [awsInfo?.profile]);
+
+  // Multi-process: if this process was spawned with LOGGY_LOAD_WORKSPACE, load
+  // that saved workspace once AWS is connected.
+  const [bootWorkspaceLoaded, setBootWorkspaceLoaded] = useState(false);
+  useEffect(() => {
+    if (bootWorkspaceLoaded || !isConnected) return;
+    directInvoke<string | null>("get_boot_workspace")
+      .then((id) => {
+        if (typeof id !== "string" || id.length === 0) {
+          setBootWorkspaceLoaded(true);
+          return;
+        }
+        const { savedWorkspaces } = useSettingsStore.getState();
+        const config = savedWorkspaces.find((w) => w.id === id) as
+          | WorkspaceConfig
+          | undefined;
+        if (config) {
+          // Boot path: bind for auto-save so the window's changes persist
+          // back to the catalog entry on close.
+          useWorkspaceStore
+            .getState()
+            .loadWorkspace(config, { bindForAutoSave: true });
+          console.info(`[boot] loaded workspace ${config.name} (${id})`);
+        } else {
+          console.warn(
+            `[boot] LOGGY_LOAD_WORKSPACE=${id} but no matching saved workspace`,
+          );
+        }
+        setBootWorkspaceLoaded(true);
+      })
+      .catch((e) => {
+        console.warn("get_boot_workspace failed:", e);
+        setBootWorkspaceLoaded(true);
+      });
+  }, [isConnected, bootWorkspaceLoaded]);
 
   // Sync theme menu checkmarks with persisted theme on startup and when theme changes
   useEffect(() => {
@@ -370,6 +466,19 @@ function App() {
       const store = useGroupStore.getState();
       store.setTimeSyncEnabled(!store.timeSyncEnabled);
     });
+    const unlistenNewWindow = listen("new-window-requested", () => {
+      directInvoke("open_new_window", { workspaceId: null }).catch(
+        (err: unknown) => {
+          console.error("open_new_window failed:", err);
+          // TODO: replace with a tail-style status-bar toast once Loggy grows
+          // a toast system. For now, `alert()` is a blocking modal, which is
+          // rough UX but acceptable for this dev-only error path (spawning a
+          // non-bundled binary). See TODOS.md "Multi-process follow-ups".
+          const msg = typeof err === "string" ? err : String(err);
+          alert(`Could not open new window:\n\n${msg}`);
+        },
+      );
+    });
 
     return () => {
       unlistenSettings.then((fn) => fn());
@@ -396,6 +505,7 @@ function App() {
       unlistenSplitDown.then((fn) => fn());
       unlistenMergeTabs.then((fn) => fn());
       unlistenToggleTimeSync.then((fn) => fn());
+      unlistenNewWindow.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand store actions are stable refs; register listeners once to prevent race conditions on re-render
   }, []);

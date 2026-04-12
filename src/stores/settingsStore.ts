@@ -1,5 +1,12 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import {
+  persist,
+  type PersistStorage,
+  type StorageValue,
+} from "zustand/middleware";
+import { initInstanceRole, isPrimary } from "./instanceRole";
 
 export type Theme = "dark" | "light" | "system";
 
@@ -279,6 +286,323 @@ function migrateFromArrayFormat(stored: LogLevelConfig[]): LogLevelConfig[] {
     }));
 }
 
+// ---------------------------------------------------------------------------
+// Multi-process split storage adapter
+// ---------------------------------------------------------------------------
+// Pure UI preferences live in <app-data>/settings.json (shared across all
+// Loggy processes). Per-window workspace state lives in a separate
+// localStorage key and is persisted only when this process is Primary.
+
+/** Fields that go to the shared file. Everything else is per-window. */
+const SHARED_FIELDS = new Set<string>([
+  "theme",
+  "logLevels",
+  "cacheLimits",
+  "autoUpdateEnabled",
+  "timePresets",
+  "savedWorkspaces",
+]);
+
+/** localStorage key for the per-window workspace slice. */
+const WORKSPACE_KEY = "loggy-workspace";
+
+/** Legacy key from v17 and earlier (single blob for everything). */
+const LEGACY_KEY = "loggy-settings";
+
+type AnyState = Record<string, unknown>;
+
+interface SplitEnvelope {
+  state: AnyState;
+  version: number;
+}
+
+function splitState(state: AnyState): {
+  shared: AnyState;
+  workspace: AnyState;
+} {
+  const shared: AnyState = {};
+  const workspace: AnyState = {};
+  for (const [k, v] of Object.entries(state)) {
+    if (SHARED_FIELDS.has(k)) {
+      shared[k] = v;
+    } else {
+      workspace[k] = v;
+    }
+  }
+  return { shared, workspace };
+}
+
+/** Debounce state for the Rust file invoke. */
+let pendingFileTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingFileEnvelope: SplitEnvelope | null = null;
+
+const FILE_WRITE_DEBOUNCE_MS = 300;
+
+async function writeFileNow(envelope: SplitEnvelope): Promise<void> {
+  try {
+    await invoke("set_settings", { value: envelope });
+  } catch (e) {
+    console.error("settings: file write failed:", e);
+  }
+}
+
+function scheduleFileWrite(envelope: SplitEnvelope): void {
+  pendingFileEnvelope = envelope;
+  if (pendingFileTimer !== null) {
+    clearTimeout(pendingFileTimer);
+  }
+  pendingFileTimer = setTimeout(() => {
+    const payload = pendingFileEnvelope;
+    pendingFileTimer = null;
+    pendingFileEnvelope = null;
+    if (payload) {
+      void writeFileNow(payload);
+    }
+  }, FILE_WRITE_DEBOUNCE_MS);
+}
+
+/**
+ * Flush any pending debounced file write synchronously. Call from
+ * `tauri://close-requested` so edits in the last ~300ms survive quit.
+ */
+export async function flushPendingSettingsWrites(): Promise<void> {
+  if (pendingFileTimer !== null) {
+    clearTimeout(pendingFileTimer);
+    pendingFileTimer = null;
+  }
+  const payload = pendingFileEnvelope;
+  pendingFileEnvelope = null;
+  if (payload) {
+    await writeFileNow(payload);
+  }
+}
+
+/**
+ * Read the legacy v17 localStorage blob (if present) and split its fields
+ * between the new shared file and the new workspace localStorage. Called once
+ * at hydrate time as a best-effort upgrade. Returns the migrated envelope so
+ * the first hydrate can see the merged result even if the file write is still
+ * in flight.
+ */
+async function migrateLegacyIfPresent(): Promise<SplitEnvelope | null> {
+  const legacyRaw = localStorage.getItem(LEGACY_KEY);
+  if (!legacyRaw) return null;
+
+  let legacy: unknown;
+  try {
+    legacy = JSON.parse(legacyRaw);
+  } catch {
+    console.warn("settings: legacy loggy-settings blob is malformed, ignoring");
+    localStorage.removeItem(LEGACY_KEY);
+    return null;
+  }
+
+  const envelope =
+    legacy && typeof legacy === "object" && "state" in (legacy as AnyState)
+      ? (legacy as SplitEnvelope)
+      : { state: legacy as AnyState, version: 0 };
+
+  const state = (envelope.state ?? {}) as AnyState;
+  const version = typeof envelope.version === "number" ? envelope.version : 0;
+
+  const { shared, workspace } = splitState(state);
+
+  // Write shared side to file (immediate, not debounced — this is a one-off).
+  try {
+    await invoke("set_settings", {
+      value: { state: shared, version },
+    });
+  } catch (e) {
+    console.warn("settings: legacy migration could not write shared file:", e);
+  }
+
+  // Write workspace side to localStorage (primary only; secondaries discard).
+  if (isPrimary()) {
+    try {
+      localStorage.setItem(
+        WORKSPACE_KEY,
+        JSON.stringify({ state: workspace, version }),
+      );
+    } catch (e) {
+      console.warn("settings: legacy migration could not write workspace:", e);
+    }
+  }
+
+  // Remove the legacy blob.
+  localStorage.removeItem(LEGACY_KEY);
+  console.info(
+    `settings: migrated legacy v${version} blob → split storage (Primary=${isPrimary()})`,
+  );
+
+  return { state, version };
+}
+
+/** Track if legacy migration has been attempted this session. */
+let legacyMigrationTried = false;
+
+/**
+ * Custom storage adapter used by zustand's `persist` middleware. Routes shared
+ * fields to `settings.json` via Rust and workspace fields to localStorage
+ * under `loggy-workspace`. Secondary processes read but do not write workspace
+ * data.
+ *
+ * NOTE: The `name` parameter (zustand's persist key, always `"loggy-settings"`
+ * in this wiring) is intentionally ignored. This adapter is hard-coded to
+ * route to two fixed destinations — the shared file via Rust, and the fixed
+ * `WORKSPACE_KEY` localStorage slot — so it is NOT reusable for other stores.
+ * Using it with a second persisted store would silently share the same
+ * localStorage slot. Do not lift this adapter out without adding a `name`
+ * check or parameterizing the keys.
+ */
+// Type the storage against `AnyState` because zustand's `partialize` produces
+// a structural subset of SettingsStore, not the full store, and forcing the
+// full type here would require exposing the partialize shape twice.
+const splitStorage: PersistStorage<AnyState> = {
+  async getItem(_name: string) {
+    // Ensure instance role is resolved before we consult isPrimary() /
+    // localStorage during the rest of this getItem.
+    await initInstanceRole();
+
+    // One-time legacy migration.
+    if (!legacyMigrationTried) {
+      legacyMigrationTried = true;
+      const migrated = await migrateLegacyIfPresent();
+      if (migrated) {
+        // Return the merged state directly so hydration sees everything and
+        // the migrate hook runs v17 -> v18.
+        return migrated as StorageValue<AnyState>;
+      }
+    }
+
+    // Workspace side (localStorage).
+    let workspaceState: AnyState = {};
+    let workspaceVersion: number | null = null;
+    try {
+      const raw = localStorage.getItem(WORKSPACE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as SplitEnvelope;
+        workspaceState = parsed.state ?? {};
+        workspaceVersion =
+          typeof parsed.version === "number" ? parsed.version : 0;
+      }
+    } catch (e) {
+      console.warn("settings: could not read workspace localStorage:", e);
+    }
+
+    // Shared side (file via Tauri).
+    let sharedState: AnyState = {};
+    let sharedVersion: number | null = null;
+    try {
+      const fileRaw = await invoke<Record<string, unknown>>("get_settings");
+      // File envelope is { state, version, schema_version? }.
+      const fileEnvelope = fileRaw as unknown as SplitEnvelope & {
+        schema_version?: number;
+      };
+      if (
+        fileEnvelope &&
+        typeof fileEnvelope === "object" &&
+        "state" in fileEnvelope &&
+        fileEnvelope.state
+      ) {
+        sharedState = fileEnvelope.state;
+        sharedVersion =
+          typeof fileEnvelope.version === "number" ? fileEnvelope.version : 0;
+      }
+    } catch (e) {
+      console.warn("settings: could not read shared file, using defaults:", e);
+    }
+
+    // Fresh install: nothing in either destination. Return null so zustand
+    // uses its initial state and skips the migrate chain (which assumes
+    // non-empty data in older steps).
+    if (workspaceVersion === null && sharedVersion === null) {
+      return null;
+    }
+
+    const mergedState = { ...workspaceState, ...sharedState };
+    const mergedVersion = Math.max(workspaceVersion ?? 0, sharedVersion ?? 0);
+
+    return {
+      state: mergedState,
+      version: mergedVersion,
+    };
+  },
+
+  setItem(_name: string, value: StorageValue<AnyState>) {
+    const state = value.state;
+    const version = value.version ?? 0;
+    const { shared, workspace } = splitState(state);
+
+    // Workspace: sync write to localStorage (primary only).
+    if (isPrimary()) {
+      try {
+        localStorage.setItem(
+          WORKSPACE_KEY,
+          JSON.stringify({ state: workspace, version }),
+        );
+      } catch (e) {
+        console.warn("settings: localStorage write failed:", e);
+      }
+    }
+
+    // Shared: debounced write to file.
+    scheduleFileWrite({ state: shared, version });
+  },
+
+  removeItem(_name: string) {
+    if (isPrimary()) {
+      localStorage.removeItem(WORKSPACE_KEY);
+    }
+    // Do NOT wipe the shared file — other windows still use it.
+  },
+};
+
+/**
+ * Subscribe to cross-process `settings-changed` events from the Rust file
+ * watcher. When another window edits settings, this re-reads the shared file
+ * and merges the shared fields into the local store without touching the
+ * workspace slice.
+ *
+ * Returns an unlisten function.
+ */
+export async function subscribeSettingsChanged(): Promise<() => void> {
+  try {
+    const unlisten = await listen("settings-changed", async () => {
+      try {
+        const fileRaw = await invoke<SplitEnvelope>("get_settings");
+        const sharedState = (fileRaw?.state ?? {}) as AnyState;
+        // Apply only the shared fields that actually DIFFER from current
+        // state. If every shared field already matches, don't call setState
+        // at all — otherwise we'd trigger the persist middleware, which
+        // would schedule another file write, which would fire the file
+        // watcher in the sibling process, which would re-hydrate us, which
+        // would trigger another write... (cross-window feedback loop).
+        const current = useSettingsStore.getState() as unknown as AnyState;
+        const partial: AnyState = {};
+        for (const [k, v] of Object.entries(sharedState)) {
+          if (!SHARED_FIELDS.has(k)) continue;
+          // JSON.stringify is the cheapest deep-equal for our shapes
+          // (everything persisted is JSON-serializable by construction).
+          if (JSON.stringify(current[k]) !== JSON.stringify(v)) {
+            partial[k] = v;
+          }
+        }
+        if (Object.keys(partial).length > 0) {
+          useSettingsStore.setState(
+            partial as unknown as Partial<SettingsStore>,
+          );
+        }
+      } catch (e) {
+        console.warn("settings: could not re-hydrate on settings-changed:", e);
+      }
+    });
+    return unlisten;
+  } catch (e) {
+    console.warn("settings: could not subscribe to settings-changed:", e);
+    return () => {};
+  }
+}
+
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => ({
@@ -512,7 +836,8 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 17,
+      version: 18,
+      storage: splitStorage,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
@@ -792,6 +1117,19 @@ export const useSettingsStore = create<SettingsStore>()(
               >) ?? migrated,
           };
           currentVersion = 17;
+        }
+
+        // v17 -> v18: Multi-process split storage.
+        //
+        // The actual field-level split between the shared file and the
+        // per-window localStorage happens in `migrateLegacyIfPresent()` inside
+        // the split storage adapter — that runs before this migrate hook, so
+        // by the time we get here the hydrated state is already the merged
+        // result of both destinations. This migration step just marks the
+        // version so zustand stops re-running older steps, and leaves data
+        // unchanged.
+        if (currentVersion <= 17) {
+          currentVersion = 18;
         }
 
         return data as {

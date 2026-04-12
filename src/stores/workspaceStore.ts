@@ -57,8 +57,34 @@ interface CorrelationSlice {
 }
 
 interface WorkspaceConfigSlice {
+  /**
+   * ID of the saved workspace *bound to this window for auto-save on close*.
+   * Only set when the window is spawned against a specific workspace via
+   * `Loggy → New Window with Workspace → <name>` (the boot path). Loading a
+   * workspace from the in-app menu intentionally does NOT bind — a user who
+   * opens a saved workspace, pokes around, and closes the window should not
+   * silently overwrite their saved state.
+   */
+  loadedWorkspaceId: string | null;
   saveWorkspace: (name: string) => WorkspaceConfig;
-  loadWorkspace: (config: WorkspaceConfig) => void;
+  /**
+   * Load a saved workspace into the current window.
+   *
+   * @param config         The workspace to load.
+   * @param opts.bindForAutoSave  If true, sets `loadedWorkspaceId` so the
+   *   current state is written back to the catalog on window close. Only
+   *   the boot path passes `true`; in-app menu loads pass false (default).
+   */
+  loadWorkspace: (
+    config: WorkspaceConfig,
+    opts?: { bindForAutoSave?: boolean },
+  ) => void;
+  /**
+   * Persist the currently loaded workspace back to the saved-workspaces
+   * catalog. Called from App.tsx on `tauri://close-requested` when
+   * `loadedWorkspaceId` is non-null.
+   */
+  autoSaveLoadedWorkspace: () => void;
 }
 
 type WorkspaceStore = PanelSlice &
@@ -336,6 +362,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
     },
 
     // ─── Workspace Config Slice ─────────────────────────────────────
+    loadedWorkspaceId: null,
+
     saveWorkspace: (name: string): WorkspaceConfig => {
       const { panels } = get();
       const { awsProfile } = useSettingsStore.getState();
@@ -370,7 +398,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
       };
     },
 
-    loadWorkspace: (config: WorkspaceConfig) => {
+    loadWorkspace: (
+      config: WorkspaceConfig,
+      opts?: { bindForAutoSave?: boolean },
+    ) => {
       const { panels } = get();
 
       // Stop all tails first
@@ -412,7 +443,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
         newPanels.set(panelConfig.id, panel);
       }
 
-      set({ panels: newPanels });
+      // Only bind for auto-save when the caller explicitly opts in (the
+      // boot-from-spawn path). In-app menu loads intentionally clear any
+      // existing binding so a subsequent close doesn't overwrite.
+      const bindForAutoSave = opts?.bindForAutoSave === true;
+      set({
+        panels: newPanels,
+        loadedWorkspaceId: bindForAutoSave ? config.id : null,
+      });
 
       // Load group layout
       useGroupStore.getState().loadGroupLayout(config.layout);
@@ -449,6 +487,35 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
           `[Workspace] Stale log groups in loaded workspace: ${staleLogGroups.join(", ")}`,
         );
       }
+    },
+
+    autoSaveLoadedWorkspace: () => {
+      const { loadedWorkspaceId } = get();
+      if (!loadedWorkspaceId) return;
+
+      const settings = useSettingsStore.getState();
+      const existing = settings.savedWorkspaces.find(
+        (w) => w.id === loadedWorkspaceId,
+      );
+      if (!existing) {
+        console.warn(
+          `[Workspace] autoSaveLoadedWorkspace: id ${loadedWorkspaceId} no longer in catalog, skipping`,
+        );
+        return;
+      }
+
+      // Build an updated config preserving the id + name but refreshing the
+      // layout, panels, and profile to whatever the user ended with.
+      const fresh = get().saveWorkspace(existing.name);
+      settings.addSavedWorkspace({
+        ...fresh,
+        id: existing.id,
+        createdAt: existing.createdAt,
+        updatedAt: Date.now(),
+      });
+      console.info(
+        `[Workspace] auto-saved workspace ${existing.name} (${existing.id}) on close`,
+      );
     },
   };
 });

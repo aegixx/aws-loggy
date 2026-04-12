@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import {
+  createJSONStorage,
+  persist,
+  type StateStorage,
+} from "zustand/middleware";
 import type {
   LayoutNode,
   LeafNode,
@@ -7,10 +11,39 @@ import type {
   SplitDirection,
   GroupLayoutConfig,
 } from "../types/workspace";
+import { initInstanceRole, isPrimary } from "./instanceRole";
 
 // Circular import: groupStore <-> workspaceStore
 // Safe because cross-store calls only happen inside actions (after both modules load).
 import { useWorkspaceStore } from "./workspaceStore";
+
+/**
+ * Multi-process storage: primary windows persist the layout tree to
+ * localStorage as before; secondary windows discard writes and read nothing.
+ *
+ * `getItem` awaits `initInstanceRole()` so the role is resolved before the
+ * first read, avoiding a race where a secondary window briefly hydrates from
+ * the primary's localStorage. `setItem` is synchronous but only runs after
+ * the first `getItem` has resolved, so by the time it fires the role is
+ * cached.
+ */
+const roleAwareStateStorage: StateStorage = {
+  async getItem(name) {
+    await initInstanceRole();
+    if (!isPrimary()) return null;
+    return localStorage.getItem(name);
+  },
+  setItem(name, value) {
+    if (!isPrimary()) return;
+    localStorage.setItem(name, value);
+  },
+  removeItem(name) {
+    if (!isPrimary()) return;
+    localStorage.removeItem(name);
+  },
+};
+
+const groupStoreStorage = createJSONStorage(() => roleAwareStateStorage);
 
 const MAX_LEAVES = 10;
 
@@ -616,6 +649,7 @@ export const useGroupStore = create<GroupStore>()(
     {
       name: "loggy-groups",
       version: 2,
+      storage: groupStoreStorage,
       partialize: (state) => ({
         timeSyncEnabled: state.timeSyncEnabled,
         root: state.root,
