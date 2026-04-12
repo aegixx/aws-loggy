@@ -259,7 +259,7 @@ The v17 → v18 migration reads any legacy single-blob `loggy-settings` localSto
   │               ▼                                    ▼                 │
   │   ┌──────────────────────────────────────────────────────┐           │
   │   │             <app-data>/                              │           │
-  │   │   loggy.lock     (fs2 advisory, held by Proc A)      │           │
+  │   │   loggy.lock     (fs4 advisory, held by Proc A)      │           │
   │   │   settings.json  (atomic rename, read by all)        │           │
   │   └──────────────────────────────────────────────────────┘           │
   └──────────────────────────────────────────────────────────────────────┘
@@ -267,9 +267,9 @@ The v17 → v18 migration reads any legacy single-blob `loggy-settings` localSto
 
 ### Launch flow
 
-`Loggy → New Window` (⌘N) emits `new-window-requested`. The frontend listener calls the `open_new_window` Tauri command. On macOS, the command shells out to `open -n -a <path-to-Loggy.app>` (where the path is derived from `std::env::current_exe()` walked up to the `.app` bundle). On Linux/Windows, it spawns `current_exe()` detached. The child inherits `LOGGY_SECONDARY=1` and optionally `LOGGY_LOAD_WORKSPACE=<id>`.
+`Loggy → New Window` (⌘N) emits `new-window-requested`. The frontend listener calls the `open_new_window` Tauri command. On macOS, the command shells out to `open -n -a <path-to-Loggy.app>` (where the path is derived from `std::env::current_exe()` walked up to the `.app` bundle). On Linux/Windows, it spawns `current_exe()` detached. Role (primary vs secondary) is determined by the file lock in `instance.rs`, not by any env var — so nothing needs to be passed to the child to establish role.
 
-On boot, the child calls `get_boot_workspace` to read `LOGGY_LOAD_WORKSPACE` and, if present, loads that saved workspace via `workspaceStore.loadWorkspace`.
+When the user launches a window bound to a specific saved workspace, the workspace ID is forwarded to the child in a platform-appropriate way: on macOS via `open --args --load-workspace <id>` (Launch Services does not propagate the `open(1)` subprocess's environment to the launched application, so argv is the reliable channel), and on Linux/Windows via the `LOGGY_LOAD_WORKSPACE` env var. The child's `get_boot_workspace` command checks argv first, then the env var, and returns whichever it finds. If present, `workspaceStore.loadWorkspace` is invoked during boot.
 
 ### Close flow
 

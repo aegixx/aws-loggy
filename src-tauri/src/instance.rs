@@ -18,7 +18,7 @@
 //! Adding `tauri-plugin-single-instance` would break this module's premise. Do not
 //! add that plugin without redesigning the multi-process launch flow.
 
-use fs2::FileExt;
+use fs4::fs_std::FileExt;
 use std::fs::{File, OpenOptions};
 use std::path::Path;
 
@@ -97,20 +97,31 @@ impl InstanceLock {
         };
 
         match file.try_lock_exclusive() {
-            Ok(()) => {
+            Ok(true) => {
                 log::info!("instance: acquired primary lock at {}", lock_path.display());
                 Self {
                     role: InstanceRole::Primary,
                     _file: Some(file),
                 }
             }
-            Err(_) => {
+            Ok(false) => {
                 log::info!(
                     "instance: lock held by another process at {} — running as secondary",
                     lock_path.display()
                 );
                 Self {
                     role: InstanceRole::Secondary,
+                    _file: None,
+                }
+            }
+            Err(e) => {
+                log::warn!(
+                    "instance: try_lock_exclusive failed on {}: {}. Falling back to Primary without lock.",
+                    lock_path.display(),
+                    e
+                );
+                Self {
+                    role: InstanceRole::Primary,
                     _file: None,
                 }
             }

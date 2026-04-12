@@ -1462,10 +1462,23 @@ fn set_settings(
 }
 
 /// Returns the saved-workspace ID the child process should load at boot, if any.
-/// Reads `LOGGY_LOAD_WORKSPACE` from the environment (set by the parent when it
-/// spawns us).
+///
+/// Two sources, checked in order:
+/// 1. `--load-workspace <id>` in `std::env::args()` — how macOS delivers it,
+///    because `open -n -a` via Launch Services does not propagate the
+///    `open(1)` subprocess's environment to the launched app.
+/// 2. `LOGGY_LOAD_WORKSPACE` env var — how Linux/Windows deliver it, since
+///    those platforms spawn the child binary directly and inherit env.
 #[tauri::command]
 fn get_boot_workspace() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    let mut i = 0;
+    while i + 1 < args.len() {
+        if args[i] == "--load-workspace" && !args[i + 1].is_empty() {
+            return Some(args[i + 1].clone());
+        }
+        i += 1;
+    }
     std::env::var("LOGGY_LOAD_WORKSPACE")
         .ok()
         .filter(|s| !s.is_empty())
@@ -1482,7 +1495,11 @@ fn get_boot_workspace() -> Option<String> {
 ///
 /// Role (primary vs secondary) is determined by the file lock in
 /// `instance.rs`, not by any env var. `workspace_id`, if provided, is
-/// passed to the child via `LOGGY_LOAD_WORKSPACE`.
+/// forwarded to the child:
+/// - macOS: via `open --args --load-workspace <id>` (Launch Services does
+///   not propagate the environment of the `open(1)` subprocess, so env vars
+///   are not an option here).
+/// - Linux/Windows: via the `LOGGY_LOAD_WORKSPACE` env var.
 #[tauri::command]
 fn open_new_window(workspace_id: Option<String>) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {}", e))?;
@@ -1505,7 +1522,10 @@ fn open_new_window(workspace_id: Option<String>) -> Result<(), String> {
                 let mut cmd = std::process::Command::new("open");
                 cmd.arg("-n").arg("-a").arg(&bundle_path);
                 if let Some(ref id) = workspace_id {
-                    cmd.env("LOGGY_LOAD_WORKSPACE", id);
+                    // `--args` tells `open` to forward everything after it as
+                    // argv to the launched application. The child reads this
+                    // in `get_boot_workspace`.
+                    cmd.arg("--args").arg("--load-workspace").arg(id);
                 }
                 cmd.spawn()
                     .map_err(|e| format!("spawn `open -n -a {}`: {}", bundle_path.display(), e))?;
@@ -1573,9 +1593,15 @@ pub fn run() {
                 mp_state.watch_state.clone(),
             ) {
                 Ok(watcher) => {
-                    if let Ok(mut guard) = mp_state._watcher.try_lock() {
-                        *guard = Some(watcher);
-                    }
+                    // `mp_state` was just constructed and has no other
+                    // references, so this lock cannot be contended. Panic
+                    // if it somehow is — losing the watcher silently would
+                    // disable cross-process settings sync with no diagnostic.
+                    let mut guard = mp_state
+                        ._watcher
+                        .lock()
+                        .expect("watcher mutex: unexpected contention during setup");
+                    *guard = Some(watcher);
                 }
                 Err(e) => {
                     log::warn!(

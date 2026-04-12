@@ -5,13 +5,19 @@
  * focuses on the post-hydrate write path, which is where a secondary could
  * accidentally overwrite the primary's layout.
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { __setInstanceRoleForTests } from "./instanceRole";
 import { useGroupStore } from "./groupStore";
 
 describe("groupStore role-aware persistence", () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    // Reset the module-level cached role so a stale value can't leak into
+    // other test files that run in the same Vitest worker.
+    __setInstanceRoleForTests(null);
   });
 
   it("primary writes groupStore state to localStorage", () => {

@@ -283,8 +283,9 @@ mod tests {
         let loaded = load_settings(&path);
         assert_eq!(loaded.as_object().unwrap().len(), 0);
 
-        // Original should be gone; a .corrupt.<ts> backup should exist.
-        assert!(!path.exists() || path.metadata().unwrap().len() == 0);
+        // Original should have been renamed away; a .corrupt.<ts> backup
+        // should exist in the same directory.
+        assert!(!path.exists(), "corrupt file should be renamed away");
         let backups: Vec<_> = fs::read_dir(tmp.path())
             .unwrap()
             .filter_map(|e| e.ok())
