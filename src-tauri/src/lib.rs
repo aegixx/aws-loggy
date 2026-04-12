@@ -1457,6 +1457,13 @@ fn set_settings(
     value: serde_json::Value,
 ) -> Result<(), String> {
     settings_store::save_settings(&state.settings_path, value)?;
+    // There is a narrow race here: the watcher thread can observe the rename
+    // from `save_settings` BEFORE this line runs, so an event can escape the
+    // suppression window and be emitted to the frontend. That is safe because
+    // the frontend's `subscribeSettingsChanged` handler re-reads the file,
+    // diffs each shared field against current store state, and skips
+    // `setState` when nothing changed. The race produces a redundant IPC
+    // round trip in the worst case, never a feedback loop.
     state.watch_state.mark_self_write();
     Ok(())
 }

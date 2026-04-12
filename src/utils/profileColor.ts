@@ -26,15 +26,17 @@ function hashString(s: string): number {
 }
 
 /**
- * Pick an HSL hue from the hash, avoiding the orange range [20°, 40°].
- * We wrap around by mapping the hash to a 340° interval and then shifting
- * past the forbidden zone if the result lands inside it.
+ * Pick an HSL hue from the hash, avoiding the orange range [20°, 40°).
+ *
+ * The full hue circle is 360°. Removing the 20°-wide orange window leaves
+ * 340° of usable space: [0°, 20°) ∪ [40°, 360°). We take the hash mod 340
+ * and, if the result lands at ≥ 20, shift it past the excluded window.
  */
 function pickHue(hash: number): number {
-  // 320° usable range after removing 20° + 20° buffer on each side of orange.
-  const usable = 320;
-  const raw = hash % usable; // 0..319
-  // Map to [0, 20) ∪ [40, 360) by shifting anything in [20, 320) up by 20.
+  // 360 - 20 (excluded window width) = 340 usable degrees.
+  const usable = 340;
+  const raw = hash % usable; // 0..339
+  // Map to [0, 20) ∪ [40, 360): anything at ≥ 20 shifts up by 20.
   return raw < 20 ? raw : raw + 20;
 }
 

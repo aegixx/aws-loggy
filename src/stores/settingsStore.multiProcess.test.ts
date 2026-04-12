@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { __setInstanceRoleForTests } from "./instanceRole";
 
 // The shared setup.ts already mocks `@tauri-apps/api/core` with an
@@ -24,6 +25,20 @@ type MockFn = ((cmd: string, args?: unknown) => Promise<unknown>) & {
   mock: { calls: unknown[][] };
 };
 const mockInvoke = invoke as unknown as MockFn;
+
+// Event listener handler type from @tauri-apps/api/event
+type EventHandler = (event: { payload: unknown }) => void | Promise<void>;
+type ListenMockFn = ((
+  eventName: string,
+  handler: EventHandler,
+) => Promise<() => void>) & {
+  mockReset: () => void;
+  mockImplementation: (
+    fn: (eventName: string, handler: EventHandler) => Promise<() => void>,
+  ) => void;
+  mock: { calls: unknown[][] };
+};
+const mockListen = listen as unknown as ListenMockFn;
 
 describe("settingsStore multi-process split", () => {
   beforeEach(() => {
@@ -168,12 +183,23 @@ describe("settingsStore multi-process split", () => {
     expect(sharedState.awsProfile).toBeUndefined();
   });
 
-  it("subscribeSettingsChanged is a no-op when remote state matches current (no feedback loop)", async () => {
+  it("subscribeSettingsChanged does not fire setState when remote state matches current", async () => {
     // Regression test: if every shared field in the incoming file state
     // already matches current store state, setState must NOT be called.
     // Otherwise zustand's persist middleware would schedule another file
     // write, triggering the sibling's watcher, triggering another
     // re-hydrate, in an infinite cross-window loop.
+    //
+    // This test actually drives subscribeSettingsChanged end-to-end by
+    // capturing the handler it registers with listen() and invoking it
+    // directly.
+    let capturedHandler: EventHandler | null = null;
+    mockListen.mockReset();
+    mockListen.mockImplementation(async (_name: string, handler) => {
+      capturedHandler = handler;
+      return () => {};
+    });
+
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "get_instance_role") return "Primary";
       if (cmd === "get_settings") return {};
@@ -184,63 +210,89 @@ describe("settingsStore multi-process split", () => {
     const mod = await import("./settingsStore");
     await new Promise((r) => setTimeout(r, 10));
 
-    // Seed a known shared-field state.
+    // Seed a known shared-field state that we want the incoming event to
+    // match exactly.
     mod.useSettingsStore.setState({ theme: "dark" });
 
-    // Count how many times setState fires after the baseline write.
+    // Subscribe and count setState fires triggered by the watcher path.
     let setStateCalls = 0;
     const unsubscribe = mod.useSettingsStore.subscribe(() => {
       setStateCalls++;
     });
 
-    // Simulate a settings-changed event where the incoming file content
-    // has the same theme as current state.
+    // Start the real subscriber, which registers our captured handler.
+    const unlisten = await mod.subscribeSettingsChanged();
+    expect(capturedHandler).not.toBeNull();
+
+    // Configure get_settings to return an incoming payload with the same
+    // theme as current state.
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_settings") {
+        return { state: { theme: "dark" }, version: 18 };
+      }
+      return undefined;
+    });
+
+    // Fire the event. This exercises the real diff-check guard.
+    await (capturedHandler as unknown as EventHandler)({ payload: null });
+
+    // No setState fire → guard held; no cross-window feedback loop.
+    expect(setStateCalls).toBe(0);
+
+    unsubscribe();
+    unlisten();
+  });
+
+  it("subscribeSettingsChanged applies only differing shared fields", async () => {
+    // Companion test: when the incoming file differs, setState IS called,
+    // but only with the fields that actually changed. This confirms the
+    // guard is a filter, not a kill-switch.
+    let capturedHandler: EventHandler | null = null;
+    mockListen.mockReset();
+    mockListen.mockImplementation(async (_name: string, handler) => {
+      capturedHandler = handler;
+      return () => {};
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_instance_role") return "Primary";
+      if (cmd === "get_settings") return {};
+      return undefined;
+    });
+
+    vi.resetModules();
+    const mod = await import("./settingsStore");
+    await new Promise((r) => setTimeout(r, 10));
+
+    mod.useSettingsStore.setState({ theme: "dark" });
+
+    const unlisten = await mod.subscribeSettingsChanged();
+    expect(capturedHandler).not.toBeNull();
+
+    // Incoming file has a different theme AND a non-shared field.
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "get_settings") {
         return {
-          state: { theme: "dark" },
+          state: {
+            theme: "light", // shared, differs → should apply
+            awsProfile: "prod", // NOT shared → should NOT apply
+          },
           version: 18,
         };
       }
       return undefined;
     });
 
-    // Replicate the exact diff-check guard from subscribeSettingsChanged
-    // inline. We can't easily fire a real Tauri event here, so we exercise
-    // the same logic against the mocked get_settings payload. If this
-    // guard regresses, subscribeSettingsChanged would schedule writes on
-    // every event and a cross-window feedback loop would resurface.
-    const fileRawRaw: unknown = await mockInvoke("get_settings");
-    const fileRaw = (fileRawRaw ?? {}) as {
-      state?: Record<string, unknown>;
-    };
-    const sharedState = (fileRaw.state ?? {}) as Record<string, unknown>;
-    const current = mod.useSettingsStore.getState() as unknown as Record<
-      string,
-      unknown
-    >;
-    const SHARED = new Set([
-      "theme",
-      "logLevels",
-      "cacheLimits",
-      "autoUpdateEnabled",
-      "timePresets",
-      "savedWorkspaces",
-    ]);
-    const partial: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(sharedState)) {
-      if (!SHARED.has(k)) continue;
-      if (JSON.stringify(current[k]) !== JSON.stringify(v)) {
-        partial[k] = v;
-      }
-    }
+    await (capturedHandler as unknown as EventHandler)({ payload: null });
+    // Let the async setState settle.
+    await new Promise((r) => setTimeout(r, 10));
 
-    // Theme already equals "dark" on both sides → partial must be empty.
-    expect(Object.keys(partial).length).toBe(0);
+    const after = mod.useSettingsStore.getState();
+    expect(after.theme).toBe("light");
+    // awsProfile should NOT have been overwritten by a non-shared incoming
+    // field. (It starts null from the default state.)
+    expect(after.awsProfile).toBeNull();
 
-    unsubscribe();
-    // If partial were non-empty we would call setState and observe a fire.
-    // The assertion above is the tighter guard.
-    expect(setStateCalls).toBe(0);
+    unlisten();
   });
 });

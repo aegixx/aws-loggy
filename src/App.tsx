@@ -203,7 +203,11 @@ function App() {
           | WorkspaceConfig
           | undefined;
         if (config) {
-          useWorkspaceStore.getState().loadWorkspace(config);
+          // Boot path: bind for auto-save so the window's changes persist
+          // back to the catalog entry on close.
+          useWorkspaceStore
+            .getState()
+            .loadWorkspace(config, { bindForAutoSave: true });
           console.info(`[boot] loaded workspace ${config.name} (${id})`);
         } else {
           console.warn(
@@ -466,7 +470,10 @@ function App() {
       directInvoke("open_new_window", { workspaceId: null }).catch(
         (err: unknown) => {
           console.error("open_new_window failed:", err);
-          // Surface the error as a tail-style toast so the user sees why.
+          // TODO: replace with a tail-style status-bar toast once Loggy grows
+          // a toast system. For now, `alert()` is a blocking modal, which is
+          // rough UX but acceptable for this dev-only error path (spawning a
+          // non-bundled binary). See TODOS.md "Multi-process follow-ups".
           const msg = typeof err === "string" ? err : String(err);
           alert(`Could not open new window:\n\n${msg}`);
         },

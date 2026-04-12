@@ -58,14 +58,27 @@ interface CorrelationSlice {
 
 interface WorkspaceConfigSlice {
   /**
-   * ID of the saved workspace currently bound to this window, if any.
-   * Non-null when the user opened a window with `Loggy → New Window with
-   * Workspace → <name>` or loaded a saved workspace manually. Used to decide
-   * whether to auto-save the current state back on window close.
+   * ID of the saved workspace *bound to this window for auto-save on close*.
+   * Only set when the window is spawned against a specific workspace via
+   * `Loggy → New Window with Workspace → <name>` (the boot path). Loading a
+   * workspace from the in-app menu intentionally does NOT bind — a user who
+   * opens a saved workspace, pokes around, and closes the window should not
+   * silently overwrite their saved state.
    */
   loadedWorkspaceId: string | null;
   saveWorkspace: (name: string) => WorkspaceConfig;
-  loadWorkspace: (config: WorkspaceConfig) => void;
+  /**
+   * Load a saved workspace into the current window.
+   *
+   * @param config         The workspace to load.
+   * @param opts.bindForAutoSave  If true, sets `loadedWorkspaceId` so the
+   *   current state is written back to the catalog on window close. Only
+   *   the boot path passes `true`; in-app menu loads pass false (default).
+   */
+  loadWorkspace: (
+    config: WorkspaceConfig,
+    opts?: { bindForAutoSave?: boolean },
+  ) => void;
   /**
    * Persist the currently loaded workspace back to the saved-workspaces
    * catalog. Called from App.tsx on `tauri://close-requested` when
@@ -385,7 +398,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
       };
     },
 
-    loadWorkspace: (config: WorkspaceConfig) => {
+    loadWorkspace: (
+      config: WorkspaceConfig,
+      opts?: { bindForAutoSave?: boolean },
+    ) => {
       const { panels } = get();
 
       // Stop all tails first
@@ -427,7 +443,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
         newPanels.set(panelConfig.id, panel);
       }
 
-      set({ panels: newPanels, loadedWorkspaceId: config.id });
+      // Only bind for auto-save when the caller explicitly opts in (the
+      // boot-from-spawn path). In-app menu loads intentionally clear any
+      // existing binding so a subsequent close doesn't overwrite.
+      const bindForAutoSave = opts?.bindForAutoSave === true;
+      set({
+        panels: newPanels,
+        loadedWorkspaceId: bindForAutoSave ? config.id : null,
+      });
 
       // Load group layout
       useGroupStore.getState().loadGroupLayout(config.layout);

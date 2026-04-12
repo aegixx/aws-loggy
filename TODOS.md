@@ -60,6 +60,20 @@ If `open_new_window` spawns a child that crashes before its window is visible, t
 **Priority:** P3
 **Deferred from:** `feat/multi-process` plan
 
+## Multi-Process: mtime-gated focus-safety-net re-read
+
+The FSEvents safety net in `WindowEvent::Focused(true)` currently emits `settings-changed` unconditionally on every focus-gained event, which forces a `get_settings` IPC round trip and a diff check on routine window switching (cmd-tab, dock click). Correctness is fine (the diff guard in `subscribeSettingsChanged` prevents spurious `setState`), but it is a file read per focus, not just an in-memory check. Track a `last_seen_mtime` in `MultiProcessState` and only emit when `settings.json`'s mtime has advanced since last read.
+
+**Priority:** P4 (speculative optimization — revisit if a user hits jank on a network-mounted home dir)
+**Deferred from:** `feat/multi-process` PR review
+
+## Multi-Process: toast system for spawn errors
+
+`App.tsx` currently uses a blocking `alert()` to surface `open_new_window` errors (the main path: "development build is not an .app bundle"). Replace with a tail-style status-bar toast once Loggy grows a toast utility. Low-priority because this path is only hit in dev builds.
+
+**Priority:** P4
+**Deferred from:** `feat/multi-process` PR review
+
 ## Completed
 
 ### Expand E2E coverage to remaining features

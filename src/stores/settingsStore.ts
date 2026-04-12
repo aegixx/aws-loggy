@@ -445,6 +445,14 @@ let legacyMigrationTried = false;
  * fields to `settings.json` via Rust and workspace fields to localStorage
  * under `loggy-workspace`. Secondary processes read but do not write workspace
  * data.
+ *
+ * NOTE: The `name` parameter (zustand's persist key, always `"loggy-settings"`
+ * in this wiring) is intentionally ignored. This adapter is hard-coded to
+ * route to two fixed destinations — the shared file via Rust, and the fixed
+ * `WORKSPACE_KEY` localStorage slot — so it is NOT reusable for other stores.
+ * Using it with a second persisted store would silently share the same
+ * localStorage slot. Do not lift this adapter out without adding a `name`
+ * check or parameterizing the keys.
  */
 // Type the storage against `AnyState` because zustand's `partialize` produces
 // a structural subset of SettingsStore, not the full store, and forcing the
