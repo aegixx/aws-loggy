@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.0](https://github.com/aegixx/aws-loggy/compare/v3.12.2...v3.13.0) (2026-04-12)
+
+
+### Features
+
+* multi-process support for monitoring multiple AWS environments ([#101](https://github.com/aegixx/aws-loggy/issues/101)) ([2e47ff8](https://github.com/aegixx/aws-loggy/commit/2e47ff81d2c08f42b173063d9ead78c569efa69d))
+
 ## [3.12.2](https://github.com/aegixx/aws-loggy/compare/v3.12.1...v3.12.2) (2026-04-09)
 
 
