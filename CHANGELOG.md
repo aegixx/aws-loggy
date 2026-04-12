@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.1](https://github.com/aegixx/aws-loggy/compare/v3.13.0...v3.13.1) (2026-04-12)
+
+
+### Bug Fixes
+
+* make groupStore hydration synchronous to prevent blank screen ([7576910](https://github.com/aegixx/aws-loggy/commit/75769107fa5c478c76f773bed83d87abcc7352f8))
+
 ## [3.13.0](https://github.com/aegixx/aws-loggy/compare/v3.12.2...v3.13.0) (2026-04-12)
 
 
