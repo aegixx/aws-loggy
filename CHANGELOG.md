@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.0](https://github.com/aegixx/aws-loggy/compare/v3.13.1...v3.14.0) (2026-04-20)
+
+
+### Features
+
+* per-panel StartLiveTail streaming with typed error handling ([#104](https://github.com/aegixx/aws-loggy/issues/104)) ([e76a7b2](https://github.com/aegixx/aws-loggy/commit/e76a7b23cb0cd79c71789b175a755ff3354eb8f1))
+
 ## [3.13.1](https://github.com/aegixx/aws-loggy/compare/v3.13.0...v3.13.1) (2026-04-12)
 
 
