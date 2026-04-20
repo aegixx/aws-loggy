@@ -26,8 +26,15 @@ export interface LiveTailEventPayload {
   count: number;
 }
 
+export type LiveTailErrorKind =
+  | "sessionLimitExceeded"
+  | "permissionDenied"
+  | "streamError"
+  | "other";
+
 export interface LiveTailErrorPayload {
   panel_id: string;
+  kind: LiveTailErrorKind;
   message: string;
 }
 
