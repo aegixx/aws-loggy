@@ -345,7 +345,11 @@ function App() {
         const { panels } = useWorkspaceStore.getState();
         const panel = panels.get(panel_id);
         if (panel?.tailManager) {
-          panel.tailManager.onTailEnded();
+          panel.tailManager
+            .onTailEnded()
+            .catch((e) =>
+              console.error("[App] onTailEnded failed for panel", panel_id, e),
+            );
         } else {
           console.warn(
             `[App] Received live-tail-ended for unknown/inactive panel: ${panel_id}`,
