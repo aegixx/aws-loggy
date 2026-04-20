@@ -5,7 +5,7 @@ use aws_config::BehaviorVersion;
 use aws_credential_types::provider::ProvideCredentials;
 use aws_sdk_cloudwatchlogs::{types::FilteredLogEvent, Client as CloudWatchClient};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -49,13 +49,20 @@ pub struct LogGroup {
     pub stored_bytes: Option<i64>,
 }
 
+/// Per-panel live tail session entry with a generation token to prevent
+/// task-exit cleanup from removing a newer session for the same panel.
+pub(crate) struct TailEntry {
+    generation: u64,
+    handle: tokio::task::JoinHandle<()>,
+}
+
 /// Application state holding the CloudWatch client and config
 pub struct AppState {
     pub client: Arc<Mutex<Option<CloudWatchClient>>>,
     pub config: Arc<Mutex<Option<aws_config::SdkConfig>>>,
     pub current_profile: Arc<Mutex<Option<String>>>,
     pub fetch_cancelled: Arc<AtomicBool>,
-    pub live_tail_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    pub(crate) live_tail_handles: Arc<Mutex<HashMap<String, TailEntry>>>,
 }
 
 /// Validates an AWS profile name for security
@@ -89,7 +96,7 @@ impl Default for AppState {
             config: Arc::new(Mutex::new(None)),
             current_profile: Arc::new(Mutex::new(None)),
             fetch_cancelled: Arc::new(AtomicBool::new(false)),
-            live_tail_handle: Arc::new(Mutex::new(None)),
+            live_tail_handles: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -1082,14 +1089,32 @@ struct LogsTruncated {
 /// Payload for live-tail-event
 #[derive(Debug, Clone, Serialize)]
 struct LiveTailEventPayload {
+    panel_id: String,
     logs: Vec<LogEvent>,
     count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum LiveTailErrorKind {
+    SessionLimitExceeded,
+    PermissionDenied,
+    StreamError,
+    Other,
 }
 
 /// Payload for live-tail-error
 #[derive(Debug, Clone, Serialize)]
 struct LiveTailErrorPayload {
+    panel_id: String,
+    kind: LiveTailErrorKind,
     message: String,
+}
+
+/// Payload for live-tail-ended
+#[derive(Debug, Clone, Serialize)]
+struct LiveTailEndedPayload {
+    panel_id: String,
 }
 
 /// Cancel any in-progress log fetch
@@ -1302,6 +1327,7 @@ fn normalize_log_group_identifier(raw: &str) -> String {
 
 #[tauri::command]
 async fn start_live_tail(
+    panel_id: String,
     log_group_arn: String,
     filter_pattern: Option<String>,
     state: State<'_, AppState>,
@@ -1309,100 +1335,132 @@ async fn start_live_tail(
 ) -> Result<(), String> {
     let normalized = normalize_log_group_identifier(&log_group_arn);
 
-    // Stop any existing live tail first
-    let mut handle_lock = state.live_tail_handle.lock().await;
-    if let Some(handle) = handle_lock.take() {
-        handle.abort();
+    let client = {
+        let lock = state.client.lock().await;
+        lock.as_ref().ok_or("AWS client not initialized")?.clone()
+    };
+
+    // Bump generation and abort any existing session for this panel atomically.
+    let generation = {
+        let mut handles = state.live_tail_handles.lock().await;
+        let next_gen = handles.get(&panel_id).map(|e| e.generation + 1).unwrap_or(0);
+        if let Some(old) = handles.remove(&panel_id) {
+            old.handle.abort();
+        }
+        next_gen
+    };
+
+    let mut request = client.start_live_tail().log_group_identifiers(normalized.as_str());
+    if let Some(ref pattern) = filter_pattern {
+        if !pattern.is_empty() {
+            request = request.log_event_filter_pattern(pattern);
+        }
     }
 
-    let client_lock = state.client.lock().await;
-    let client = client_lock
-        .as_ref()
-        .ok_or("AWS client not initialized")?
-        .clone();
-    drop(client_lock);
+    // send().await is where LimitExceededException and AccessDeniedException surface.
+    let output = match request.send().await {
+        Ok(out) => out,
+        Err(e) => {
+            let service_err = e.into_service_error();
+            let kind = if service_err.is_limit_exceeded_exception() {
+                LiveTailErrorKind::SessionLimitExceeded
+            } else if service_err.is_access_denied_exception() {
+                LiveTailErrorKind::PermissionDenied
+            } else {
+                LiveTailErrorKind::Other
+            };
+            let message = format!("{}", service_err);
+            log::error!("Failed to start live tail for panel {}: {}", panel_id, message);
+            app.emit("live-tail-error", LiveTailErrorPayload { panel_id, kind, message }).ok();
+            return Ok(());
+        }
+    };
 
-    let live_tail_handle = state.live_tail_handle.clone();
+    let live_tail_handles = state.live_tail_handles.clone();
+    let panel_id_task = panel_id.clone();
+    let app_task = app.clone();
+    let task_gen = generation;
 
     let handle = tokio::spawn(async move {
-        let mut request = client
-            .start_live_tail()
-            .log_group_identifiers(normalized.as_str());
-
-        if let Some(ref pattern) = filter_pattern {
-            if !pattern.is_empty() {
-                request = request.log_event_filter_pattern(pattern);
-            }
-        }
-
-        match request.send().await {
-            Ok(output) => {
-                let mut stream = output.response_stream;
-                loop {
-                    match stream.recv().await {
-                        Ok(Some(event)) => {
-                            match event {
-                                aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionUpdate(update) => {
-                                    let results = update.session_results.unwrap_or_default();
-                                    let count = results.len();
-                                    let logs: Vec<LogEvent> = results.into_iter().map(|e| LogEvent {
-                                        timestamp: e.timestamp.unwrap_or(0),
-                                        message: e.message.unwrap_or_default(),
-                                        log_stream_name: e.log_stream_name,
-                                        event_id: None,
-                                    }).collect();
-
-                                    if !logs.is_empty() {
-                                        app.emit("live-tail-event", LiveTailEventPayload { logs, count }).ok();
-                                    }
-                                }
-                                aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionStart(_) => {
-                                    log::info!("Live tail session started for {}", log_group_arn);
-                                }
-                                _ => {}
+        let mut stream = output.response_stream;
+        loop {
+            match stream.recv().await {
+                Ok(Some(event)) => {
+                    match event {
+                        aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionUpdate(update) => {
+                            let results = update.session_results.unwrap_or_default();
+                            let count = results.len();
+                            let logs: Vec<LogEvent> = results.into_iter().map(|e| LogEvent {
+                                timestamp: e.timestamp.unwrap_or(0),
+                                message: e.message.unwrap_or_default(),
+                                log_stream_name: e.log_stream_name,
+                                event_id: None,
+                            }).collect();
+                            if !logs.is_empty() {
+                                app_task.emit("live-tail-event", LiveTailEventPayload {
+                                    panel_id: panel_id_task.clone(),
+                                    logs,
+                                    count,
+                                }).ok();
                             }
                         }
-                        Ok(None) => {
-                            // Stream ended (3-hour timeout)
-                            log::info!("Live tail stream ended for {}", log_group_arn);
-                            app.emit("live-tail-ended", serde_json::json!({})).ok();
-                            break;
+                        aws_sdk_cloudwatchlogs::types::StartLiveTailResponseStream::SessionStart(_) => {
+                            log::info!("Live tail session started for panel {}", panel_id_task);
                         }
-                        Err(e) => {
-                            let error_msg = format!("{:?}", e);
-                            log::error!("Live tail stream error: {}", error_msg);
-                            app.emit("live-tail-error", LiveTailErrorPayload { message: error_msg }).ok();
-                            break;
-                        }
+                        _ => {}
                     }
                 }
-            }
-            Err(e) => {
-                let error_msg = format!("{:?}", e);
-                log::error!("Failed to start live tail: {}", error_msg);
-                app.emit(
-                    "live-tail-error",
-                    LiveTailErrorPayload { message: error_msg },
-                )
-                .ok();
+                Ok(None) => {
+                    // Normal stream end (very rare; session timeout comes as an error below)
+                    log::info!("Live tail stream ended for panel {}", panel_id_task);
+                    app_task.emit("live-tail-ended", LiveTailEndedPayload {
+                        panel_id: panel_id_task.clone(),
+                    }).ok();
+                    break;
+                }
+                Err(e) => {
+                    let service_err = e.into_service_error();
+                    if service_err.is_session_timeout_exception() {
+                        // 3-hour timeout — treat as normal end so frontend reconnects
+                        log::info!("Live tail session timed out for panel {}", panel_id_task);
+                        app_task.emit("live-tail-ended", LiveTailEndedPayload {
+                            panel_id: panel_id_task.clone(),
+                        }).ok();
+                    } else {
+                        let error_msg = format!("{}", service_err);
+                        log::error!("Live tail stream error for panel {}: {}", panel_id_task, error_msg);
+                        app_task.emit("live-tail-error", LiveTailErrorPayload {
+                            panel_id: panel_id_task.clone(),
+                            kind: LiveTailErrorKind::StreamError,
+                            message: error_msg,
+                        }).ok();
+                    }
+                    break;
+                }
             }
         }
 
-        // Clear handle when done
-        let mut handle_lock = live_tail_handle.lock().await;
-        *handle_lock = None;
+        // Only remove the map entry if our generation still matches — a newer
+        // session may have replaced us while we were in the recv loop.
+        let mut handles = live_tail_handles.lock().await;
+        if let Some(entry) = handles.get(&panel_id_task) {
+            if entry.generation == task_gen {
+                handles.remove(&panel_id_task);
+            }
+        }
     });
 
-    *handle_lock = Some(handle);
+    // Insert the handle into the map now that the task is spawned.
+    state.live_tail_handles.lock().await.insert(panel_id, TailEntry { generation, handle });
     Ok(())
 }
 
 #[tauri::command]
-async fn stop_live_tail(state: State<'_, AppState>) -> Result<(), String> {
-    let mut handle_lock = state.live_tail_handle.lock().await;
-    if let Some(handle) = handle_lock.take() {
-        handle.abort();
-        log::info!("Live tail stopped");
+async fn stop_live_tail(panel_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut handles = state.live_tail_handles.lock().await;
+    if let Some(entry) = handles.remove(&panel_id) {
+        entry.handle.abort();
+        log::info!("Live tail stopped for panel {}", panel_id);
     }
     Ok(())
 }

@@ -20,6 +20,7 @@ export class TailPoller implements TailTransport {
     private onNewLogs: (logs: LogEvent[]) => void,
     private onError: (error: unknown) => void,
     private getLastLogTimestamp: () => number | null,
+    private initialTimestamp?: number,
   ) {}
 
   /**
@@ -34,8 +35,9 @@ export class TailPoller implements TailTransport {
 
     console.log("[User Activity] Start live tail");
 
-    // Track when tail started - used to filter out older logs
-    this.startTimestamp = Date.now();
+    // Track when tail started - used to filter out older logs.
+    // Use initialTimestamp when provided (stream→poll fallback overlap window).
+    this.startTimestamp = this.initialTimestamp ?? Date.now();
     this.isPolling = true;
 
     // Start the polling loop

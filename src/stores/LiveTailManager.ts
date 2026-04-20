@@ -12,6 +12,8 @@ import type {
 export type TransportType = "stream" | "poll";
 
 const SAMPLING_THRESHOLD = 500;
+// Overlap window when switching from stream to poll to avoid event gaps at cutover.
+const FALLBACK_OVERLAP_MS = 2000;
 
 export class LiveTailManager {
   private transport: TailTransport | null = null;
@@ -25,6 +27,9 @@ export class LiveTailManager {
   private onTransportChange: (type: TransportType) => void;
   private onToast: (message: string) => void;
   private getLastLogTimestamp: () => number | null;
+  // Generation counter guards start/stop races: if startGen advances while
+  // an invoke is in flight, the resolved invoke is stale and we abort it.
+  private startGen = 0;
 
   constructor(options: {
     panelId: string;
@@ -57,14 +62,17 @@ export class LiveTailManager {
       return;
     }
 
-    // Always use polling until backend event routing supports panel_id.
-    // Streaming events (live-tail-event, live-tail-error, live-tail-ended)
-    // are emitted without panel_id, so App.tsx cannot route them to the
-    // correct panel and they are silently dropped.
-    this.startPolling(null);
+    // Null ARN means the log group isn't resolved yet — stay idle until
+    // the caller re-invokes start() once the ARN is available.
+    if (!this.logGroupArn) {
+      return;
+    }
+
+    await this.startStream();
   }
 
   stop(): void {
+    this.startGen++;
     if (this.transportType === "stream") {
       invoke("stop_live_tail", { panelId: this.panelId }).catch((e) =>
         console.debug("[LiveTailManager] stop_live_tail:", e),
@@ -111,7 +119,7 @@ export class LiveTailManager {
       return;
     }
 
-    // Track last clean timestamp for sampling fallback
+    // Track last clean timestamp for fallback cutover
     if (logs.length > 0) {
       this.lastCleanTimestamp = Math.max(...logs.map((l) => l.timestamp));
     }
@@ -123,23 +131,74 @@ export class LiveTailManager {
 
   /** Handle a live tail error dispatched from App.tsx's global listener. */
   onTailError(payload: LiveTailErrorPayload): void {
-    console.error("[LiveTailManager] Stream error:", payload.message);
-    this.handleStreamError(payload.message);
+    console.error(
+      "[LiveTailManager] Stream error:",
+      payload.kind,
+      payload.message,
+    );
+
+    if (payload.kind === "sessionLimitExceeded") {
+      // Bump startGen so any in-flight startStream() invoke won't overwrite the fallback.
+      this.startGen++;
+      // Use overlap window to avoid missing events between stream error and polling start,
+      // consistent with the sampling-detection fallback.
+      const replayFrom = this.lastCleanTimestamp
+        ? this.lastCleanTimestamp - FALLBACK_OVERLAP_MS
+        : null;
+      this.startPolling(replayFrom);
+      this.onTransportChange("poll");
+      this.onToast(
+        "AWS session limit reached \u2014 using polling. Close other Loggy windows to restore streaming.",
+      );
+    } else if (payload.kind === "permissionDenied") {
+      // Stop state first, then notify callers (conventional error handling order).
+      // Do not silently fall back — user action required.
+      this.stop();
+      this.onError(new Error(`Permission denied: ${payload.message}`));
+    } else {
+      // StreamError or Other: fall back to polling.
+      // Bump startGen so any in-flight startStream() invoke won't overwrite the fallback.
+      this.startGen++;
+      this.startPolling(null);
+      this.onTransportChange("poll");
+      this.onToast("Stream unavailable \u2014 using polling");
+    }
   }
 
   /** Handle a live tail ended event dispatched from App.tsx's global listener. */
-  onTailEnded(): void {
+  onTailEnded(): Promise<void> {
     console.log("[LiveTailManager] Stream ended (timeout), reconnecting");
-    this.handleStreamEnded();
+    return this.handleStreamEnded();
   }
 
   private async startStream(): Promise<void> {
+    const myGen = this.startGen;
+
     // Start the stream on the backend (uses ARN — required by StartLiveTail API)
-    await invoke("start_live_tail", {
-      panelId: this.panelId,
-      logGroupArn: this.logGroupArn,
-      filterPattern: null,
-    });
+    // TODO: filterPattern is intentionally null here—all filtering happens client-side
+    // during streaming. Polling path passes filter pattern for backward compatibility.
+    try {
+      await invoke("start_live_tail", {
+        panelId: this.panelId,
+        logGroupArn: this.logGroupArn,
+        filterPattern: null,
+      });
+    } catch (e) {
+      // invoke() itself errored (IPC failure, not a live-tail-error event)
+      if (this.startGen !== myGen) return;
+      console.error("[LiveTailManager] start_live_tail invoke failed:", e);
+      this.startPolling(null);
+      this.onToast("Stream unavailable \u2014 using polling");
+      return;
+    }
+
+    // If stop() was called while invoke was in-flight, abort the backend session.
+    if (this.startGen !== myGen) {
+      invoke("stop_live_tail", { panelId: this.panelId }).catch((e) =>
+        console.debug("[LiveTailManager] stale stop_live_tail:", e),
+      );
+      return;
+    }
 
     // Create a minimal transport wrapper for stream (start/stop/isActive/resetStartTimestamp)
     this.transport = {
@@ -172,6 +231,7 @@ export class LiveTailManager {
       this.onNewLogs,
       this.onError,
       getTimestamp,
+      fromTimestamp ?? undefined,
     );
     poller.start();
 
@@ -186,9 +246,9 @@ export class LiveTailManager {
       console.debug("[LiveTailManager] stop_live_tail:", e),
     );
 
-    // Start polling from last clean timestamp to backfill sampled gaps
+    // Use a 2s overlap window so dedupe in panelSlice can handle any same-ms events.
     const replayFrom = this.lastCleanTimestamp
-      ? this.lastCleanTimestamp + 1
+      ? this.lastCleanTimestamp - FALLBACK_OVERLAP_MS
       : null;
 
     this.startPolling(replayFrom);
@@ -197,39 +257,13 @@ export class LiveTailManager {
     );
   }
 
-  private handleStreamError(message: string): void {
-    const lower = message.toLowerCase();
-    const isConnectionOrCredentialError =
-      lower.includes("expired") ||
-      lower.includes("sso") ||
-      lower.includes("token") ||
-      lower.includes("credential") ||
-      lower.includes("connection") ||
-      lower.includes("connector") ||
-      lower.includes("network") ||
-      lower.includes("timeout") ||
-      lower.includes("unable to connect");
-
-    if (isConnectionOrCredentialError) {
-      this.onError(new Error(message));
-      this.stop();
-    } else {
-      // Fall back to polling — don't retry streaming (it just failed)
-      console.log(
-        "[LiveTailManager] Stream error, falling back to polling:",
-        message,
-      );
-      this.startPolling(null);
-      this.onToast("Stream unavailable \u2014 using polling");
-    }
-  }
-
   private async handleStreamEnded(): Promise<void> {
     // 3-hour timeout — auto-reconnect
     try {
       await this.startStream();
       this.onToast("Live stream reconnected");
-    } catch {
+    } catch (e) {
+      console.error("[LiveTailManager] Stream reconnect failed:", e);
       this.startPolling(null);
       this.onToast("Stream unavailable \u2014 using polling");
     }

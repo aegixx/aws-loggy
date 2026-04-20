@@ -453,6 +453,14 @@ export function createPanelActions(
             error instanceof Error ? error.message : String(error);
           if (isConnectionOrCredentialError(message)) {
             useConnectionStore.getState().setConnectionFailed(message);
+          } else {
+            // Non-recoverable error (e.g. permission denied) — clear tailing
+            // state so the panel doesn't appear stuck and reconnect won't retry.
+            setPanel({
+              isTailing: false,
+              tailManager: null,
+              activeTransport: null,
+            });
           }
         },
         onTransportChange: (type: TransportType) => {

@@ -197,9 +197,10 @@ The filter bar time quickfilter buttons are customizable in Settings (CMD-,):
 - `reconnect_aws` Tauri command re-initializes the AWS client after credential refresh
 - `refreshConnection` store action calls `reconnect_aws` and re-fetches logs with current filters
 - Log cache limits configurable in Settings (default: 50,000 entries OR 100 MB)
-- Live tail uses CloudWatch StartLiveTail streaming API (1-second updates from AWS)
-- Falls back to 1-second polling if streaming is unavailable or sampling detected
+- Live tail uses CloudWatch StartLiveTail streaming API (1-second updates from AWS) with per-panel sessions
+- Falls back to 1-second polling if streaming is unavailable or sampling detected (2-second overlap window prevents event gaps)
 - Sampling detection: if 500 events in one update, switches to polling from last clean timestamp
+- Stream error handling: session limit exceeded → polling with toast; permission denied → error dialog and stop; other errors → silent polling fallback
 - Follow mode auto-scrolls to latest during live tail; pauses when scrolled up; "Jump to latest" button to resume
 - Transport indicator shows "Streaming" or "Polling" during live tail
 - Log group selector uses Fuse.js fuzzy matching with virtualized dropdown (keyboard nav: ArrowUp/Down, Enter, Escape)

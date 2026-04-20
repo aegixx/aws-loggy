@@ -129,10 +129,20 @@ Existing tools like AWS Live Tail or CloudWatch Console make a roundtrip to AWS 
 
 **Live Tail Mode:**
 
-1. Backend polls CloudWatch every 2 seconds for new events
-2. New events parsed, cached, and emitted to frontend
-3. Frontend appends to virtualized list, applies active filters client-side
-4. User filter changes = instant re-filter of cached data (no AWS call)
+1. Backend initiates per-panel streaming via CloudWatch `StartLiveTail` API (1-second server-side updates)
+2. If streaming unavailable or sampling detected (500+ events in one update), falls back to 1-second polling
+3. Fallback transition uses 2-second overlap window to avoid event gaps at cutover
+4. New events parsed, cached, and emitted to frontend with per-panel routing via `panel_id`
+5. Typed error handling: session limit → polling fallback with toast; permission denied → error dialog; other errors → silent polling fallback
+6. Frontend appends to virtualized list, applies active filters client-side
+7. User filter changes = instant re-filter of cached data (no AWS call)
+
+**Architecture:**
+
+- `LiveTailManager` in the frontend orchestrates streaming vs polling transport selection and per-panel event routing
+- Each streaming session has a generation token to prevent task-exit cleanup from removing a newer session for the same panel
+- `TailTransport` interface abstracts streaming and polling transports
+- Rust backend tracks live tail handles per `panel_id` in a `HashMap<String, TailEntry>` to support multi-panel streaming
 
 **Historical Mode:**
 
