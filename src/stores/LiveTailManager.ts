@@ -140,15 +140,21 @@ export class LiveTailManager {
     if (payload.kind === "sessionLimitExceeded") {
       // Bump startGen so any in-flight startStream() invoke won't overwrite the fallback.
       this.startGen++;
-      this.startPolling(null);
+      // Use overlap window to avoid missing events between stream error and polling start,
+      // consistent with the sampling-detection fallback.
+      const replayFrom = this.lastCleanTimestamp
+        ? this.lastCleanTimestamp - FALLBACK_OVERLAP_MS
+        : null;
+      this.startPolling(replayFrom);
       this.onTransportChange("poll");
       this.onToast(
         "AWS session limit reached \u2014 using polling. Close other Loggy windows to restore streaming.",
       );
     } else if (payload.kind === "permissionDenied") {
-      // Surface to UI; do not silently fall back — user action required.
-      this.onError(new Error(`Permission denied: ${payload.message}`));
+      // Stop state first, then notify callers (conventional error handling order).
+      // Do not silently fall back — user action required.
       this.stop();
+      this.onError(new Error(`Permission denied: ${payload.message}`));
     } else {
       // StreamError or Other: fall back to polling.
       // Bump startGen so any in-flight startStream() invoke won't overwrite the fallback.
@@ -169,6 +175,8 @@ export class LiveTailManager {
     const myGen = this.startGen;
 
     // Start the stream on the backend (uses ARN — required by StartLiveTail API)
+    // TODO: filterPattern is intentionally null here—all filtering happens client-side
+    // during streaming. Polling path passes filter pattern for backward compatibility.
     try {
       await invoke("start_live_tail", {
         panelId: this.panelId,
