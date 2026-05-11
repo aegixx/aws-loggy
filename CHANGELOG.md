@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.1](https://github.com/aegixx/aws-loggy/compare/v3.14.0...v3.14.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* close window via Rust app.exit on X-button ([#106](https://github.com/aegixx/aws-loggy/issues/106)) ([#107](https://github.com/aegixx/aws-loggy/issues/107)) ([29115fd](https://github.com/aegixx/aws-loggy/commit/29115fd2e82ee19b9bc04849cdf1264af3145d53))
+
 ## [3.14.0](https://github.com/aegixx/aws-loggy/compare/v3.13.1...v3.14.0) (2026-04-20)
 
 
