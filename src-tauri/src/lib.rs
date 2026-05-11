@@ -1565,6 +1565,16 @@ fn get_boot_workspace() -> Option<String> {
 ///   not propagate the environment of the `open(1)` subprocess, so env vars
 ///   are not an option here).
 /// - Linux/Windows: via the `LOGGY_LOAD_WORKSPACE` env var.
+// Issue #106: On Windows, calling `window.close()` from inside a JS
+// `onCloseRequested` handler after `preventDefault()` is a no-op — the X
+// button appears dead. The native Exit menu works because it goes through
+// the menu's `.quit()` path. Mirror that here so the frontend can finalize
+// the close from JS after flushing pending writes.
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 #[tauri::command]
 fn open_new_window(workspace_id: Option<String>) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {}", e))?;
@@ -2040,6 +2050,7 @@ pub fn run() {
             set_settings,
             open_new_window,
             get_boot_workspace,
+            quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
