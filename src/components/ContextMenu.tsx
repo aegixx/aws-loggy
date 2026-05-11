@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { shortcut } from "../utils/platform";
 
 interface ContextMenuProps {
   x: number;
@@ -147,7 +148,7 @@ export function ContextMenu({
         onClick={() => handleItemClick(onCopy, copyDisabled)}
       >
         <span>{hasTextSelection ? "Copy selection" : "Copy"}</span>
-        <span className={shortcutClass}>Cmd+C</span>
+        <span className={shortcutClass}>{shortcut("C")}</span>
       </div>
 
       {/* Copy All (group headers only) */}
@@ -332,7 +333,7 @@ export function ContextMenu({
         onClick={() => handleItemClick(onRefresh)}
       >
         <span>Refresh</span>
-        <span className={shortcutClass}>Cmd+R</span>
+        <span className={shortcutClass}>{shortcut("R")}</span>
       </div>
 
       {/* Clear */}
@@ -342,7 +343,7 @@ export function ContextMenu({
         onClick={() => handleItemClick(onClear, clearDisabled)}
       >
         <span>Clear</span>
-        <span className={shortcutClass}>Cmd+K</span>
+        <span className={shortcutClass}>{shortcut("K")}</span>
       </div>
     </div>
   );
