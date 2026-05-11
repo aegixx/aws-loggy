@@ -16,6 +16,7 @@ import { TimeRangePicker } from "./TimeRangePicker";
 import type { LogLevel, GroupByMode } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
 import { useSystemTheme } from "../hooks/useSystemTheme";
+import { shortcut } from "../utils/platform";
 
 /** Delay in ms before filter text changes trigger log filtering */
 const FILTER_DEBOUNCE_MS = 300;
@@ -301,7 +302,7 @@ export function FilterBar({ hideGroupBy }: { hideGroupBy?: boolean } = {}) {
           onClick={clearLogs}
           disabled={logs.length === 0 || !isTailing}
           className={`p-1 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer ${isDark ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"}`}
-          title="Clear logs (⌘K)"
+          title={`Clear logs (${shortcut("K")})`}
         >
           <MdDeleteOutline className="w-4 h-4" />
         </button>
