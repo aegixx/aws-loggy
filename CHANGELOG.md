@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.2](https://github.com/aegixx/aws-loggy/compare/v3.14.1...v3.14.2) (2026-05-11)
+
+
+### Bug Fixes
+
+* show platform-appropriate keyboard shortcuts on Windows/Linux ([#109](https://github.com/aegixx/aws-loggy/issues/109)) ([04b5cfd](https://github.com/aegixx/aws-loggy/commit/04b5cfd2fba6aae8539e142079de43a5695fe372))
+
 ## [3.14.1](https://github.com/aegixx/aws-loggy/compare/v3.14.0...v3.14.1) (2026-05-11)
 
 
