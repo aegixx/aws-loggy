@@ -144,16 +144,17 @@ function App() {
   }, []);
 
   // Multi-process: block the window close long enough to flush pending
-  // debounced settings writes and auto-save the bound workspace. We must
-  // use `onCloseRequested` (not the generic `listen` API) because that's
-  // the only path that lets us `preventDefault()` and call `win.close()`
-  // explicitly after the async work finishes. Using `listen` here races
-  // the close and silently drops writes made in the last ~300ms.
+  // debounced settings writes and auto-save the bound workspace, then exit
+  // the process via the `quit_app` Tauri command. Issue #106: on Windows,
+  // calling `win.close()` from inside `onCloseRequested` after
+  // `preventDefault()` is silently dropped, so the X button does nothing.
+  // Routing the final exit through Rust's `app.exit(0)` matches the Exit
+  // menu path and works on every OS.
   useEffect(() => {
     const win = getCurrentWindow();
     let closing = false;
     const unlistenPromise = win.onCloseRequested(async (event) => {
-      if (closing) return; // our own `win.close()` below re-fires the event
+      if (closing) return;
       closing = true;
       event.preventDefault();
       try {
@@ -167,9 +168,9 @@ function App() {
         console.warn("close: flushPendingSettingsWrites failed:", e);
       }
       try {
-        await win.close();
+        await directInvoke("quit_app");
       } catch (e) {
-        console.warn("close: win.close() failed:", e);
+        console.warn("close: quit_app failed:", e);
       }
     });
     return () => {
