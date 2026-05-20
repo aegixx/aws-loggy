@@ -14,6 +14,11 @@ const BACKFILL_WINDOW_MS = 15 * 60 * 1000;
 // overlap; gaps would silently lose events.
 const BACKFILL_SEAM_OVERLAP_MS = 2000;
 const BACKFILL_TIMEOUT_MS = 15_000;
+// How many of the most recent events to check for stream/backfill dedup.
+// Bounded so onNewLogs stays O(window) even when logs holds the 50k-event
+// backfill — streaming dedup only matters against very recent events near
+// the seam, never against events from minutes ago.
+const DEDUP_WINDOW_SIZE = 500;
 
 /** Runtime state for a single panel */
 export interface PanelState {
@@ -417,7 +422,14 @@ export function createPanelActions(
       //      checks `panel.isTailing`) will resume live tail on panels whose
       //      backfill failed with a credential error mid-flight.
       // Downstream consumers should treat `isTailing && !tailManager` as
-      // "backfilling, manager not yet started".
+      // one of two transient states:
+      //   - backfill is in flight, manager not yet constructed (the common
+      //     case while `isLoading: true`), OR
+      //   - backfill ended with a credential error and the panel is waiting
+      //     for SSO refresh to retrigger startTail (isLoading: false).
+      // A future `tailStatus: 'backfilling' | 'credential_error' | 'live'`
+      // field would disambiguate these for UI affordances like a "reconnecting"
+      // spinner; today the two states are distinguishable via `isLoading`.
       setPanel({
         isTailing: true,
         isLoading: true,
@@ -446,6 +458,11 @@ export function createPanelActions(
         maxSizeMb: cacheLimits.maxSizeMb,
         fetchId,
       });
+      // If the timeout wins the Promise.race below, the backfillInvoke
+      // promise is still pending. A later rejection (network error after
+      // the timeout fired) would surface as an UnhandledPromiseRejection.
+      // Attach a no-op catch so the abandoned branch settles cleanly.
+      backfillInvoke.catch(() => {});
 
       let backfillFailedFatally = false;
       // Track the timeout handle so we can cancel it on success. Without
@@ -549,14 +566,17 @@ export function createPanelActions(
           const current = getPanel();
           if (!current) return; // Panel was closed
 
-          // Deduplicate
+          // Deduplicate against the most recent DEDUP_WINDOW_SIZE events
+          // only. Streamed events arrive at most ~1s apart and only collide
+          // with backfill events near the seam, so checking the full log
+          // history (up to 50k entries after backfill) on every callback
+          // is wasted O(n) work.
+          const dedupWindow = current.logs.slice(-DEDUP_WINDOW_SIZE);
           const existingIds = new Set(
-            current.logs.map((l) => l.event_id).filter(Boolean),
+            dedupWindow.map((l) => l.event_id).filter(Boolean),
           );
           const existingKeys = new Set(
-            current.logs.map(
-              (l) => `${l.timestamp}:${l.message.slice(0, 100)}`,
-            ),
+            dedupWindow.map((l) => `${l.timestamp}:${l.message.slice(0, 100)}`),
           );
           const uniqueNewLogs = newLogs.filter((log) => {
             if (log.event_id && existingIds.has(log.event_id)) return false;

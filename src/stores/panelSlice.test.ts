@@ -113,6 +113,17 @@ function makeEvent(ts: number, message: string, event_id?: string): LogEvent {
   } as LogEvent;
 }
 
+// Flush all pending microtasks so promise chains settle deterministically.
+// Used in negative-assertion tests ("X did NOT happen") where vi.waitFor
+// can't help — there's no positive condition to await. Three Promise.resolve
+// turns covers the longest chain in startTail() (Promise.race → catch →
+// post-backfill check → return).
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────
 
 describe("panelSlice startTail backfill", () => {
@@ -227,10 +238,8 @@ describe("panelSlice startTail backfill", () => {
 
     const harness = makeHarness();
     harness.actions.startTail();
-    // Give the rejected promise a chance to settle.
-    await new Promise((r) => setTimeout(r, 10));
+    await vi.waitFor(() => expect(setConnectionFailed).toHaveBeenCalled());
 
-    expect(setConnectionFailed).toHaveBeenCalled();
     expect(managerStart).not.toHaveBeenCalled();
     // `isTailing` stays true even after credential failure so the post-SSO
     // refresh callback in workspaceStore restarts live tail on this panel.
@@ -292,7 +301,7 @@ describe("panelSlice startTail backfill", () => {
     // Simulate a competing action that bumps currentFetchId.
     harness.panel.currentFetchId += 1;
     resolveFetch([makeEvent(1000, "hello", "e1")]);
-    await new Promise((r) => setTimeout(r, 10));
+    await flushMicrotasks();
 
     expect(managerStart).not.toHaveBeenCalled();
     // Stale logs were NOT applied.
@@ -315,7 +324,7 @@ describe("panelSlice startTail backfill", () => {
     // User clicks Stop while backfill is pending.
     harness.actions.stopTail();
     resolveFetch([makeEvent(1000, "hello", "e1")]);
-    await new Promise((r) => setTimeout(r, 10));
+    await flushMicrotasks();
 
     expect(managerStart).not.toHaveBeenCalled();
     expect(harness.panel.isTailing).toBe(false);
@@ -338,7 +347,7 @@ describe("panelSlice startTail backfill", () => {
     harness.panel.logGroupName = "/aws/lambda/other";
     harness.panel.currentFetchId += 1;
     resolveFetch([makeEvent(1000, "hello", "e1")]);
-    await new Promise((r) => setTimeout(r, 10));
+    await flushMicrotasks();
 
     expect(managerStart).not.toHaveBeenCalled();
   });
@@ -363,9 +372,7 @@ describe("panelSlice startTail backfill", () => {
     expect(resolvers).toHaveLength(1);
 
     resolvers[0]([makeEvent(1000, "hello", "e1")]);
-    await new Promise((r) => setTimeout(r, 10));
-
-    expect(managerStart).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(managerStart).toHaveBeenCalledTimes(1));
     expect(harness.panel.logs.map((l) => l.event_id)).toEqual(["e1"]);
   });
 
