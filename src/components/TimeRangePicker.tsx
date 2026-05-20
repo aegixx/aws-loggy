@@ -10,6 +10,7 @@ import {
   useSettingsStore,
   DEFAULT_TIME_PRESETS,
   type TimePreset,
+  getActiveProfileBucket,
 } from "../stores/settingsStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { useSystemTheme } from "../hooks/useSystemTheme";
@@ -21,12 +22,17 @@ export function TimeRangePicker() {
   const { isTailing, timeRange } = panel;
   const selectedLogGroup = panel.logGroupName;
   const { startTail, stopTail, clearLogs, setTimeRange } = actions;
-  const globalTimePreset = useSettingsStore((s) => s.persistedTimePreset);
-  const globalTimeRange = useSettingsStore((s) => s.persistedTimeRange);
+  const globalTimePreset = useSettingsStore(
+    (s) => getActiveProfileBucket(s).persistedTimePreset,
+  );
+  const globalTimeRange = useSettingsStore(
+    (s) => getActiveProfileBucket(s).persistedTimeRange,
+  );
   const timePresets = useSettingsStore((s) => s.timePresets);
-  // Select only this panel's config to avoid re-renders from other panels' writes
+  // Select only this panel's config from the active profile bucket to
+  // avoid re-renders from other panels' or other profiles' writes.
   const panelConfig = useSettingsStore(
-    (s) => s.panelPersistedConfigs[panel.id],
+    (s) => getActiveProfileBucket(s).panelPersistedConfigs[panel.id],
   );
   // Per-panel time preset takes precedence over global
   const persistedTimePreset =

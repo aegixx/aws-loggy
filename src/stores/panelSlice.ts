@@ -1,6 +1,6 @@
 import { invoke } from "../demo/demoInvoke";
 import type { LogEvent, ParsedLogEvent, LogLevel, GroupByMode } from "../types";
-import { useSettingsStore } from "./settingsStore";
+import { useSettingsStore, getActiveProfileKey } from "./settingsStore";
 import { LiveTailManager, type TransportType } from "./LiveTailManager";
 import { parseLogEvent, mergeFragmentedLogs } from "../utils/logParsing";
 import { FilterCache } from "../utils/logFiltering";
@@ -19,6 +19,16 @@ const BACKFILL_TIMEOUT_MS = 15_000;
 // backfill — streaming dedup only matters against very recent events near
 // the seam, never against events from minutes ago.
 const DEDUP_WINDOW_SIZE = 500;
+
+/**
+ * Capture the active profile key at the call site. Deferred writes
+ * (via setTimeout) MUST pass this key forward so they land in the bucket
+ * that was active when the user took the action, not whatever the user
+ * has switched to by the time the timer fires.
+ */
+function captureProfileKey(): string {
+  return getActiveProfileKey(useSettingsStore.getState());
+}
 
 /** Runtime state for a single panel */
 export interface PanelState {
@@ -86,7 +96,20 @@ export interface PanelActions {
   setTailToast: (message: string | null) => void;
   clearLogs: () => void;
   resetFilters: () => void;
+  /**
+   * Destructive reset: clears in-memory panel state AND the panel's
+   * persisted config under the active profile. Used by explicit user
+   * resets only. Profile-change flows must use `clearInMemoryState`
+   * instead so they preserve per-profile saved selections.
+   */
   resetState: () => void;
+  /**
+   * Non-destructive teardown for profile-switch and demo-toggle: stops
+   * the live tail, cancels in-flight fetches, bumps currentFetchId, and
+   * clears in-memory logs/selection. Does NOT touch persisted state, so
+   * switching back to the prior profile restores it cleanly.
+   */
+  clearInMemoryState: () => void;
   setLoadingProgress: (count: number, sizeBytes: number) => void;
   toggleGroupFilter: () => void;
   setGroupByMode: (mode: GroupByMode | "auto") => void;
@@ -188,12 +211,15 @@ export function createPanelActions(
         effectiveGroupByMode: effectiveMode,
       });
 
-      // Defer settings persistence to avoid cross-store render tearing
+      // Defer settings persistence to avoid cross-store render tearing.
+      // Capture profile key now so a profile switch before the timer
+      // fires writes into the source profile, not the new one.
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const { setLastSelectedLogGroup, setPanelPersistedConfig } =
           useSettingsStore.getState();
-        setLastSelectedLogGroup(name);
-        setPanelPersistedConfig(panelId, { logGroupName: name });
+        setLastSelectedLogGroup(profileKey, name);
+        setPanelPersistedConfig(profileKey, panelId, { logGroupName: name });
       }, 0);
 
       // Auto-fetch with current time range
@@ -328,13 +354,12 @@ export function createPanelActions(
         selectedLogIndices: new Set(),
       });
       // Defer settings persistence to avoid cross-store render tearing.
-      // The workspaceStore update above is the authoritative state change;
-      // settingsStore writes are only for localStorage persistence.
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const { setPersistedDisabledLevels, setPanelPersistedConfig } =
           useSettingsStore.getState();
-        setPersistedDisabledLevels(newDisabled);
-        setPanelPersistedConfig(panelId, {
+        setPersistedDisabledLevels(profileKey, newDisabled);
+        setPanelPersistedConfig(profileKey, panelId, {
           disabledLevels: [...newDisabled],
         });
       }, 0);
@@ -377,11 +402,12 @@ export function createPanelActions(
       preset?: string | null,
     ) => {
       setPanel({ timeRange: range });
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const { setPersistedTimeRange, setPanelPersistedConfig } =
           useSettingsStore.getState();
-        setPersistedTimeRange(range, preset);
-        setPanelPersistedConfig(panelId, {
+        setPersistedTimeRange(profileKey, range, preset);
+        setPanelPersistedConfig(profileKey, panelId, {
           timePreset: preset ?? null,
           timeRange: range,
         });
@@ -639,11 +665,12 @@ export function createPanelActions(
       setPanel({ isTailing: true, tailManager: manager, isLoading: false });
 
       // Defer settings persistence to avoid cross-store render tearing
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const { setPersistedTimeRange, setPanelPersistedConfig } =
           useSettingsStore.getState();
-        setPersistedTimeRange(null, "live");
-        setPanelPersistedConfig(panelId, {
+        setPersistedTimeRange(profileKey, null, "live");
+        setPanelPersistedConfig(profileKey, panelId, {
           timePreset: "live",
           timeRange: null,
         });
@@ -719,15 +746,16 @@ export function createPanelActions(
         selectedLogIndices: new Set(),
       });
 
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const {
           setPersistedDisabledLevels,
           setPersistedTimeRange,
           setPanelPersistedConfig,
         } = useSettingsStore.getState();
-        setPersistedDisabledLevels(defaultDisabled);
-        setPersistedTimeRange(null);
-        setPanelPersistedConfig(panelId, {
+        setPersistedDisabledLevels(profileKey, defaultDisabled);
+        setPersistedTimeRange(profileKey, null);
+        setPanelPersistedConfig(profileKey, panelId, {
           disabledLevels: [...defaultDisabled],
           timePreset: null,
           timeRange: null,
@@ -756,12 +784,46 @@ export function createPanelActions(
         totalSizeBytes: 0,
       });
 
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const { setLastSelectedLogGroup, clearPanelPersistedConfig } =
           useSettingsStore.getState();
-        setLastSelectedLogGroup(null);
-        clearPanelPersistedConfig(panelId);
+        setLastSelectedLogGroup(profileKey, null);
+        clearPanelPersistedConfig(profileKey, panelId);
       }, 0);
+    },
+
+    clearInMemoryState: () => {
+      const panel = getPanel();
+      if (!panel) return;
+
+      // Stop live tail without touching the persisted "live" preset
+      if (panel.tailManager) {
+        panel.tailManager.stop();
+      }
+      // Cancel any in-flight backend fetch/tail
+      invoke("cancel_fetch", { panelId }).catch(() => {});
+      invoke("stop_live_tail", { panelId }).catch(() => {});
+
+      setPanel({
+        logGroupName: null,
+        logs: [],
+        filteredLogs: [],
+        expandedLogIndex: null,
+        selectedLogIndex: null,
+        selectedLogIndices: new Set(),
+        error: null,
+        isLoading: false,
+        loadingProgress: 0,
+        loadingSizeBytes: 0,
+        totalSizeBytes: 0,
+        isTailing: false,
+        tailManager: null,
+        activeTransport: null,
+        isFollowing: false,
+        tailToast: null,
+        currentFetchId: panel.currentFetchId + 1,
+      });
     },
 
     setLoadingProgress: (count: number, sizeBytes: number) => {
@@ -772,11 +834,12 @@ export function createPanelActions(
       const panel = safeGet();
       const next = !panel.groupFilter;
       setPanel({ groupFilter: next });
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const { setPersistedGroupFilter, setPanelPersistedConfig } =
           useSettingsStore.getState();
-        setPersistedGroupFilter(next);
-        setPanelPersistedConfig(panelId, { groupFilter: next });
+        setPersistedGroupFilter(profileKey, next);
+        setPanelPersistedConfig(profileKey, panelId, { groupFilter: next });
       }, 0);
     },
 
@@ -789,11 +852,12 @@ export function createPanelActions(
         effectiveGroupByMode: effectiveMode,
         groupFilter: effectiveMode === "none" ? false : panel.groupFilter,
       });
+      const profileKey = captureProfileKey();
       setTimeout(() => {
         const { setPersistedGroupByMode, setPanelPersistedConfig } =
           useSettingsStore.getState();
-        setPersistedGroupByMode(mode);
-        setPanelPersistedConfig(panelId, { groupByMode: mode });
+        setPersistedGroupByMode(profileKey, mode);
+        setPanelPersistedConfig(profileKey, panelId, { groupByMode: mode });
       }, 0);
     },
 

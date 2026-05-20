@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke as directInvoke } from "@tauri-apps/api/core";
@@ -9,7 +9,10 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { AboutDialog } from "./components/AboutDialog";
 import { UpdateDialog, UpdateInfo } from "./components/UpdateDialog";
 import { useConnectionStore } from "./stores/connectionStore";
-import { useWorkspaceStore } from "./stores/workspaceStore";
+import {
+  useWorkspaceStore,
+  restoreAllPanelsForActiveProfile,
+} from "./stores/workspaceStore";
 import { useGroupStore, initializeGroups } from "./stores/groupStore";
 import type { WorkspaceConfig } from "./types/workspace";
 import {
@@ -98,6 +101,11 @@ function App() {
     "default",
   ]);
   const [isChangingProfile, setIsChangingProfile] = useState(false);
+  // Monotonic token: closes the race when the user double-clicks the
+  // profile dropdown or switches again before refreshConnection resolves.
+  // Older switches drop their restore when they discover their generation
+  // is no longer current.
+  const profileSwitchGenerationRef = useRef(0);
 
   // Toast from active panel's tail manager — select primitives to avoid re-render loops
   const activePanelId = useGroupStore((s) => s.getActivePanelId());
@@ -236,23 +244,70 @@ function App() {
     const currentProfile = awsProfile ?? awsInfo?.profile ?? "default";
     const isProfileChange = newProfile !== currentProfile;
 
-    setIsChangingProfile(true);
-    setAwsProfile(profileValue);
-
-    // Reset state on all panels if switching to a different profile
-    if (isProfileChange) {
-      const { panels, panelAction } = useWorkspaceStore.getState();
-      for (const panelId of panels.keys()) {
-        panelAction(panelId).resetState();
+    if (!isProfileChange) {
+      // Re-clicking the same profile is a no-op refresh; let the
+      // existing refresh path handle it without a swap.
+      setIsChangingProfile(true);
+      try {
+        await refreshConnection();
+      } catch (err) {
+        console.error("Failed to refresh profile:", err);
+      } finally {
+        setIsChangingProfile(false);
       }
+      return;
     }
+
+    // Generation token closes the double-click race: if the user
+    // triggers another switch before refreshConnection resolves, only
+    // the latest switch applies its restore.
+    const myGen = ++profileSwitchGenerationRef.current;
+    const priorProfile = awsProfile;
+
+    setIsChangingProfile(true);
+
+    // Clear in-memory panel state (logs, selection, active tail) without
+    // wiping persisted config — switching back to priorProfile must
+    // still see priorProfile's saved selections.
+    const { panels, panelAction } = useWorkspaceStore.getState();
+    for (const panelId of panels.keys()) {
+      panelAction(panelId).clearInMemoryState();
+    }
+
+    // Swap the active profile bucket synchronously so any read happening
+    // before refreshConnection resolves already sees the new profile.
+    setAwsProfile(profileValue);
 
     try {
       await refreshConnection();
+      // Stale switch — a newer change is in flight, drop our restore.
+      if (myGen !== profileSwitchGenerationRef.current) return;
+
+      // refreshConnection() catches its own errors and resolves either
+      // way; inspect connection state explicitly to detect failure.
+      const { isConnected: nowConnected, connectionError: nowError } =
+        useConnectionStore.getState();
+      if (!nowConnected || nowError) {
+        // Roll back: revert active profile + restore the prior bucket's
+        // selections so the user sees what they had, with the error
+        // surfaced via connectionError.
+        setAwsProfile(priorProfile);
+        restoreAllPanelsForActiveProfile();
+      } else {
+        restoreAllPanelsForActiveProfile();
+      }
     } catch (err) {
+      // Unexpected throw (refreshConnection swallows AWS errors, so this
+      // would only fire for a programming bug). Roll back defensively.
       console.error("Failed to switch profile:", err);
+      if (myGen === profileSwitchGenerationRef.current) {
+        setAwsProfile(priorProfile);
+        restoreAllPanelsForActiveProfile();
+      }
     } finally {
-      setIsChangingProfile(false);
+      if (myGen === profileSwitchGenerationRef.current) {
+        setIsChangingProfile(false);
+      }
     }
   };
 
@@ -407,9 +462,11 @@ function App() {
         }
       }
       useDemoStore.getState().setDemoMode(enabled);
-      // Reset all panels
+      // Clear in-memory panel state without wiping persisted config —
+      // toggling demo mode should not destroy the user's real AWS
+      // profile saved log group / filter selections.
       for (const panelId of panels.keys()) {
-        panelAction(panelId).resetState();
+        panelAction(panelId).clearInMemoryState();
       }
       // Refresh profiles (demo wrapper returns ["demo"], real returns AWS profiles)
       invoke<string[]>("list_aws_profiles")

@@ -157,14 +157,21 @@ describe("settingsStore multi-process split", () => {
     // Legacy key should be removed.
     expect(localStorage.getItem("loggy-settings")).toBeNull();
 
-    // Workspace side should hold awsProfile + panelPersistedConfigs.
+    // Workspace side should hold awsProfile + profileScopedConfigs (v19+).
+    // The v18->v19 migration collapses the legacy flat panelPersistedConfigs
+    // into a per-profile bucket keyed on the user's active awsProfile.
     const wsRaw = localStorage.getItem("loggy-workspace");
     expect(wsRaw).toBeTruthy();
     const wsEnvelope = JSON.parse(wsRaw as string);
     expect(wsEnvelope.state.awsProfile).toBe("dev");
-    expect(wsEnvelope.state.panelPersistedConfigs).toEqual({
+    expect(wsEnvelope.state.profileScopedConfigs).toBeDefined();
+    expect(
+      wsEnvelope.state.profileScopedConfigs.dev.panelPersistedConfigs,
+    ).toEqual({
       "panel-1": { logGroupName: "fg" },
     });
+    // Flat fields must NOT be present in v19+.
+    expect(wsEnvelope.state.panelPersistedConfigs).toBeUndefined();
 
     // Shared side should have received theme + logLevels + cacheLimits.
     expect(sharedWritten).not.toBeNull();
