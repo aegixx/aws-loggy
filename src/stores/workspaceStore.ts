@@ -17,7 +17,12 @@ import {
   type PanelState,
   type PanelActions,
 } from "./panelSlice";
-import { useSettingsStore, DEFAULT_TIME_PRESETS } from "./settingsStore";
+import {
+  useSettingsStore,
+  DEFAULT_TIME_PRESETS,
+  getActiveProfileBucket,
+  getActiveProfileKey,
+} from "./settingsStore";
 import {
   useConnectionStore,
   setOnConnectionEstablished,
@@ -100,19 +105,22 @@ function restorePersistedStateForPanel(
   actions: PanelActions,
   useGlobalFallback: boolean,
 ): void {
+  const settingsState = useSettingsStore.getState();
+  const bucket = getActiveProfileBucket(settingsState);
+  const profileKey = getActiveProfileKey(settingsState);
+  const { getDefaultDisabledLevels } = settingsState;
   const {
     lastSelectedLogGroup,
     panelPersistedConfigs,
-    getPersistedDisabledLevelsAsSet,
     persistedTimeRange,
     persistedTimePreset,
     persistedGroupByMode,
     persistedGroupFilter,
-    getDefaultDisabledLevels,
-  } = useSettingsStore.getState();
+    persistedDisabledLevels,
+  } = bucket;
 
   const rawConfig = panelPersistedConfigs[panelId];
-  const persistedLevels = getPersistedDisabledLevelsAsSet();
+  const persistedLevels = new Set(persistedDisabledLevels);
 
   // Per-panel configs may have been created before new fields were added
   // (e.g. disabledLevels, timePreset). Check each field explicitly with
@@ -200,10 +208,13 @@ function restorePersistedStateForPanel(
 
   // Defer write-back to avoid cross-store render tearing.
   // The workspaceStore setPanel above is the authoritative state change.
+  // Profile key was captured above, so this write lands in the bucket
+  // that was active when restore started even if the user switches
+  // profile before the timer fires.
   if (effectiveLogGroup) {
     setTimeout(() => {
       const { setPanelPersistedConfig } = useSettingsStore.getState();
-      setPanelPersistedConfig(panelId, {
+      setPanelPersistedConfig(profileKey, panelId, {
         logGroupName: effectiveLogGroup,
         timePreset: effectiveTimePreset,
         timeRange: effectiveTimePreset === "custom" ? effectiveTimeRange : null,
@@ -218,12 +229,68 @@ function restorePersistedStateForPanel(
     effectiveLogGroup &&
     logGroups.some((g) => g.name === effectiveLogGroup)
   ) {
-    actions.selectLogGroup(effectiveLogGroup);
-
+    // Set logGroupName directly and fetch / tail once. Going through
+    // selectLogGroup() here would fire a fetch that startTail() then
+    // cancels, churning the backend and racing on the stale fetch.
+    setPanel({ logGroupName: effectiveLogGroup });
     if (effectiveTimePreset === "live") {
       actions.startTail();
+    } else {
+      actions.fetchLogs(
+        restoredTimeRange?.start,
+        restoredTimeRange?.end ?? undefined,
+      );
     }
   }
+}
+
+/**
+ * Restore every panel's state from the active profile bucket. Used both at
+ * boot (after AWS connects) and after a profile switch. Staggers fetches
+ * to avoid hammering AWS when multiple panels exist.
+ */
+export function restoreAllPanelsForActiveProfile(): void {
+  const allPanelIds = useGroupStore.getState().getAllPanelIds();
+  if (allPanelIds.length === 0) return;
+
+  // Global fallback only makes sense for a single panel — multi-panel
+  // setups should not bleed one panel's persisted preferences into
+  // another panel that has never been configured.
+  const useGlobalFallback = allPanelIds.length === 1;
+
+  allPanelIds.forEach((panelId, index) => {
+    const setPanelFn = (partial: Partial<PanelState>) => {
+      const { panels } = useWorkspaceStore.getState();
+      const existing = panels.get(panelId);
+      if (!existing) return;
+      const updated = new Map(panels);
+      updated.set(panelId, { ...existing, ...partial });
+      useWorkspaceStore.setState({ panels: updated });
+    };
+
+    const actions = useWorkspaceStore.getState().panelAction(panelId);
+
+    if (index === 0) {
+      restorePersistedStateForPanel(
+        panelId,
+        setPanelFn,
+        actions,
+        useGlobalFallback,
+      );
+    } else {
+      // Stagger secondary panel fetches to avoid hammering AWS
+      setTimeout(
+        () =>
+          restorePersistedStateForPanel(
+            panelId,
+            setPanelFn,
+            actions,
+            useGlobalFallback,
+          ),
+        index * 500,
+      );
+    }
+  });
 }
 
 // ─── Action Cache ───────────────────────────────────────────────────────────
@@ -529,50 +596,10 @@ export function usePanelState(panelId: string): PanelState {
 
 // ─── Connection Callbacks ───────────────────────────────────────────────────
 
-// Register post-connection callback to restore persisted state into all panels
+// Register post-connection callback to restore persisted state into all
+// panels. Boot path and profile-switch path share the same helper.
 setOnConnectionEstablished(() => {
-  const allPanelIds = useGroupStore.getState().getAllPanelIds();
-  if (allPanelIds.length === 0) return;
-
-  // Only use global fallback (lastSelectedLogGroup, persistedTimePreset, etc.)
-  // for single-panel layouts. Multi-panel: each panel uses its own per-panel
-  // config or stays empty — prevents panel 1's settings from bleeding into
-  // unconfigured panels.
-  const useGlobalFallback = allPanelIds.length === 1;
-
-  allPanelIds.forEach((panelId, index) => {
-    const setPanelFn = (partial: Partial<PanelState>) => {
-      const { panels } = useWorkspaceStore.getState();
-      const existing = panels.get(panelId);
-      if (!existing) return;
-      const updated = new Map(panels);
-      updated.set(panelId, { ...existing, ...partial });
-      useWorkspaceStore.setState({ panels: updated });
-    };
-
-    const actions = useWorkspaceStore.getState().panelAction(panelId);
-
-    if (index === 0) {
-      restorePersistedStateForPanel(
-        panelId,
-        setPanelFn,
-        actions,
-        useGlobalFallback,
-      );
-    } else {
-      // Stagger secondary panel fetches to avoid hammering AWS
-      setTimeout(
-        () =>
-          restorePersistedStateForPanel(
-            panelId,
-            setPanelFn,
-            actions,
-            useGlobalFallback,
-          ),
-        index * 500,
-      );
-    }
-  });
+  restoreAllPanelsForActiveProfile();
 });
 
 // Register post-refresh callback to re-fetch all panels

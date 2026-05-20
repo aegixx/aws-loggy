@@ -71,6 +71,34 @@ export interface PanelPersistedConfig {
   disabledLevels: string[]; // stored as array for JSON serialization
 }
 
+/**
+ * Workspace state scoped per AWS profile. Each profile carries its own
+ * bucket; switching profiles swaps the active bucket. v19+ schema.
+ */
+export interface ProfileScopedConfig {
+  lastSelectedLogGroup: string | null;
+  panelPersistedConfigs: Record<string, PanelPersistedConfig>;
+  persistedDisabledLevels: string[];
+  persistedTimeRange: { start: number; end: number | null } | null;
+  persistedTimePreset: string | null;
+  persistedGroupByMode: string;
+  persistedGroupFilter: boolean;
+}
+
+/** Sentinel profile key for "no explicit profile" (system default). */
+export const DEFAULT_PROFILE_KEY = "__default__";
+
+/** Empty bucket used when a profile has no saved state yet. */
+export const DEFAULT_PROFILE_BUCKET: ProfileScopedConfig = {
+  lastSelectedLogGroup: null,
+  panelPersistedConfigs: {},
+  persistedDisabledLevels: [],
+  persistedTimeRange: null,
+  persistedTimePreset: null,
+  persistedGroupByMode: "none",
+  persistedGroupFilter: true,
+};
+
 interface SettingsStore {
   // Theme
   theme: Theme;
@@ -78,24 +106,21 @@ interface SettingsStore {
   // Log level settings - array ordered by priority
   logLevels: LogLevelConfig[];
 
-  // Last selected log group (persisted)
-  lastSelectedLogGroup: string | null;
-
-  // Per-panel persisted config (keyed by panel ID)
-  panelPersistedConfigs: Record<string, PanelPersistedConfig>;
+  /**
+   * Per-profile workspace state. Key is `awsProfile ?? DEFAULT_PROFILE_KEY`.
+   * Sole source of truth for workspace state — no flat-field mirror.
+   * Reads: use `getActiveProfileBucket(state)` or the matching React selectors.
+   * Writes: use the profile-keyed setters below; callers MUST capture
+   * `awsProfile` at scheduling time so deferred writes (via `setTimeout`)
+   * cannot land in the wrong bucket after a profile switch.
+   */
+  profileScopedConfigs: Record<string, ProfileScopedConfig>;
 
   // Cache limits
   cacheLimits: CacheLimits;
 
-  // AWS profile (persisted)
+  /** AWS profile (persisted). Determines the active profileScopedConfigs bucket. */
   awsProfile: string | null;
-
-  // Persisted filter state (stored as array for JSON serialization)
-  persistedDisabledLevels: string[];
-  persistedTimeRange: { start: number; end: number | null } | null;
-  persistedTimePreset: string | null; // "15m", "1h", "6h", "24h", "7d", "custom", or null
-  persistedGroupByMode: string; // "none" | "stream" | "invocation"
-  persistedGroupFilter: boolean;
 
   // Settings dialog visibility
   isSettingsOpen: boolean;
@@ -111,12 +136,16 @@ interface SettingsStore {
 
   // Actions
   setTheme: (theme: Theme) => void;
-  setLastSelectedLogGroup: (logGroup: string | null) => void;
+  setLastSelectedLogGroup: (
+    profileKey: string,
+    logGroup: string | null,
+  ) => void;
   setPanelPersistedConfig: (
+    profileKey: string,
     panelId: string,
     config: Partial<PanelPersistedConfig>,
   ) => void;
-  clearPanelPersistedConfig: (panelId: string) => void;
+  clearPanelPersistedConfig: (profileKey: string, panelId: string) => void;
   setCacheLimits: (limits: Partial<CacheLimits>) => void;
   setAwsProfile: (profile: string | null) => void;
   setLogLevelStyle: (id: string, style: Partial<LogLevelStyle>) => void;
@@ -131,14 +160,16 @@ interface SettingsStore {
   closeSettings: () => void;
   setAutoUpdateEnabled: (enabled: boolean) => void;
   getDefaultDisabledLevels: () => Set<string>;
-  setPersistedDisabledLevels: (levels: Set<string>) => void;
+  setPersistedDisabledLevels: (profileKey: string, levels: Set<string>) => void;
   setPersistedTimeRange: (
+    profileKey: string,
     range: { start: number; end: number | null } | null,
     preset?: string | null,
   ) => void;
+  /** Returns disabled levels from the ACTIVE profile bucket. */
   getPersistedDisabledLevelsAsSet: () => Set<string>;
-  setPersistedGroupByMode: (mode: string) => void;
-  setPersistedGroupFilter: (enabled: boolean) => void;
+  setPersistedGroupByMode: (profileKey: string, mode: string) => void;
+  setPersistedGroupFilter: (profileKey: string, enabled: boolean) => void;
   setTimePresets: (presets: TimePreset[]) => void;
   addTimePreset: () => void;
   removeTimePreset: (index: number) => void;
@@ -150,6 +181,39 @@ interface SettingsStore {
   ) => void;
   removeSavedWorkspace: (id: string) => void;
   renameSavedWorkspace: (id: string, name: string) => void;
+}
+
+/** Resolve the active profile key. `null`/empty → DEFAULT_PROFILE_KEY. */
+export function getActiveProfileKey(state: {
+  awsProfile: string | null;
+}): string {
+  return state.awsProfile ?? DEFAULT_PROFILE_KEY;
+}
+
+/**
+ * Read the active profile's workspace bucket. Returns DEFAULT_PROFILE_BUCKET
+ * if the user has never used the active profile.
+ */
+export function getActiveProfileBucket(state: {
+  awsProfile: string | null;
+  profileScopedConfigs: Record<string, ProfileScopedConfig>;
+}): ProfileScopedConfig {
+  const key = getActiveProfileKey(state);
+  return state.profileScopedConfigs[key] ?? DEFAULT_PROFILE_BUCKET;
+}
+
+/** Internal: merge a partial bucket update into profileScopedConfigs[key]. */
+function withBucket(
+  state: { profileScopedConfigs: Record<string, ProfileScopedConfig> },
+  profileKey: string,
+  patch: Partial<ProfileScopedConfig>,
+): Record<string, ProfileScopedConfig> {
+  const existing =
+    state.profileScopedConfigs[profileKey] ?? DEFAULT_PROFILE_BUCKET;
+  return {
+    ...state.profileScopedConfigs,
+    [profileKey]: { ...existing, ...patch },
+  };
 }
 
 const DEFAULT_LOG_LEVELS: LogLevelConfig[] = [
@@ -608,25 +672,25 @@ export const useSettingsStore = create<SettingsStore>()(
     (set, get) => ({
       theme: "system" as Theme,
       logLevels: DEFAULT_LOG_LEVELS,
-      lastSelectedLogGroup: null,
-      panelPersistedConfigs: {},
+      profileScopedConfigs: {},
       cacheLimits: DEFAULT_CACHE_LIMITS,
       awsProfile: null,
-      persistedDisabledLevels: [],
-      persistedTimeRange: null,
-      persistedTimePreset: null,
-      persistedGroupByMode: "none",
-      persistedGroupFilter: true,
       isSettingsOpen: false,
       autoUpdateEnabled: true,
       timePresets: null,
       savedWorkspaces: [],
 
       setTheme: (theme) => set({ theme }),
-      setLastSelectedLogGroup: (logGroup) =>
-        set({ lastSelectedLogGroup: logGroup }),
-      setPanelPersistedConfig: (panelId, config) =>
+      setLastSelectedLogGroup: (profileKey, logGroup) =>
+        set((state) => ({
+          profileScopedConfigs: withBucket(state, profileKey, {
+            lastSelectedLogGroup: logGroup,
+          }),
+        })),
+      setPanelPersistedConfig: (profileKey, panelId, config) =>
         set((state) => {
+          const bucket =
+            state.profileScopedConfigs[profileKey] ?? DEFAULT_PROFILE_BUCKET;
           const defaults: PanelPersistedConfig = {
             logGroupName: null,
             groupByMode: "none",
@@ -636,21 +700,29 @@ export const useSettingsStore = create<SettingsStore>()(
             disabledLevels: [],
           };
           return {
-            panelPersistedConfigs: {
-              ...state.panelPersistedConfigs,
-              [panelId]: {
-                ...defaults,
-                ...(state.panelPersistedConfigs[panelId] ?? {}),
-                ...config,
+            profileScopedConfigs: withBucket(state, profileKey, {
+              panelPersistedConfigs: {
+                ...bucket.panelPersistedConfigs,
+                [panelId]: {
+                  ...defaults,
+                  ...(bucket.panelPersistedConfigs[panelId] ?? {}),
+                  ...config,
+                },
               },
-            },
+            }),
           };
         }),
-      clearPanelPersistedConfig: (panelId) =>
+      clearPanelPersistedConfig: (profileKey, panelId) =>
         set((state) => {
-          const updated = { ...state.panelPersistedConfigs };
+          const bucket = state.profileScopedConfigs[profileKey];
+          if (!bucket) return {};
+          const updated = { ...bucket.panelPersistedConfigs };
           delete updated[panelId];
-          return { panelPersistedConfigs: updated };
+          return {
+            profileScopedConfigs: withBucket(state, profileKey, {
+              panelPersistedConfigs: updated,
+            }),
+          };
         }),
       setCacheLimits: (limits) =>
         set((state) => ({
@@ -744,17 +816,35 @@ export const useSettingsStore = create<SettingsStore>()(
         );
       },
 
-      setPersistedDisabledLevels: (levels) =>
-        set({ persistedDisabledLevels: Array.from(levels) }),
+      setPersistedDisabledLevels: (profileKey, levels) =>
+        set((state) => ({
+          profileScopedConfigs: withBucket(state, profileKey, {
+            persistedDisabledLevels: Array.from(levels),
+          }),
+        })),
 
-      setPersistedTimeRange: (range, preset) =>
-        set({ persistedTimeRange: range, persistedTimePreset: preset ?? null }),
+      setPersistedTimeRange: (profileKey, range, preset) =>
+        set((state) => ({
+          profileScopedConfigs: withBucket(state, profileKey, {
+            persistedTimeRange: range,
+            persistedTimePreset: preset ?? null,
+          }),
+        })),
 
       getPersistedDisabledLevelsAsSet: () =>
-        new Set(get().persistedDisabledLevels),
-      setPersistedGroupByMode: (mode) => set({ persistedGroupByMode: mode }),
-      setPersistedGroupFilter: (enabled) =>
-        set({ persistedGroupFilter: enabled }),
+        new Set(getActiveProfileBucket(get()).persistedDisabledLevels),
+      setPersistedGroupByMode: (profileKey, mode) =>
+        set((state) => ({
+          profileScopedConfigs: withBucket(state, profileKey, {
+            persistedGroupByMode: mode,
+          }),
+        })),
+      setPersistedGroupFilter: (profileKey, enabled) =>
+        set((state) => ({
+          profileScopedConfigs: withBucket(state, profileKey, {
+            persistedGroupFilter: enabled,
+          }),
+        })),
 
       setTimePresets: (presets) => set({ timePresets: presets }),
 
@@ -836,21 +926,15 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "loggy-settings",
-      version: 18,
+      version: 19,
       storage: splitStorage,
       partialize: (state) => ({
         theme: state.theme,
         logLevels: state.logLevels,
-        lastSelectedLogGroup: state.lastSelectedLogGroup,
-        panelPersistedConfigs: state.panelPersistedConfigs,
+        profileScopedConfigs: state.profileScopedConfigs,
         cacheLimits: state.cacheLimits,
         awsProfile: state.awsProfile,
-        persistedDisabledLevels: state.persistedDisabledLevels,
-        persistedTimeRange: state.persistedTimeRange,
-        persistedTimePreset: state.persistedTimePreset,
         autoUpdateEnabled: state.autoUpdateEnabled,
-        persistedGroupByMode: state.persistedGroupByMode,
-        persistedGroupFilter: state.persistedGroupFilter,
         timePresets: state.timePresets,
         savedWorkspaces: state.savedWorkspaces,
       }),
@@ -1132,19 +1216,78 @@ export const useSettingsStore = create<SettingsStore>()(
           currentVersion = 18;
         }
 
+        // v18 -> v19: Per-profile workspace state.
+        //
+        // Flat fields (lastSelectedLogGroup, panelPersistedConfigs,
+        // persistedDisabledLevels, etc.) collapse into a per-profile bucket
+        // under `profileScopedConfigs[currentProfile]`. The shape check
+        // (`!profileScopedConfigs`) is the migration trigger, NOT the
+        // version. This defends against split-storage version skew, where
+        // one window has already upgraded the shared file to v19 but a
+        // sibling window's workspace blob is still flat at v18.
+        if (!data.profileScopedConfigs) {
+          const currentProfile =
+            (data.awsProfile as string | null) ?? DEFAULT_PROFILE_KEY;
+          const hadFlatState =
+            data.lastSelectedLogGroup != null ||
+            data.panelPersistedConfigs != null ||
+            data.persistedDisabledLevels != null ||
+            data.persistedTimeRange != null ||
+            data.persistedTimePreset != null ||
+            data.persistedGroupByMode != null ||
+            data.persistedGroupFilter != null;
+
+          data = {
+            ...data,
+            profileScopedConfigs: hadFlatState
+              ? {
+                  [currentProfile]: {
+                    lastSelectedLogGroup:
+                      (data.lastSelectedLogGroup as string | null) ?? null,
+                    panelPersistedConfigs:
+                      (data.panelPersistedConfigs as Record<
+                        string,
+                        PanelPersistedConfig
+                      >) ?? {},
+                    persistedDisabledLevels:
+                      (data.persistedDisabledLevels as string[]) ?? [],
+                    persistedTimeRange:
+                      (data.persistedTimeRange as {
+                        start: number;
+                        end: number | null;
+                      } | null) ?? null,
+                    persistedTimePreset:
+                      (data.persistedTimePreset as string | null) ?? null,
+                    persistedGroupByMode:
+                      (data.persistedGroupByMode as string) ?? "none",
+                    persistedGroupFilter:
+                      (data.persistedGroupFilter as boolean) ?? true,
+                  },
+                }
+              : {},
+          };
+        }
+        // Strip the old flat fields from the persisted state regardless of
+        // version: a partially-migrated blob (skew across windows) must not
+        // leave stale flat fields around to confuse readers.
+        delete data.lastSelectedLogGroup;
+        delete data.panelPersistedConfigs;
+        delete data.persistedDisabledLevels;
+        delete data.persistedTimeRange;
+        delete data.persistedTimePreset;
+        delete data.persistedGroupByMode;
+        delete data.persistedGroupFilter;
+        if (currentVersion <= 18) {
+          currentVersion = 19;
+        }
+
         return data as {
           theme: Theme;
           logLevels: LogLevelConfig[];
-          lastSelectedLogGroup: string | null;
-          panelPersistedConfigs: Record<string, PanelPersistedConfig>;
+          profileScopedConfigs: Record<string, ProfileScopedConfig>;
           cacheLimits: CacheLimits;
           awsProfile: string | null;
-          persistedDisabledLevels: string[];
-          persistedTimeRange: { start: number; end: number | null } | null;
-          persistedTimePreset: string | null;
           autoUpdateEnabled: boolean;
-          persistedGroupByMode: string;
-          persistedGroupFilter: boolean;
           timePresets: TimePreset[] | null;
           savedWorkspaces: import("../types/workspace").WorkspaceConfig[];
         };

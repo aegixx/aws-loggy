@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useSettingsStore, DEFAULT_TIME_PRESETS } from "./settingsStore";
+import {
+  useSettingsStore,
+  DEFAULT_TIME_PRESETS,
+  DEFAULT_PROFILE_KEY,
+  getActiveProfileBucket,
+} from "./settingsStore";
 
 describe("settingsStore - autoUpdateEnabled", () => {
   beforeEach(() => {
@@ -33,17 +38,43 @@ describe("settingsStore - autoUpdateEnabled", () => {
   });
 });
 
-describe("settingsStore - persistedGroupFilter", () => {
-  it("should default persistedGroupFilter to true", () => {
-    const { persistedGroupFilter } = useSettingsStore.getState();
-    expect(persistedGroupFilter).toBe(true);
+describe("settingsStore - persistedGroupFilter (active profile)", () => {
+  beforeEach(() => {
+    useSettingsStore.setState({ profileScopedConfigs: {}, awsProfile: null });
   });
 
-  it("should update persistedGroupFilter via setPersistedGroupFilter", () => {
-    useSettingsStore.getState().setPersistedGroupFilter(false);
-    expect(useSettingsStore.getState().persistedGroupFilter).toBe(false);
-    useSettingsStore.getState().setPersistedGroupFilter(true);
-    expect(useSettingsStore.getState().persistedGroupFilter).toBe(true);
+  it("should default persistedGroupFilter to true for unseen profile", () => {
+    const bucket = getActiveProfileBucket(useSettingsStore.getState());
+    expect(bucket.persistedGroupFilter).toBe(true);
+  });
+
+  it("should update persistedGroupFilter under specified profile bucket", () => {
+    useSettingsStore
+      .getState()
+      .setPersistedGroupFilter(DEFAULT_PROFILE_KEY, false);
+    expect(
+      getActiveProfileBucket(useSettingsStore.getState()).persistedGroupFilter,
+    ).toBe(false);
+    useSettingsStore
+      .getState()
+      .setPersistedGroupFilter(DEFAULT_PROFILE_KEY, true);
+    expect(
+      getActiveProfileBucket(useSettingsStore.getState()).persistedGroupFilter,
+    ).toBe(true);
+  });
+
+  it("should isolate writes by profile key", () => {
+    const s = useSettingsStore.getState();
+    s.setPersistedGroupFilter("dev", false);
+    s.setPersistedGroupFilter("prod", true);
+    expect(
+      useSettingsStore.getState().profileScopedConfigs.dev
+        ?.persistedGroupFilter,
+    ).toBe(false);
+    expect(
+      useSettingsStore.getState().profileScopedConfigs.prod
+        ?.persistedGroupFilter,
+    ).toBe(true);
   });
 });
 
