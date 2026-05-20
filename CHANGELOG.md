@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.0](https://github.com/aegixx/aws-loggy/compare/v3.14.2...v3.15.0) (2026-05-20)
+
+
+### Features
+
+* backfill last 15 minutes of logs when entering LIVE mode ([#111](https://github.com/aegixx/aws-loggy/issues/111)) ([d82a9b3](https://github.com/aegixx/aws-loggy/commit/d82a9b3b6bdacefb87a974e8e096a6a82adcfc2d))
+
 ## [3.14.2](https://github.com/aegixx/aws-loggy/compare/v3.14.1...v3.14.2) (2026-05-11)
 
 
