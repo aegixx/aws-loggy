@@ -586,9 +586,74 @@ const splitStorage: PersistStorage<AnyState> = {
     const mergedState = { ...workspaceState, ...sharedState };
     const mergedVersion = Math.max(workspaceVersion ?? 0, sharedVersion ?? 0);
 
+    // Shape-based pre-hydration migration (v18 -> v19).
+    //
+    // Zustand only calls the `migrate` hook when the persisted version is
+    // less than the store version. With split storage, the shared file
+    // may have already advanced to v19 (no workspace fields) while the
+    // workspace localStorage blob is still v18 (carrying flat fields).
+    // mergedVersion = max(workspaceVersion, sharedVersion) = 19, so
+    // zustand skips migrate, the flat fields hydrate as untyped keys,
+    // and the next partialize call drops them on the next write —
+    // silent data loss.
+    //
+    // Defend by inspecting shape here, BEFORE zustand sees the state.
+    // If profileScopedConfigs is missing but flat fields are present,
+    // collapse the flat fields into a per-profile bucket and strip the
+    // flats. After this, the migrate chain runs (if version < 19) and
+    // safely re-checks the same shape.
+    const ms = mergedState as AnyState;
+    const hadFlatState =
+      ms.lastSelectedLogGroup != null ||
+      ms.panelPersistedConfigs != null ||
+      ms.persistedDisabledLevels != null ||
+      ms.persistedTimeRange != null ||
+      ms.persistedTimePreset != null ||
+      ms.persistedGroupByMode != null ||
+      ms.persistedGroupFilter != null;
+    if (!ms.profileScopedConfigs && hadFlatState) {
+      const currentProfile =
+        (ms.awsProfile as string | null) ?? DEFAULT_PROFILE_KEY;
+      ms.profileScopedConfigs = {
+        [currentProfile]: {
+          lastSelectedLogGroup:
+            (ms.lastSelectedLogGroup as string | null) ?? null,
+          panelPersistedConfigs:
+            (ms.panelPersistedConfigs as Record<
+              string,
+              PanelPersistedConfig
+            >) ?? {},
+          persistedDisabledLevels:
+            (ms.persistedDisabledLevels as string[]) ?? [],
+          persistedTimeRange:
+            (ms.persistedTimeRange as {
+              start: number;
+              end: number | null;
+            } | null) ?? null,
+          persistedTimePreset:
+            (ms.persistedTimePreset as string | null) ?? null,
+          persistedGroupByMode: (ms.persistedGroupByMode as string) ?? "none",
+          persistedGroupFilter: (ms.persistedGroupFilter as boolean) ?? true,
+        },
+      };
+    }
+    // Always strip flat fields if present — they have no home in v19+.
+    if (hadFlatState) {
+      delete ms.lastSelectedLogGroup;
+      delete ms.panelPersistedConfigs;
+      delete ms.persistedDisabledLevels;
+      delete ms.persistedTimeRange;
+      delete ms.persistedTimePreset;
+      delete ms.persistedGroupByMode;
+      delete ms.persistedGroupFilter;
+    }
+
     return {
       state: mergedState,
-      version: mergedVersion,
+      // Force version to current so a downstream migrate chain re-validates
+      // shape if needed. Idempotent: a true v19 blob has no flat fields and
+      // already has profileScopedConfigs, so the block above is a no-op.
+      version: hadFlatState ? Math.max(mergedVersion, 19) : mergedVersion,
     };
   },
 

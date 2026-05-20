@@ -22,6 +22,8 @@ import {
   DEFAULT_TIME_PRESETS,
   getActiveProfileBucket,
   getActiveProfileKey,
+  DEFAULT_PROFILE_BUCKET,
+  type ProfileScopedConfig,
 } from "./settingsStore";
 import {
   useConnectionStore,
@@ -104,10 +106,16 @@ function restorePersistedStateForPanel(
   setPanel: (partial: Partial<PanelState>) => void,
   actions: PanelActions,
   useGlobalFallback: boolean,
+  // The profile bucket and key are captured by the caller at scheduling
+  // time, NOT read live. Staggered restores fire across hundreds of ms;
+  // if the user switches profile mid-stagger, late timers must still
+  // restore against the bucket that was active when the switch started.
+  capturedBucket?: ProfileScopedConfig,
+  capturedProfileKey?: string,
 ): void {
   const settingsState = useSettingsStore.getState();
-  const bucket = getActiveProfileBucket(settingsState);
-  const profileKey = getActiveProfileKey(settingsState);
+  const bucket = capturedBucket ?? getActiveProfileBucket(settingsState);
+  const profileKey = capturedProfileKey ?? getActiveProfileKey(settingsState);
   const { getDefaultDisabledLevels } = settingsState;
   const {
     lastSelectedLogGroup,
@@ -258,6 +266,15 @@ export function restoreAllPanelsForActiveProfile(): void {
   // another panel that has never been configured.
   const useGlobalFallback = allPanelIds.length === 1;
 
+  // Capture the active profile bucket NOW. Each staggered restore
+  // (every 500ms) uses this captured bucket, so even if the user
+  // switches profile during the stagger window, the in-flight restore
+  // still targets the bucket that was active when the switch started.
+  const settingsAtStart = useSettingsStore.getState();
+  const capturedBucket =
+    getActiveProfileBucket(settingsAtStart) ?? DEFAULT_PROFILE_BUCKET;
+  const capturedProfileKey = getActiveProfileKey(settingsAtStart);
+
   allPanelIds.forEach((panelId, index) => {
     const setPanelFn = (partial: Partial<PanelState>) => {
       const { panels } = useWorkspaceStore.getState();
@@ -276,6 +293,8 @@ export function restoreAllPanelsForActiveProfile(): void {
         setPanelFn,
         actions,
         useGlobalFallback,
+        capturedBucket,
+        capturedProfileKey,
       );
     } else {
       // Stagger secondary panel fetches to avoid hammering AWS
@@ -286,6 +305,8 @@ export function restoreAllPanelsForActiveProfile(): void {
             setPanelFn,
             actions,
             useGlobalFallback,
+            capturedBucket,
+            capturedProfileKey,
           ),
         index * 500,
       );

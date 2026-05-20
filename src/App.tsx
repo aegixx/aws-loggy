@@ -282,11 +282,24 @@ function App() {
       await refreshConnection();
       // Stale switch — a newer change is in flight, drop our restore.
       if (myGen !== profileSwitchGenerationRef.current) return;
-      restoreAllPanelsForActiveProfile();
+
+      // refreshConnection() catches its own errors and resolves either
+      // way; inspect connection state explicitly to detect failure.
+      const { isConnected: nowConnected, connectionError: nowError } =
+        useConnectionStore.getState();
+      if (!nowConnected || nowError) {
+        // Roll back: revert active profile + restore the prior bucket's
+        // selections so the user sees what they had, with the error
+        // surfaced via connectionError.
+        setAwsProfile(priorProfile);
+        restoreAllPanelsForActiveProfile();
+      } else {
+        restoreAllPanelsForActiveProfile();
+      }
     } catch (err) {
+      // Unexpected throw (refreshConnection swallows AWS errors, so this
+      // would only fire for a programming bug). Roll back defensively.
       console.error("Failed to switch profile:", err);
-      // Roll back the active profile + restore the prior bucket's state
-      // so the user sees what they had before, with an error toast.
       if (myGen === profileSwitchGenerationRef.current) {
         setAwsProfile(priorProfile);
         restoreAllPanelsForActiveProfile();
