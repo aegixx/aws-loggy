@@ -198,6 +198,7 @@ The filter bar time quickfilter buttons are customizable in Settings (CMD-,):
 - `refreshConnection` store action calls `reconnect_aws` and re-fetches logs with current filters
 - Log cache limits configurable in Settings (default: 50,000 entries OR 100 MB)
 - Live tail uses CloudWatch StartLiveTail streaming API (1-second updates from AWS) with per-panel sessions
+- When LIVE is activated, the panel first backfills the last 15 minutes via `fetch_logs` (window includes a 2s overlap past `now` so events emitted while the stream is connecting are not lost at the seam — existing dedup handles overlap). Backfill failure is non-fatal: a toast shows "Backfill failed — streaming live only" and the stream still starts. SSO/credential errors during backfill route through `setConnectionFailed` and the stream does NOT start until reconnect completes.
 - Falls back to 1-second polling if streaming is unavailable or sampling detected (2-second overlap window prevents event gaps)
 - Sampling detection: if 500 events in one update, switches to polling from last clean timestamp
 - Stream error handling: session limit exceeded → polling with toast; permission denied → error dialog and stop; other errors → silent polling fallback
