@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.1](https://github.com/aegixx/aws-loggy/compare/v3.15.0...v3.15.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* persist workspace state per AWS profile ([#112](https://github.com/aegixx/aws-loggy/issues/112)) ([c27146a](https://github.com/aegixx/aws-loggy/commit/c27146a9c416590a7234ca6daf25ab2e8a3eff5a))
+
 ## [3.15.0](https://github.com/aegixx/aws-loggy/compare/v3.14.2...v3.15.0) (2026-05-20)
 
 
