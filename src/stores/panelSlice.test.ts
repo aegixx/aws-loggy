@@ -232,7 +232,11 @@ describe("panelSlice startTail backfill", () => {
 
     expect(setConnectionFailed).toHaveBeenCalled();
     expect(managerStart).not.toHaveBeenCalled();
-    expect(harness.panel.isTailing).toBe(false);
+    // `isTailing` stays true even after credential failure so the post-SSO
+    // refresh callback in workspaceStore restarts live tail on this panel.
+    // `tailManager` is null because the manager was never constructed.
+    expect(harness.panel.isTailing).toBe(true);
+    expect(harness.panel.tailManager).toBeNull();
   });
 
   it("seam dedup: stream event with same event_id is dropped by onNewLogs", async () => {
@@ -339,7 +343,7 @@ describe("panelSlice startTail backfill", () => {
     expect(managerStart).not.toHaveBeenCalled();
   });
 
-  it("rapid LIVE toggle: only the latest backfill starts a manager", async () => {
+  it("rapid LIVE toggle: second click during backfill is blocked by isTailing guard", async () => {
     const { invoke } = await import("../demo/demoInvoke");
     const resolvers: Array<(v: LogEvent[]) => void> = [];
     vi.mocked(invoke).mockImplementation((cmd: string) => {
@@ -352,20 +356,17 @@ describe("panelSlice startTail backfill", () => {
 
     const harness = makeHarness();
     harness.actions.startTail();
-    // Calling startTail again while isTailing is false (because backfill
-    // hasn't resolved yet) would launch a second backfill. The spec doesn't
-    // guard with isTailing on the second call, so the test verifies our
-    // fetchId-based defense: first resolve becomes stale.
+    // First call sets isTailing=true before awaiting backfill. The second
+    // call must hit the `if (panel.isTailing) return;` guard at the top of
+    // startTail and become a no-op — no second backfill, no wasted AWS call.
     harness.actions.startTail();
-    expect(resolvers).toHaveLength(2);
+    expect(resolvers).toHaveLength(1);
 
     resolvers[0]([makeEvent(1000, "hello", "e1")]);
-    resolvers[1]([makeEvent(2000, "world", "e2")]);
     await new Promise((r) => setTimeout(r, 10));
 
     expect(managerStart).toHaveBeenCalledTimes(1);
-    // Only logs from the latest fetch are present.
-    expect(harness.panel.logs.map((l) => l.event_id)).toEqual(["e2"]);
+    expect(harness.panel.logs.map((l) => l.event_id)).toEqual(["e1"]);
   });
 
   it("backfill timeout path: soft-fails to toast and starts manager (ENG-5)", async () => {

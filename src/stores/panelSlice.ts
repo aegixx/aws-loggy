@@ -409,7 +409,17 @@ export function createPanelActions(
       }
 
       // Clear existing logs — live tail starts fresh, then backfills.
+      // `isTailing` becomes true as soon as the user expresses live intent,
+      // even before the manager is constructed. This way:
+      //   1) The guard at the top of `startTail()` blocks parallel backfills
+      //      when the user rapidly clicks LIVE during a slow backfill.
+      //   2) The post-SSO-refresh restart loop in workspaceStore.ts (which
+      //      checks `panel.isTailing`) will resume live tail on panels whose
+      //      backfill failed with a credential error mid-flight.
+      // Downstream consumers should treat `isTailing && !tailManager` as
+      // "backfilling, manager not yet started".
       setPanel({
+        isTailing: true,
         isLoading: true,
         logs: [],
         filteredLogs: [],
@@ -438,20 +448,25 @@ export function createPanelActions(
       });
 
       let backfillFailedFatally = false;
+      // Track the timeout handle so we can cancel it on success. Without
+      // this, every successful backfill leaks a pending setTimeout that
+      // fires 15s later and produces an unhandled rejection.
+      let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
       try {
         const rawLogs = await Promise.race<LogEvent[]>([
           backfillInvoke,
-          new Promise<LogEvent[]>((_, reject) =>
+          new Promise<LogEvent[]>((_, reject) => {
             // Do not include the word "timeout" — it would match
             // `isConnectionOrCredentialError` and falsely trigger an SSO
             // refresh prompt. A backfill that exceeds the window is a
             // soft local failure, not a credential problem.
-            setTimeout(
+            timeoutHandle = setTimeout(
               () => reject(new Error("backfill window exceeded")),
               BACKFILL_TIMEOUT_MS,
-            ),
-          ),
+            );
+          }),
         ]);
+        if (timeoutHandle) clearTimeout(timeoutHandle);
 
         // Stale-result guard: matches `fetchLogs` at panelSlice.ts:240. If
         // another action bumped `currentFetchId` (stopTail, log-group switch,
@@ -484,6 +499,7 @@ export function createPanelActions(
           isLoading: false,
         });
       } catch (error) {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
         const message = error instanceof Error ? error.message : String(error);
         // Credential errors route through the connection store so SSO refresh
         // can run; live tail is blocked until reconnect completes.
