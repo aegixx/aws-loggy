@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.2](https://github.com/aegixx/aws-loggy/compare/v3.15.1...v3.15.2) (2026-05-27)
+
+
+### Documentation
+
+* add backlog items from Apr 8-9 daily notes ([5624cf7](https://github.com/aegixx/aws-loggy/commit/5624cf7b82d80fea6960c24a37d6572b01973788))
+
 ## [3.15.1](https://github.com/aegixx/aws-loggy/compare/v3.15.0...v3.15.1) (2026-05-20)
 
 
