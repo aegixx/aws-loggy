@@ -74,6 +74,48 @@ The FSEvents safety net in `WindowEvent::Focused(true)` currently emits `setting
 **Priority:** P4
 **Deferred from:** `feat/multi-process` PR review
 
+## BUG: Sync time not working
+
+Time sync across panels/windows is not behaving as expected. Repro and pin down exact scope (merged view? cross-window? time-range linking?) before fixing.
+
+**Priority:** P3
+**Source:** Daily 2026-04-08
+
+## BUG: Clearing with merged view only clears one log group's events
+
+In merged view, `⌘K` (Clear) only clears one source panel's events instead of clearing all merged sources. Should clear all panels contributing to the merged view.
+
+**Priority:** P3
+**Source:** Daily 2026-04-08
+
+## BUG: Follow doesn't work correctly in merged view
+
+Follow/auto-scroll-to-latest misbehaves in merged view — likely because new events from different sources arrive out of order and the follow logic anchors to one source's tail.
+
+**Priority:** P3
+**Source:** Daily 2026-04-09
+
+## FEAT: Resize panels equally
+
+Add a command/shortcut to redistribute split sizes equally across all sibling panels in the current split (or recursively across the layout tree). Currently resize is manual via drag handles only.
+
+**Priority:** P3
+**Source:** Daily 2026-04-09
+
+## FEAT: Inverse search (exclusion)
+
+Support excluding terms from the filter — e.g., `-foo` or `!foo` to hide rows containing `foo`. Composes with existing AND matching on space-separated terms.
+
+**Priority:** P3
+**Source:** Daily 2026-04-09
+
+## FEAT: Nickname/color log groups
+
+Let the user assign a custom display name and color to a log group, persisted in settings. Especially useful in merged view where distinguishing source groups at a glance is hard. Color could tint the group's row gutter or stream-name badge.
+
+**Priority:** P3
+**Source:** Daily 2026-04-09
+
 ## Completed
 
 ### Expand E2E coverage to remaining features
