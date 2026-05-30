@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.3](https://github.com/aegixx/aws-loggy/compare/v3.15.2...v3.15.3) (2026-05-30)
+
+
+### Miscellaneous
+
+* Cleanup unused plans/specs ([81b8aa1](https://github.com/aegixx/aws-loggy/commit/81b8aa14d62789555c7b432346fccd574e0e6239))
+
 ## [3.15.2](https://github.com/aegixx/aws-loggy/compare/v3.15.1...v3.15.2) (2026-05-27)
 
 
